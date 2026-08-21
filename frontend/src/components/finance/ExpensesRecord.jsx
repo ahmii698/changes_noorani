@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { FiPlus, FiEdit2, FiTrash2, FiX, FiCheckCircle, FiSearch, FiTrendingDown, FiDollarSign, FiHome, FiGrid, FiChevronDown, FiChevronUp, FiFilter, FiFolder, FiFolderPlus, FiCalendar } from 'react-icons/fi';
+import { FiPlus, FiEdit2, FiTrash2, FiX, FiCheckCircle, FiSearch, FiTrendingDown, FiDollarSign, FiHome, FiGrid, FiChevronDown, FiChevronUp, FiFilter, FiFolder, FiFolderPlus, FiCalendar, FiClock, FiGift } from 'react-icons/fi';
 import toast from 'react-hot-toast';
 import api from '../../services/api';
 
@@ -46,7 +46,7 @@ const ExpensesRecord = ({ expenses, onAddExpense, onUpdateExpense, darkMode, ref
   const [customDateTo, setCustomDateTo] = useState('');
   const [showCustomDate, setShowCustomDate] = useState(false);
   
-  // ✅ Category filter state - for Other sub-categories
+  // ✅ Category filter states
   const [selectedSubCategory, setSelectedSubCategory] = useState('all');
   const [showSubCategoryDropdown, setShowSubCategoryDropdown] = useState(false);
   
@@ -84,7 +84,7 @@ const ExpensesRecord = ({ expenses, onAddExpense, onUpdateExpense, darkMode, ref
     return Array.from(cats).sort();
   }, [localExpenses]);
 
-  // ✅ Get sub-categories under "Other" (only for other tab)
+  // ✅ Get sub-categories under "Other"
   const otherSubCategories = useMemo(() => {
     return allCategories
       .filter(cat => cat.startsWith('Other/'))
@@ -111,7 +111,7 @@ const ExpensesRecord = ({ expenses, onAddExpense, onUpdateExpense, darkMode, ref
     return labels[dateFilter] || 'All Time';
   };
 
-  // ✅ Filtered expenses based on tab, search, date, and sub-category filter
+  // ✅ Filtered expenses
   const filteredExpenses = useMemo(() => {
     let filtered = localExpenses;
     
@@ -161,7 +161,7 @@ const ExpensesRecord = ({ expenses, onAddExpense, onUpdateExpense, darkMode, ref
       }
     }
     
-    // ✅ Sub-category filter (only for Other tab)
+    // ✅ Sub-category filter
     if (activeTab === 'other' && selectedSubCategory !== 'all') {
       const fullCategory = `Other/${selectedSubCategory}`;
       filtered = filtered.filter(exp => exp.category === fullCategory);
@@ -179,7 +179,7 @@ const ExpensesRecord = ({ expenses, onAddExpense, onUpdateExpense, darkMode, ref
     return filtered;
   }, [localExpenses, activeTab, searchTerm, dateFilter, customDateFrom, customDateTo, selectedSubCategory, fixedCategories]);
 
-  // ✅ Total expenses (filtered)
+  // ✅ Total expenses
   const totalExpenses = useMemo(() => 
     filteredExpenses.reduce((sum, exp) => sum + (parseFloat(exp.amount) || 0), 0),
     [filteredExpenses]
@@ -196,13 +196,11 @@ const ExpensesRecord = ({ expenses, onAddExpense, onUpdateExpense, darkMode, ref
     [localExpenses, fixedCategories]
   );
 
-  // ✅ Get count for a specific sub-category
   const getSubCategoryCount = (subCat) => {
     const fullCategory = `Other/${subCat}`;
     return localExpenses.filter(exp => exp.category === fullCategory).length;
   };
 
-  // ✅ Get count for base categories (General, Maintenance, etc.)
   const getCategoryCount = (category) => {
     return localExpenses.filter(exp => exp.category === category).length;
   };
@@ -215,7 +213,6 @@ const ExpensesRecord = ({ expenses, onAddExpense, onUpdateExpense, darkMode, ref
     }));
   }, []);
 
-  // ✅ Handle category selection from dropdown
   const handleCategorySelect = (category) => {
     if (category === 'other') {
       setShowOtherInput(true);
@@ -227,13 +224,11 @@ const ExpensesRecord = ({ expenses, onAddExpense, onUpdateExpense, darkMode, ref
     setShowCategoryDropdown(false);
   };
 
-  // ✅ Handle sub-category filter selection
   const handleSubCategorySelect = (subCat) => {
     setSelectedSubCategory(subCat);
     setShowSubCategoryDropdown(false);
   };
 
-  // ✅ Toggle sub-category dropdown
   const toggleSubCategoryDropdown = (e) => {
     e.stopPropagation();
     setShowSubCategoryDropdown(!showSubCategoryDropdown);
@@ -361,7 +356,6 @@ const ExpensesRecord = ({ expenses, onAddExpense, onUpdateExpense, darkMode, ref
         );
         
         toast.success(`✅ Payment recorded for ${expense.description}!`);
-        toast.success(`📅 Last paid: ${new Date(today).toLocaleDateString()}`);
         toast.success(`📅 Next payment due on ${new Date(newNextPaymentDate).toLocaleDateString()}`);
         
         if (refreshExpenses) {
@@ -421,7 +415,6 @@ const ExpensesRecord = ({ expenses, onAddExpense, onUpdateExpense, darkMode, ref
 
   const clearSearch = useCallback(() => setSearchTerm(''), []);
 
-  // ✅ Handle date filter change
   const handleDateFilterChange = useCallback((filter) => {
     setDateFilter(filter);
     if (filter === 'custom') {
@@ -433,16 +426,16 @@ const ExpensesRecord = ({ expenses, onAddExpense, onUpdateExpense, darkMode, ref
     }
   }, []);
 
-  // ✅ Get category color
+  // ✅ Get category color - Amber Theme
   const getCategoryColor = (category) => {
     if (!category) return 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300';
     if (category.startsWith('Other/')) {
       return 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400';
     }
     const colors = {
-      'Rent': 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
+      'Rent': 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
       'Utilities': 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400',
-      'Salary': 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
+      'Salary': 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
       'Office': 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400',
       'Staff': 'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-400',
       'General': 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300',
@@ -455,18 +448,18 @@ const ExpensesRecord = ({ expenses, onAddExpense, onUpdateExpense, darkMode, ref
     return colors[category] || 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300';
   };
 
-  // ✅ Get category display name
   const getCategoryDisplayName = (category) => {
     if (!category) return 'General';
     return category;
   };
 
   return (
-    <div className={`${darkMode ? 'bg-gray-900' : 'bg-white'} rounded-2xl shadow-lg overflow-hidden border ${darkMode ? 'border-gray-700' : 'border-gray-200'}`}>
-      <div className={`px-6 py-4 border-b ${darkMode ? 'border-gray-700 bg-gray-900' : 'border-gray-200 bg-white'}`}>
+    <div className={`${darkMode ? 'bg-gray-900' : 'bg-white'} rounded-xl border ${darkMode ? 'border-gray-800' : 'border-gray-200 shadow-sm'} overflow-hidden`}>
+      {/* Header - Amber Theme */}
+      <div className={`px-5 py-4 border-b ${darkMode ? 'border-gray-800' : 'border-gray-200'} bg-amber-400`}>
         <div className="flex flex-wrap justify-between items-center gap-4">
-          <h3 className={`text-lg font-semibold flex items-center gap-2 ${darkMode ? 'text-white' : 'text-gray-800'}`}>
-            <FiTrendingDown className="text-red-500 text-xl" />
+          <h3 className={`text-lg font-extrabold flex items-center gap-2 text-gray-900`}>
+            <FiTrendingDown className="text-gray-900 text-2xl" />
             Expenses Record
           </h3>
           <div className="flex gap-3 flex-wrap">
@@ -476,300 +469,279 @@ const ExpensesRecord = ({ expenses, onAddExpense, onUpdateExpense, darkMode, ref
                 placeholder="Search expenses..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className={`px-4 py-2 pl-10 pr-8 rounded-lg border text-sm focus:outline-none focus:ring-2 focus:ring-red-400 ${
+                className={`px-3 py-1.5 pl-8 pr-7 rounded-lg text-sm font-bold border focus:outline-none focus:ring-2 focus:ring-amber-400 ${
                   darkMode ? 'bg-gray-800 border-gray-700 text-white placeholder-gray-500' : 'bg-white border-gray-300 text-gray-900'
                 }`}
-                style={{ width: '250px' }}
+                style={{ width: '220px' }}
               />
-              <FiSearch className="absolute left-3 top-3 text-gray-400" />
+              <FiSearch className="absolute left-2.5 top-2 text-gray-400 text-sm" />
               {searchTerm && (
-                <button onClick={clearSearch} className="absolute right-3 top-2.5 text-gray-400 hover:text-gray-600">
+                <button onClick={clearSearch} className="absolute right-2 top-1.5 text-gray-400 hover:text-gray-600">
                   <FiX size={14} />
                 </button>
               )}
             </div>
             <button
               onClick={() => setIsModalOpen(true)}
-              className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition flex items-center gap-2 shadow-md whitespace-nowrap"
+              className="px-3 py-1.5 bg-gray-900 text-white rounded-lg text-sm font-bold hover:bg-gray-800 transition flex items-center gap-1.5 shadow-md whitespace-nowrap"
             >
-              <FiPlus /> Add Expense
+              <FiPlus className="text-base" /> Add Expense
             </button>
           </div>
         </div>
-        
-        {/* Tabs and Date Filters */}
-        <div className="flex flex-wrap justify-between items-center mt-4 border-b border-gray-200 dark:border-gray-700">
-          <div className="flex gap-4">
+      </div>
+      
+      {/* Tabs and Date Filters - Amber Theme */}
+      <div className={`px-5 pt-3 pb-0 flex flex-wrap justify-between items-center border-b ${darkMode ? 'border-gray-800' : 'border-gray-200'}`}>
+        <div className="flex gap-4">
+          <button
+            onClick={() => { 
+              setActiveTab('fixed'); 
+              setSelectedSubCategory('all'); 
+              setShowSubCategoryDropdown(false);
+            }}
+            className={`px-3 py-2 font-bold text-base transition flex items-center gap-2 ${
+              activeTab === 'fixed'
+                ? 'text-amber-400 border-b-2 border-amber-400'
+                : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
+            }`}
+          >
+            <FiHome className="text-lg" /> Fixed Monthly
+            <span className={`ml-1 text-xs px-2 py-0.5 rounded-full font-bold ${darkMode ? 'bg-gray-700 text-gray-300' : 'bg-gray-200 text-gray-600'}`}>
+              {fixedCount}
+            </span>
+          </button>
+          
+          <div className="relative">
             <button
               onClick={() => { 
-                setActiveTab('fixed'); 
-                setSelectedSubCategory('all'); 
-                setShowSubCategoryDropdown(false);
+                setActiveTab('other');
+                if (activeTab !== 'other') {
+                  setSelectedSubCategory('all');
+                  setShowSubCategoryDropdown(false);
+                }
               }}
-              className={`px-4 py-2 font-semibold transition flex items-center gap-2 ${
-                activeTab === 'fixed'
-                  ? 'text-red-500 border-b-2 border-red-500'
+              className={`px-3 py-2 font-bold text-base transition flex items-center gap-2 ${
+                activeTab === 'other'
+                  ? 'text-amber-400 border-b-2 border-amber-400'
                   : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
               }`}
             >
-              <FiHome className="text-lg" /> Fixed Monthly
-              <span className="ml-1 text-xs bg-gray-200 dark:bg-gray-700 px-2 py-0.5 rounded-full">
-                {fixedCount}
+              <FiGrid className="text-lg" /> Other
+              <span className={`ml-1 text-xs px-2 py-0.5 rounded-full font-bold ${darkMode ? 'bg-gray-700 text-gray-300' : 'bg-gray-200 text-gray-600'}`}>
+                {otherCount}
               </span>
+              <button
+                onClick={toggleSubCategoryDropdown}
+                className={`p-0.5 rounded hover:bg-gray-200 dark:hover:bg-gray-600 transition ${activeTab === 'other' ? 'text-amber-400' : 'text-gray-400'}`}
+                title="Filter by sub-category"
+              >
+                <FiChevronDown className={`text-base transition-transform ${showSubCategoryDropdown ? 'rotate-180' : ''}`} />
+              </button>
             </button>
             
-            <div className="relative">
-              <button
-                onClick={() => { 
-                  setActiveTab('other');
-                  if (activeTab !== 'other') {
-                    setSelectedSubCategory('all');
-                    setShowSubCategoryDropdown(false);
-                  }
-                }}
-                className={`px-4 py-2 font-semibold transition flex items-center gap-2 ${
-                  activeTab === 'other'
-                    ? 'text-red-500 border-b-2 border-red-500'
-                    : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
-                }`}
-              >
-                <FiGrid className="text-lg" /> Other
-                <span className="ml-1 text-xs bg-gray-200 dark:bg-gray-700 px-2 py-0.5 rounded-full">
-                  {otherCount}
-                </span>
-                <button
-                  onClick={toggleSubCategoryDropdown}
-                  className={`p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-600 transition ${activeTab === 'other' ? 'text-red-500' : 'text-gray-400'}`}
-                  title="Filter by sub-category"
-                >
-                  <FiChevronDown className={`text-sm transition-transform ${showSubCategoryDropdown ? 'rotate-180' : ''}`} />
-                </button>
-              </button>
-              
-              {activeTab === 'other' && showSubCategoryDropdown && (
-                <div className={`absolute left-0 z-10 mt-1 w-64 max-h-60 overflow-y-auto rounded-lg shadow-lg border ${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
-                  <div className="p-2">
-                    <button
-                      onClick={() => handleSubCategorySelect('all')}
-                      className={`w-full px-3 py-2 rounded-lg text-left text-sm transition flex justify-between items-center ${selectedSubCategory === 'all' ? 'bg-red-500 text-white' : darkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-100'}`}
-                    >
-                      <span>📊 All Other Expenses</span>
-                      <span className={`text-xs ${selectedSubCategory === 'all' ? 'text-white' : darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                        ({otherCount})
-                      </span>
-                    </button>
-                    
-                    {baseOtherCategories.map(cat => {
-                      const count = getCategoryCount(cat);
-                      if (count > 0) {
+            {activeTab === 'other' && showSubCategoryDropdown && (
+              <div className={`absolute left-0 z-10 mt-1 w-64 max-h-60 overflow-y-auto rounded-lg shadow-lg border ${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
+                <div className="p-2">
+                  <button
+                    onClick={() => handleSubCategorySelect('all')}
+                    className={`w-full px-3 py-2 rounded-lg text-left text-sm font-bold transition flex justify-between items-center ${selectedSubCategory === 'all' ? 'bg-amber-400 text-gray-900' : darkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-100'}`}
+                  >
+                    <span>📊 All Other Expenses</span>
+                    <span className={`text-xs ${selectedSubCategory === 'all' ? 'text-gray-900' : darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                      ({otherCount})
+                    </span>
+                  </button>
+                  
+                  {baseOtherCategories.map(cat => {
+                    const count = getCategoryCount(cat);
+                    if (count > 0) {
+                      return (
+                        <button
+                          key={cat}
+                          onClick={() => handleSubCategorySelect(cat)}
+                          className={`w-full px-3 py-2 rounded-lg text-left text-sm font-bold transition flex justify-between items-center ${selectedSubCategory === cat ? 'bg-amber-400 text-gray-900' : darkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-100'}`}
+                        >
+                          <span>{cat}</span>
+                          <span className={`text-xs ${selectedSubCategory === cat ? 'text-gray-900' : darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                            ({count})
+                          </span>
+                        </button>
+                      );
+                    }
+                    return null;
+                  })}
+                  
+                  {otherSubCategories.length > 0 && (
+                    <>
+                      <div className="text-xs font-bold text-purple-400 px-3 py-1 mt-2 border-t dark:border-gray-700">📂 Sub-Categories</div>
+                      {otherSubCategories.map(subCat => {
+                        const count = getSubCategoryCount(subCat);
                         return (
                           <button
-                            key={cat}
-                            onClick={() => handleSubCategorySelect(cat)}
-                            className={`w-full px-3 py-2 rounded-lg text-left text-sm transition flex justify-between items-center ${selectedSubCategory === cat ? 'bg-red-500 text-white' : darkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-100'}`}
+                            key={subCat}
+                            onClick={() => handleSubCategorySelect(subCat)}
+                            className={`w-full px-3 py-2 rounded-lg text-left text-sm font-bold transition flex justify-between items-center ${selectedSubCategory === subCat ? 'bg-purple-500 text-white' : darkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-100'}`}
                           >
-                            <span>{cat}</span>
-                            <span className={`text-xs ${selectedSubCategory === cat ? 'text-white' : darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                            <span className="flex items-center gap-2">
+                              <FiFolder className="text-purple-500 text-xs" />
+                              Other/{subCat}
+                            </span>
+                            <span className={`text-xs ${selectedSubCategory === subCat ? 'text-white' : darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
                               ({count})
                             </span>
                           </button>
                         );
-                      }
-                      return null;
-                    })}
-                    
-                    {otherSubCategories.length > 0 && (
-                      <>
-                        <div className="text-xs font-semibold text-purple-400 px-3 py-1 mt-2 border-t dark:border-gray-700">📂 Sub-Categories</div>
-                        {otherSubCategories.map(subCat => {
-                          const count = getSubCategoryCount(subCat);
-                          return (
-                            <button
-                              key={subCat}
-                              onClick={() => handleSubCategorySelect(subCat)}
-                              className={`w-full px-3 py-2 rounded-lg text-left text-sm transition flex justify-between items-center ${selectedSubCategory === subCat ? 'bg-purple-500 text-white' : darkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-100'}`}
-                            >
-                              <span className="flex items-center gap-2">
-                                <FiFolder className="text-purple-500 text-xs" />
-                                Other/{subCat}
-                              </span>
-                              <span className={`text-xs ${selectedSubCategory === subCat ? 'text-white' : darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                                ({count})
-                              </span>
-                            </button>
-                          );
-                        })}
-                      </>
-                    )}
-                  </div>
+                      })}
+                    </>
+                  )}
                 </div>
-              )}
-            </div>
-          </div>
-          
-          {/* ✅ Date Filter Buttons */}
-          <div className="flex gap-1 flex-wrap py-2">
-            <button
-              onClick={() => handleDateFilterChange('all')}
-              className={`px-3 py-1.5 rounded-lg text-xs transition ${
-                dateFilter === 'all' ? 'bg-red-500 text-white' : darkMode ? 'bg-gray-800 text-gray-300 hover:bg-gray-700' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
-            >
-              All
-            </button>
-            <button
-              onClick={() => handleDateFilterChange('today')}
-              className={`px-3 py-1.5 rounded-lg text-xs transition ${
-                dateFilter === 'today' ? 'bg-red-500 text-white' : darkMode ? 'bg-gray-800 text-gray-300 hover:bg-gray-700' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
-            >
-              Today
-            </button>
-            <button
-              onClick={() => handleDateFilterChange('week')}
-              className={`px-3 py-1.5 rounded-lg text-xs transition ${
-                dateFilter === 'week' ? 'bg-red-500 text-white' : darkMode ? 'bg-gray-800 text-gray-300 hover:bg-gray-700' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
-            >
-              This Week
-            </button>
-            <button
-              onClick={() => handleDateFilterChange('month')}
-              className={`px-3 py-1.5 rounded-lg text-xs transition ${
-                dateFilter === 'month' ? 'bg-red-500 text-white' : darkMode ? 'bg-gray-800 text-gray-300 hover:bg-gray-700' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
-            >
-              This Month
-            </button>
-            <button
-              onClick={() => handleDateFilterChange('year')}
-              className={`px-3 py-1.5 rounded-lg text-xs transition ${
-                dateFilter === 'year' ? 'bg-red-500 text-white' : darkMode ? 'bg-gray-800 text-gray-300 hover:bg-gray-700' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
-            >
-              This Year
-            </button>
-            <button
-              onClick={() => handleDateFilterChange('custom')}
-              className={`px-3 py-1.5 rounded-lg text-xs transition ${
-                dateFilter === 'custom' ? 'bg-purple-500 text-white' : darkMode ? 'bg-gray-800 text-gray-300 hover:bg-gray-700' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
-            >
-              <FiCalendar className="inline mr-1" /> Custom
-            </button>
+              </div>
+            )}
           </div>
         </div>
         
-        {/* ✅ Custom Date Range Inputs */}
-        {showCustomDate && (
-          <div className={`p-3 border-b ${darkMode ? 'border-gray-700' : 'border-gray-200'} flex flex-wrap items-center gap-4 bg-purple-50 dark:bg-purple-900/10 mt-2`}>
-            <div className="flex items-center gap-2">
-              <FiCalendar className={`${darkMode ? 'text-purple-400' : 'text-purple-600'}`} />
-              <span className={`text-sm font-medium ${darkMode ? 'text-purple-400' : 'text-purple-700'}`}>Custom Date Range:</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <label className={`text-sm ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>From</label>
-              <input
-                type="date"
-                value={customDateFrom}
-                onChange={(e) => setCustomDateFrom(e.target.value)}
-                className={`px-3 py-1.5 rounded-lg border focus:ring-2 focus:ring-purple-500 outline-none text-sm ${
-                  darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300 text-gray-900'
-                }`}
-              />
-            </div>
-            <div className="flex items-center gap-2">
-              <label className={`text-sm ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>To</label>
-              <input
-                type="date"
-                value={customDateTo}
-                onChange={(e) => setCustomDateTo(e.target.value)}
-                className={`px-3 py-1.5 rounded-lg border focus:ring-2 focus:ring-purple-500 outline-none text-sm ${
-                  darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300 text-gray-900'
-                }`}
-              />
-            </div>
-            <button
-              onClick={() => {
-                if (customDateFrom && customDateTo) {
-                  toast.success(`Showing records from ${customDateFrom} to ${customDateTo}`);
-                } else {
-                  toast.warning('Please select both From and To dates');
-                }
-              }}
-              className="px-4 py-1.5 bg-purple-500 text-white rounded-lg text-sm hover:bg-purple-600 transition flex items-center gap-1 shadow-md"
-            >
-              <FiCalendar className="text-sm" /> Apply Range
-            </button>
-            {customDateFrom && customDateTo && (
-              <span className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                Showing: {customDateFrom} → {customDateTo} ({filteredExpenses.length} records)
-              </span>
-            )}
-          </div>
-        )}
+        {/* ✅ Date Filter Buttons - Amber Theme */}
+        <div className="flex gap-1 flex-wrap py-2">
+          <button
+            onClick={() => handleDateFilterChange('all')}
+            className={`px-2.5 py-1 rounded-lg text-sm font-bold transition ${
+              dateFilter === 'all' ? 'bg-amber-400 text-gray-900 shadow-md' : darkMode ? 'bg-gray-800 text-gray-300 hover:bg-gray-700' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+          >
+            All
+          </button>
+          <button
+            onClick={() => handleDateFilterChange('today')}
+            className={`px-2.5 py-1 rounded-lg text-sm font-bold transition ${
+              dateFilter === 'today' ? 'bg-amber-400 text-gray-900 shadow-md' : darkMode ? 'bg-gray-800 text-gray-300 hover:bg-gray-700' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+          >
+            Today
+          </button>
+          <button
+            onClick={() => handleDateFilterChange('week')}
+            className={`px-2.5 py-1 rounded-lg text-sm font-bold transition ${
+              dateFilter === 'week' ? 'bg-amber-400 text-gray-900 shadow-md' : darkMode ? 'bg-gray-800 text-gray-300 hover:bg-gray-700' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+          >
+            Week
+          </button>
+          <button
+            onClick={() => handleDateFilterChange('month')}
+            className={`px-2.5 py-1 rounded-lg text-sm font-bold transition ${
+              dateFilter === 'month' ? 'bg-amber-400 text-gray-900 shadow-md' : darkMode ? 'bg-gray-800 text-gray-300 hover:bg-gray-700' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+          >
+            Month
+          </button>
+          <button
+            onClick={() => handleDateFilterChange('year')}
+            className={`px-2.5 py-1 rounded-lg text-sm font-bold transition ${
+              dateFilter === 'year' ? 'bg-amber-400 text-gray-900 shadow-md' : darkMode ? 'bg-gray-800 text-gray-300 hover:bg-gray-700' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+          >
+            Year
+          </button>
+          <button
+            onClick={() => handleDateFilterChange('custom')}
+            className={`px-2.5 py-1 rounded-lg text-sm font-bold transition ${
+              dateFilter === 'custom' ? 'bg-purple-500 text-white' : darkMode ? 'bg-gray-800 text-gray-300 hover:bg-gray-700' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+          >
+            <FiCalendar className="inline mr-1 text-sm" /> Custom
+          </button>
+        </div>
       </div>
+      
+      {/* ✅ Custom Date Range Inputs */}
+      {showCustomDate && (
+        <div className={`p-3 border-b ${darkMode ? 'border-gray-800' : 'border-gray-200'} flex flex-wrap items-center gap-3 bg-purple-50 dark:bg-purple-900/10`}>
+          <div className="flex items-center gap-1.5">
+            <FiCalendar className={`${darkMode ? 'text-purple-400' : 'text-purple-600'}`} />
+            <span className={`text-sm font-bold ${darkMode ? 'text-purple-400' : 'text-purple-700'}`}>Range:</span>
+          </div>
+          <input
+            type="date"
+            value={customDateFrom}
+            onChange={(e) => setCustomDateFrom(e.target.value)}
+            className={`px-2.5 py-1 rounded-lg border text-sm font-bold focus:ring-2 focus:ring-purple-500 outline-none ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300 text-gray-900'}`}
+          />
+          <span className={`text-sm ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>→</span>
+          <input
+            type="date"
+            value={customDateTo}
+            onChange={(e) => setCustomDateTo(e.target.value)}
+            className={`px-2.5 py-1 rounded-lg border text-sm font-bold focus:ring-2 focus:ring-purple-500 outline-none ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300 text-gray-900'}`}
+          />
+          <button
+            onClick={() => {
+              if (customDateFrom && customDateTo) {
+                toast.success(`Showing ${customDateFrom} → ${customDateTo}`);
+              } else {
+                toast.warning('Please select both dates');
+              }
+            }}
+            className="px-3 py-1 bg-purple-500 text-white rounded-lg text-sm font-bold hover:bg-purple-600 transition flex items-center gap-1 shadow-md"
+          >
+            <FiCalendar className="text-sm" /> Apply
+          </button>
+          {customDateFrom && customDateTo && (
+            <span className={`text-sm font-bold ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+              {customDateFrom} → {customDateTo} ({filteredExpenses.length})
+            </span>
+          )}
+        </div>
+      )}
 
-      <div className={`px-6 py-2 text-sm ${darkMode ? 'text-gray-400 bg-gray-800' : 'text-gray-500 bg-gray-50'}`}>
+      {/* Info Bar */}
+      <div className={`px-5 py-2 text-sm font-bold ${darkMode ? 'text-gray-400 bg-gray-800' : 'text-gray-500 bg-gray-50'} border-b ${darkMode ? 'border-gray-800' : 'border-gray-200'}`}>
         {activeTab === 'fixed' ? (
-          <div className="flex items-center gap-4">
-            <FiHome className="text-red-500" />
-            <span>Monthly recurring expenses: Rent, Utilities, and Salary. These expenses have "Pay Now" option to record monthly payments.</span>
+          <div className="flex items-center gap-3">
+            <FiHome className="text-amber-400 text-lg" />
+            <span className="font-bold">Monthly recurring expenses: Rent, Utilities, and Salary.</span>
           </div>
         ) : (
-          <div className="flex items-center gap-4">
-            <FiGrid className="text-blue-500" />
-            <span>
-              One-time and variable expenses: Maintenance, Tea/Coffee, Stationery, Marketing, Repairs, and other general expenses.
+          <div className="flex items-center gap-3">
+            <FiGrid className="text-amber-400 text-lg" />
+            <span className="font-bold">
+              One-time and variable expenses: Maintenance, Tea/Coffee, Stationery, Marketing, Repairs.
               {selectedSubCategory !== 'all' && (
-                <span className="ml-2 text-purple-500 font-medium">
+                <span className="ml-2 text-purple-500 font-extrabold">
                   • Filtered: {selectedSubCategory.startsWith('Other/') ? selectedSubCategory : `Other/${selectedSubCategory}`}
                 </span>
               )}
-              <span className="ml-2 text-red-400 font-medium">
+              <span className="ml-2 text-amber-400 font-extrabold">
                 • {getDateFilterLabel()}
               </span>
             </span>
           </div>
         )}
-        {activeTab === 'other' && selectedSubCategory !== 'all' && (
-          <div className="mt-1 flex items-center gap-2">
-            <span className="text-xs text-purple-500">Filtered by:</span>
-            <span className={`text-xs px-2 py-0.5 rounded ${getCategoryColor(`Other/${selectedSubCategory}`)}`}>
-              {selectedSubCategory.startsWith('Other/') ? selectedSubCategory : `Other/${selectedSubCategory}`}
-            </span>
-            <button
-              onClick={() => setSelectedSubCategory('all')}
-              className="text-xs text-red-500 hover:text-red-600"
-            >
-              <FiX className="inline" /> Clear
-            </button>
-          </div>
-        )}
       </div>
 
+      {/* Table - Bold + Dark Mode White */}
       <div className="overflow-x-auto">
-        <table className="w-full">
+        <table className="w-full text-sm">
           <thead className={darkMode ? 'bg-gray-800' : 'bg-gray-50'}>
             <tr>
-              <th className="px-4 py-3 text-left text-xs font-medium uppercase">Description</th>
-              <th className="px-4 py-3 text-left text-xs font-medium uppercase">Category</th>
-              <th className="px-4 py-3 text-left text-xs font-medium uppercase">Last Paid</th>
-              <th className="px-4 py-3 text-left text-xs font-medium uppercase">Next Due</th>
-              <th className="px-4 py-3 text-right text-xs font-medium uppercase">Amount</th>
-              <th className="px-4 py-3 text-center text-xs font-medium uppercase">Actions</th>
+              <th className={`px-4 py-3 text-left text-sm font-extrabold uppercase ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>Description</th>
+              <th className={`px-4 py-3 text-left text-sm font-extrabold uppercase ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>Category</th>
+              <th className={`px-4 py-3 text-left text-sm font-extrabold uppercase ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>Last Paid</th>
+              <th className={`px-4 py-3 text-left text-sm font-extrabold uppercase ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>Next Due</th>
+              <th className={`px-4 py-3 text-right text-sm font-extrabold uppercase ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>Amount</th>
+              <th className={`px-4 py-3 text-center text-sm font-extrabold uppercase ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>Actions</th>
             </tr>
           </thead>
           <tbody className={`divide-y ${darkMode ? 'divide-gray-800' : 'divide-gray-200'}`}>
             {filteredExpenses.length === 0 ? (
               <tr>
-                <td colSpan="6" className="px-6 py-12 text-center">
+                <td colSpan="6" className="px-5 py-10 text-center">
                   <div className="flex flex-col items-center gap-2">
-                    <FiTrendingDown className="text-5xl text-gray-400" />
-                    <p className={`${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                      {searchTerm ? `No expenses found matching "${searchTerm}"` : 
+                    <FiTrendingDown className="text-4xl text-gray-400" />
+                    <p className={`text-base font-bold ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                      {searchTerm ? `No expenses found for "${searchTerm}"` : 
                        activeTab === 'fixed' ? 'No fixed monthly expenses added yet.' : 
-                       selectedSubCategory !== 'all' ? `No expenses in "${selectedSubCategory}" category` :
+                       selectedSubCategory !== 'all' ? `No expenses in "${selectedSubCategory}"` :
                        'No other expenses added yet.'}
                     </p>
                   </div>
@@ -777,61 +749,63 @@ const ExpensesRecord = ({ expenses, onAddExpense, onUpdateExpense, darkMode, ref
               </tr>
             ) : (
               filteredExpenses.map((expense) => (
-                <tr key={expense.id} className={darkMode ? 'hover:bg-gray-800' : 'hover:bg-gray-50'}>
-                  <td className="px-4 py-3 font-medium">
+                <tr key={expense.id} className={darkMode ? 'hover:bg-gray-800/50' : 'hover:bg-gray-50'}>
+                  <td className={`px-4 py-3 font-extrabold text-base ${darkMode ? 'text-white' : 'text-gray-900'}`}>
                     {expense.description}
                     {expense.is_recurring === 1 && (
-                      <span className="ml-2 text-xs bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 px-1.5 py-0.5 rounded">Recurring</span>
+                      <span className="ml-2 text-xs bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 px-1.5 py-0.5 rounded font-extrabold">Recurring</span>
                     )}
                   </td>
                   <td className="px-4 py-3">
-                    <span className={`px-2 py-1 rounded text-xs whitespace-nowrap ${getCategoryColor(expense.category)}`}>
+                    <span className={`px-2.5 py-1 rounded text-sm font-extrabold whitespace-nowrap ${getCategoryColor(expense.category)}`}>
                       {getCategoryDisplayName(expense.category)}
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-sm whitespace-nowrap">
+                  <td className={`px-4 py-3 text-sm font-bold ${darkMode ? 'text-white' : 'text-gray-700'}`}>
                     {expense.last_paid_date ? new Date(expense.last_paid_date).toLocaleDateString() : 
                      expense.expense_date ? new Date(expense.expense_date).toLocaleDateString() : '-'}
                   </td>
                   <td className="px-4 py-3">
                     {expense.is_recurring === 1 ? (
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className={`text-sm font-medium whitespace-nowrap ${isOverdue(expense.next_payment_date) ? 'text-red-500 font-bold' : 'text-yellow-500'}`}>
+                        <span className={`text-sm font-extrabold whitespace-nowrap ${isOverdue(expense.next_payment_date) ? 'text-red-500' : 'text-amber-500'}`}>
                           {expense.next_payment_date ? new Date(expense.next_payment_date).toLocaleDateString() : 'Not set'}
                         </span>
                         {isOverdue(expense.next_payment_date) && (
-                          <span className="text-xs bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 px-2 py-0.5 rounded whitespace-nowrap">Overdue!</span>
+                          <span className="text-xs font-extrabold bg-red-500/20 text-red-500 px-2 py-0.5 rounded whitespace-nowrap">Overdue!</span>
                         )}
                       </div>
                     ) : (
-                      <span className="text-sm text-gray-400">One-time</span>
+                      <span className="text-sm font-bold text-gray-400">One-time</span>
                     )}
                   </td>
-                  <td className="px-4 py-3 text-right font-semibold text-red-500 whitespace-nowrap">Rs. {parseFloat(expense.amount).toLocaleString()}</td>
+                  <td className={`px-4 py-3 text-right font-extrabold text-amber-400 text-base whitespace-nowrap`}>
+                    Rs. {parseFloat(expense.amount).toLocaleString()}
+                  </td>
                   <td className="px-4 py-3 text-center">
-                    <div className="flex justify-center gap-2 flex-wrap">
+                    <div className="flex justify-center gap-1.5 flex-wrap">
                       {expense.is_recurring === 1 && (
                         <button
                           onClick={() => handlePayNow(expense)}
-                          className="px-3 py-1 bg-green-600 text-white rounded-lg text-xs hover:bg-green-700 transition flex items-center gap-1 shadow-md whitespace-nowrap"
+                          className="px-2.5 py-1 bg-emerald-500 text-white rounded-lg text-sm font-extrabold hover:bg-emerald-600 transition flex items-center gap-1 shadow-md whitespace-nowrap"
                           title="Pay Now"
                         >
-                          <FiDollarSign size={12} /> Pay Now
+                          <FiDollarSign size={14} /> Pay Now
                         </button>
                       )}
                       <button
                         onClick={() => handleEdit(expense)}
-                        className="p-1.5 text-blue-500 hover:text-blue-700 transition bg-blue-50 dark:bg-blue-900/20 rounded"
+                        className="p-1.5 text-blue-500 hover:text-blue-700 transition bg-blue-50 dark:bg-blue-900/20 rounded font-extrabold"
                         title="Edit"
                       >
-                        <FiEdit2 size={14} />
+                        <FiEdit2 size={15} />
                       </button>
                       <button
                         onClick={() => handleDelete(expense.id, expense.description)}
-                        className="p-1.5 text-red-500 hover:text-red-700 transition bg-red-50 dark:bg-red-900/20 rounded"
+                        className="p-1.5 text-red-500 hover:text-red-700 transition bg-red-50 dark:bg-red-900/20 rounded font-extrabold"
                         title="Delete"
                       >
-                        <FiTrash2 size={14} />
+                        <FiTrash2 size={15} />
                       </button>
                     </div>
                   </td>
@@ -842,8 +816,8 @@ const ExpensesRecord = ({ expenses, onAddExpense, onUpdateExpense, darkMode, ref
           {filteredExpenses.length > 0 && (
             <tfoot className={darkMode ? 'bg-gray-800' : 'bg-gray-100'}>
               <tr>
-                <td colSpan="4" className="px-4 py-3 text-right font-bold">Total:</td>
-                <td className="px-4 py-3 text-right font-bold text-red-500">Rs. {totalExpenses.toLocaleString()}</td>
+                <td colSpan="4" className={`px-4 py-3 text-right font-extrabold text-base ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>Total:</td>
+                <td className="px-4 py-3 text-right font-extrabold text-amber-400 text-base">Rs. {totalExpenses.toLocaleString()}</td>
                 <td className="px-4 py-3"></td>
               </tr>
             </tfoot>
@@ -851,38 +825,41 @@ const ExpensesRecord = ({ expenses, onAddExpense, onUpdateExpense, darkMode, ref
         </table>
       </div>
 
-      {/* ✅ Add/Edit Modal with Category Dropdown + Other Sub-category */}
+      {/* ✅ Add/Edit Modal - Amber Theme (Bold & Larger) */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className={`${darkMode ? 'bg-gray-900 text-white' : 'bg-white text-gray-900'} rounded-2xl shadow-xl max-w-md w-full border ${darkMode ? 'border-gray-700' : 'border-gray-200'}`}>
-            <div className={`px-6 py-4 border-b ${darkMode ? 'border-gray-700' : 'border-gray-200'} flex justify-between items-center`}>
-              <h3 className="text-xl font-semibold">{editingExpense ? 'Edit Expense' : 'Add New Expense'}</h3>
-              <button onClick={() => { setIsModalOpen(false); setEditingExpense(null); setShowOtherInput(false); setOtherSubCategory(''); }} className="text-gray-500 hover:text-gray-700 text-2xl">
+          <div className={`${darkMode ? 'bg-gray-900 text-white' : 'bg-white text-gray-900'} rounded-xl shadow-2xl max-w-lg w-full border ${darkMode ? 'border-gray-800' : 'border-gray-200'}`}>
+            <div className={`px-6 py-5 border-b ${darkMode ? 'border-gray-800' : 'border-gray-200'} flex justify-between items-center`}>
+              <h3 className="text-xl font-extrabold flex items-center gap-2">
+                <FiTrendingDown className="text-amber-400 text-2xl" />
+                {editingExpense ? 'Edit Expense' : 'Add New Expense'}
+              </h3>
+              <button onClick={() => { setIsModalOpen(false); setEditingExpense(null); setShowOtherInput(false); setOtherSubCategory(''); }} className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300 text-2xl">
                 <FiX />
               </button>
             </div>
             
-            <form onSubmit={handleSubmit} className="p-6 space-y-4">
+            <form onSubmit={handleSubmit} className="p-6 space-y-5">
               <div>
-                <label className={`block text-sm font-medium mb-2 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>Description *</label>
+                <label className={`block text-base font-extrabold mb-2 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>Description *</label>
                 <input
                   type="text"
                   name="description"
                   value={formData.description}
                   onChange={handleInputChange}
-                  className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-red-400 ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'border-gray-300'}`}
+                  className={`w-full px-4 py-2.5 rounded-lg border text-base font-bold focus:outline-none focus:ring-2 focus:ring-amber-400 ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'border-gray-300'}`}
                   placeholder="e.g., Shop Rent, Employee Salary"
                   required
                 />
               </div>
               <div>
-                <label className={`block text-sm font-medium mb-2 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>Amount * (Rs.)</label>
+                <label className={`block text-base font-extrabold mb-2 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>Amount * (Rs.)</label>
                 <input
                   type="number"
                   name="amount"
                   value={formData.amount}
                   onChange={handleInputChange}
-                  className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-red-400 ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'border-gray-300'}`}
+                  className={`w-full px-4 py-2.5 rounded-lg border text-base font-bold focus:outline-none focus:ring-2 focus:ring-amber-400 ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'border-gray-300'}`}
                   placeholder="Enter amount"
                   min="0"
                   step="0.01"
@@ -890,69 +867,66 @@ const ExpensesRecord = ({ expenses, onAddExpense, onUpdateExpense, darkMode, ref
                 />
               </div>
               <div>
-                <label className={`block text-sm font-medium mb-2 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>Payment Date *</label>
+                <label className={`block text-base font-extrabold mb-2 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>Payment Date *</label>
                 <input
                   type="date"
                   name="date"
                   value={formData.date}
                   onChange={handleInputChange}
-                  className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-red-400 ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'border-gray-300'}`}
+                  className={`w-full px-4 py-2.5 rounded-lg border text-base font-bold focus:outline-none focus:ring-2 focus:ring-amber-400 ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'border-gray-300'}`}
                   required
                 />
               </div>
               
-              {/* ✅ Category Field with Dropdown and "Other" option */}
+              {/* Category Field with Dropdown */}
               <div>
-                <label className={`block text-sm font-medium mb-2 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+                <label className={`block text-base font-extrabold mb-2 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>
                   Category *
                 </label>
                 
-                {/* Category Dropdown Button */}
                 <div className="relative">
                   <button
                     type="button"
                     onClick={() => setShowCategoryDropdown(!showCategoryDropdown)}
-                    className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-red-400 flex items-center justify-between ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300'}`}
+                    className={`w-full px-4 py-2.5 rounded-lg border text-base font-bold focus:outline-none focus:ring-2 focus:ring-amber-400 flex items-center justify-between ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300'}`}
                   >
-                    <span>
+                    <span className="font-bold">
                       {showOtherInput && otherSubCategory ? `Other/${otherSubCategory}` : 
                        formData.category || 'Select category...'}
                     </span>
-                    <FiChevronDown className={`transition-transform ${showCategoryDropdown ? 'rotate-180' : ''}`} />
+                    <FiChevronDown className={`text-xl transition-transform ${showCategoryDropdown ? 'rotate-180' : ''}`} />
                   </button>
                   
                   {showCategoryDropdown && (
                     <div className={`absolute z-10 mt-1 w-full max-h-48 overflow-y-auto rounded-lg shadow-lg border ${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
                       <div className="p-2 space-y-1">
-                        {/* Fixed categories */}
-                        <div className="text-xs font-semibold text-gray-400 px-3 py-1">Fixed Monthly</div>
+                        <div className="text-xs font-extrabold text-gray-400 px-3 py-1">Fixed Monthly</div>
                         {['Rent', 'Utilities', 'Salary', 'Office', 'Staff'].map(cat => (
                           <button
                             key={cat}
                             type="button"
                             onClick={() => handleCategorySelect(cat)}
-                            className={`w-full px-3 py-2 rounded-lg text-left text-sm transition ${formData.category === cat && !showOtherInput ? 'bg-red-500 text-white' : darkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-100'}`}
+                            className={`w-full px-3 py-2 rounded-lg text-left text-sm font-bold transition ${formData.category === cat && !showOtherInput ? 'bg-amber-400 text-gray-900' : darkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-100'}`}
                           >
                             {cat}
                           </button>
                         ))}
                         
-                        <div className="text-xs font-semibold text-gray-400 px-3 py-1 border-t dark:border-gray-700">Other Expenses</div>
+                        <div className="text-xs font-extrabold text-gray-400 px-3 py-1 border-t dark:border-gray-700">Other Expenses</div>
                         {['General', 'Maintenance', 'Tea/Coffee', 'Stationery', 'Marketing', 'Repair'].map(cat => (
                           <button
                             key={cat}
                             type="button"
                             onClick={() => handleCategorySelect(cat)}
-                            className={`w-full px-3 py-2 rounded-lg text-left text-sm transition ${formData.category === cat && !showOtherInput ? 'bg-red-500 text-white' : darkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-100'}`}
+                            className={`w-full px-3 py-2 rounded-lg text-left text-sm font-bold transition ${formData.category === cat && !showOtherInput ? 'bg-amber-400 text-gray-900' : darkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-100'}`}
                           >
                             {cat}
                           </button>
                         ))}
                         
-                        {/* ✅ Existing "Other" sub-categories from expenses */}
                         {otherSubCategories.length > 0 && (
                           <>
-                            <div className="text-xs font-semibold text-purple-400 px-3 py-1 border-t dark:border-gray-700">📂 Your Sub-Categories</div>
+                            <div className="text-xs font-extrabold text-purple-400 px-3 py-1 border-t dark:border-gray-700">📂 Your Sub-Categories</div>
                             {otherSubCategories.map(subCat => {
                               const fullCat = `Other/${subCat}`;
                               return (
@@ -965,9 +939,9 @@ const ExpensesRecord = ({ expenses, onAddExpense, onUpdateExpense, darkMode, ref
                                     setOtherSubCategory(subCat);
                                     setShowCategoryDropdown(false);
                                   }}
-                                  className={`w-full px-3 py-2 rounded-lg text-left text-sm transition flex items-center gap-2 ${formData.category === fullCat ? 'bg-purple-500 text-white' : darkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-100'}`}
+                                  className={`w-full px-3 py-2 rounded-lg text-left text-sm font-bold transition flex items-center gap-2 ${formData.category === fullCat ? 'bg-purple-500 text-white' : darkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-100'}`}
                                 >
-                                  <FiFolder className="text-purple-500 text-xs" />
+                                  <FiFolder className="text-purple-500 text-sm" />
                                   Other/{subCat}
                                 </button>
                               );
@@ -975,7 +949,6 @@ const ExpensesRecord = ({ expenses, onAddExpense, onUpdateExpense, darkMode, ref
                           </>
                         )}
                         
-                        {/* ✅ "Other" option to add new category */}
                         <button
                           type="button"
                           onClick={() => {
@@ -983,10 +956,10 @@ const ExpensesRecord = ({ expenses, onAddExpense, onUpdateExpense, darkMode, ref
                             setFormData(prev => ({ ...prev, category: '' }));
                             setShowCategoryDropdown(false);
                           }}
-                          className={`w-full px-3 py-2 rounded-lg text-left text-sm transition border-t ${darkMode ? 'border-gray-700' : 'border-gray-200'} ${showOtherInput ? 'bg-purple-500 text-white' : darkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-100'}`}
+                          className={`w-full px-3 py-2 rounded-lg text-left text-sm font-bold transition border-t ${darkMode ? 'border-gray-700' : 'border-gray-200'} ${showOtherInput ? 'bg-purple-500 text-white' : darkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-100'}`}
                         >
                           <span className="flex items-center gap-2">
-                            <FiFolderPlus className="text-sm text-purple-500" /> Other (New Sub-Category)
+                            <FiFolderPlus className="text-base text-purple-500" /> Other (New)
                           </span>
                         </button>
                       </div>
@@ -994,12 +967,11 @@ const ExpensesRecord = ({ expenses, onAddExpense, onUpdateExpense, darkMode, ref
                   )}
                 </div>
 
-                {/* ✅ Sub-category input for "Other" */}
                 {showOtherInput && (
                   <div className="mt-2">
                     <input
                       type="text"
-                      placeholder="Enter sub-category name (e.g., paana, water, tool)"
+                      placeholder="Enter sub-category name (e.g., paana, water)"
                       value={otherSubCategory}
                       onChange={(e) => {
                         const val = e.target.value;
@@ -1008,45 +980,42 @@ const ExpensesRecord = ({ expenses, onAddExpense, onUpdateExpense, darkMode, ref
                           setFormData(prev => ({ ...prev, category: `Other/${val.trim()}` }));
                         }
                       }}
-                      className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-400 ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300'}`}
+                      className={`w-full px-4 py-2.5 rounded-lg border text-base font-bold focus:outline-none focus:ring-2 focus:ring-purple-400 ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300'}`}
                       placeholder="e.g., paana, water, tool, etc."
                       autoFocus
                     />
-                    <p className={`text-xs mt-1 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                      This will create a new sub-category under "Other"
-                    </p>
                     {otherSubCategory && (
-                      <div className={`mt-1 text-xs ${darkMode ? 'text-purple-400' : 'text-purple-600'}`}>
-                        Category will be: <strong>Other/{otherSubCategory}</strong>
+                      <div className={`mt-1 text-sm font-extrabold ${darkMode ? 'text-purple-400' : 'text-purple-600'}`}>
+                        Category: <strong>Other/{otherSubCategory}</strong>
                       </div>
                     )}
                   </div>
                 )}
               </div>
               
-              <div className="border-t pt-3">
+              <div className={`border-t ${darkMode ? 'border-gray-800' : 'border-gray-200'} pt-4`}>
                 <div className="flex items-center gap-3">
                   <input
                     type="checkbox"
                     name="isRecurring"
                     checked={formData.isRecurring}
                     onChange={handleInputChange}
-                    className="w-4 h-4 text-red-500 focus:ring-red-400"
+                    className="w-5 h-5 text-amber-400 focus:ring-amber-400 rounded"
                   />
-                  <label className={`text-sm font-medium ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>
-                    🔄 This is a recurring expense (Monthly Rent, Salary, etc.)
+                  <label className={`text-base font-extrabold ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+                    🔄 Recurring expense
                   </label>
                 </div>
                 
                 {formData.isRecurring && (
-                  <div className="mt-3 pl-6 space-y-3 border-l-2 border-red-300">
+                  <div className="mt-3 pl-5 space-y-3 border-l-2 border-amber-400">
                     <div>
-                      <label className={`block text-sm font-medium mb-1 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>Recurring Type</label>
+                      <label className={`block text-base font-extrabold mb-1.5 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>Recurring Type</label>
                       <select
                         name="recurringType"
                         value={formData.recurringType}
                         onChange={handleInputChange}
-                        className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-red-400 ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'border-gray-300'}`}
+                        className={`w-full px-4 py-2.5 rounded-lg border text-base font-bold focus:outline-none focus:ring-2 focus:ring-amber-400 ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'border-gray-300'}`}
                       >
                         <option value="monthly">📅 Monthly</option>
                         <option value="weekly">📆 Weekly</option>
@@ -1055,27 +1024,25 @@ const ExpensesRecord = ({ expenses, onAddExpense, onUpdateExpense, darkMode, ref
                     </div>
                     
                     <div>
-                      <label className={`block text-sm font-medium mb-1 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>Last Paid Date</label>
+                      <label className={`block text-base font-extrabold mb-1.5 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>Last Paid</label>
                       <input
                         type="date"
                         name="lastPaidDate"
                         value={formData.lastPaidDate}
                         onChange={handleInputChange}
-                        className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-red-400 ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'border-gray-300'}`}
+                        className={`w-full px-4 py-2.5 rounded-lg border text-base font-bold focus:outline-none focus:ring-2 focus:ring-amber-400 ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'border-gray-300'}`}
                       />
-                      <p className="text-xs text-gray-400 mt-1">Leave empty to use payment date</p>
                     </div>
                     
                     <div>
-                      <label className={`block text-sm font-medium mb-1 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>Next Payment Date</label>
+                      <label className={`block text-base font-extrabold mb-1.5 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>Next Due</label>
                       <input
                         type="date"
                         name="nextPaymentDate"
                         value={formData.nextPaymentDate}
                         onChange={handleInputChange}
-                        className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-red-400 ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'border-gray-300'}`}
+                        className={`w-full px-4 py-2.5 rounded-lg border text-base font-bold focus:outline-none focus:ring-2 focus:ring-amber-400 ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'border-gray-300'}`}
                       />
-                      <p className="text-xs text-gray-400 mt-1">Leave empty to auto-calculate</p>
                     </div>
                   </div>
                 )}
@@ -1085,15 +1052,15 @@ const ExpensesRecord = ({ expenses, onAddExpense, onUpdateExpense, darkMode, ref
                 <button
                   type="button"
                   onClick={() => { setIsModalOpen(false); setEditingExpense(null); setShowOtherInput(false); setOtherSubCategory(''); }}
-                  className={`flex-1 px-4 py-2 rounded-lg transition ${darkMode ? 'bg-gray-800 hover:bg-gray-700 text-white' : 'bg-gray-200 hover:bg-gray-300 text-gray-700'}`}
+                  className={`flex-1 px-4 py-2.5 rounded-lg transition text-base font-extrabold ${darkMode ? 'bg-gray-800 hover:bg-gray-700 text-white' : 'bg-gray-200 hover:bg-gray-300 text-gray-700'}`}
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition flex items-center justify-center gap-2 shadow-md"
+                  className="flex-1 px-4 py-2.5 bg-amber-400 text-gray-900 rounded-lg hover:bg-amber-300 transition flex items-center justify-center gap-2 shadow-md text-base font-extrabold"
                 >
-                  <FiCheckCircle className="text-sm" /> {editingExpense ? 'Update Expense' : 'Add Expense'}
+                  <FiCheckCircle className="text-xl" /> {editingExpense ? 'Update' : 'Add'}
                 </button>
               </div>
             </form>

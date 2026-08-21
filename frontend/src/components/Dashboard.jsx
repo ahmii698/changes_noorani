@@ -1,14 +1,15 @@
 // src/components/Dashboard.jsx
+
 import React, { useState, useEffect, useCallback, useMemo, lazy, Suspense } from 'react';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { 
   FiMenu, FiChevronLeft, FiSun, FiMoon, FiLogOut, 
   FiPackage, FiDollarSign, FiFileText, FiBarChart2, 
-  FiBell, FiTrendingUp, FiShoppingCart, FiCheckCircle, 
+  FiTrendingUp, FiShoppingCart, FiCheckCircle, 
   FiAlertCircle, FiClock, FiArrowRight, FiLoader, FiUsers,
   FiCreditCard, FiCalendar, FiGift, FiChevronDown, FiChevronUp, FiFile,
-  FiBattery, FiArchive
+  FiBattery, FiArchive, FiMoreVertical
 } from 'react-icons/fi';
 import { 
   LineChart, Line, BarChart, Bar, AreaChart, Area,
@@ -33,33 +34,83 @@ const Credit = lazy(() => import('./finance/Credit'));
 const DiscardedBillsPage = lazy(() => import('./billing/DiscardedBillsPage'));
 const EstimatedBill = lazy(() => import('./EstimatedBill'));
 const BatteryPage = lazy(() => import('./BatteryPage'));
-const EstimateRecords = lazy(() => import('./EstimateRecords')); // ✅ NEW
+const EstimateRecords = lazy(() => import('./EstimateRecords'));
+// ✅ LEAVE APPLICATION - Add this import
+const LeaveApplication = lazy(() => import('./leave/LeaveApplication'));
 
 // Loading fallback component
 const LoadingFallback = ({ darkMode }) => (
   <div className={`flex items-center justify-center h-96 ${darkMode ? 'bg-gray-900' : 'bg-gray-100'}`}>
     <div className="text-center">
-      <FiLoader className="text-5xl text-red-500 animate-spin mx-auto mb-4" />
-      <p className={`${darkMode ? 'text-white' : 'text-gray-700'}`}>Loading...</p>
+      <FiLoader className="text-6xl text-amber-400 animate-spin mx-auto mb-4" />
+      <p className={`text-base font-bold ${darkMode ? 'text-white' : 'text-gray-700'}`}>Loading...</p>
     </div>
   </div>
 );
 
-// Memoized Stats Card Component
-const StatsCard = React.memo(({ title, value, subtitle, icon: Icon, color, darkMode }) => (
-  <div className={`bg-gradient-to-r ${color} rounded-2xl p-6 text-white shadow-lg`}>
-    <div className="flex justify-between items-start">
-      <div>
-        <p className="text-sm opacity-90">{title}</p>
-        <p className="text-3xl font-bold mt-2">{value}</p>
-        {subtitle && <p className="text-xs opacity-75 mt-1">{subtitle}</p>}
+// ==================== Sparkline mini chart ====================
+const Sparkline = ({ data, color }) => (
+  <div className="h-10 mt-3 -mx-1">
+    <ResponsiveContainer width="100%" height="100%">
+      <AreaChart data={data} margin={{ top: 2, right: 0, left: 0, bottom: 0 }}>
+        <YAxis domain={[0, 'dataMax']} hide />
+        <Area
+          type="monotone"
+          dataKey="value"
+          stroke={color}
+          fill={color}
+          fillOpacity={0.15}
+          strokeWidth={2}
+          isAnimationActive={false}
+        />
+      </AreaChart>
+    </ResponsiveContainer>
+  </div>
+);
+
+// ==================== Stats Card - FIXED: Same height and aligned lines ====================
+const StatsCard = React.memo(({ 
+  title, value, icon: Icon, iconBg, iconColor, 
+  trend, subtitle, sparkData, sparkColor, 
+  progressPercent, progressLabel, darkMode 
+}) => (
+  <div className={`rounded-2xl p-5 border flex flex-col ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200 shadow-sm'}`} style={{ minHeight: '165px' }}>
+    <div className="flex items-center gap-2.5 mb-2">
+      <div className={`p-2 rounded-full ${iconBg}`}>
+        <Icon className={`text-base ${iconColor}`} />
       </div>
-      <Icon className="text-3xl opacity-50" />
+      <span className={`text-sm font-bold ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>{title}</span>
     </div>
+    
+    {/* ✅ Value - Same position for all cards */}
+    <p className={`text-2xl font-extrabold ${darkMode ? 'text-white' : 'text-gray-900'}`}>{value}</p>
+
+    {/* ✅ Fixed height container for trend/subtitle - ALL CARDS ALIGNED */}
+    <div className="h-7 flex items-center mt-0.5">
+      {trend !== null && trend !== undefined && (
+        <p className={`text-sm flex items-center gap-1 font-bold ${trend >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+          {trend >= 0 ? '↑' : '↓'} {Math.abs(trend).toFixed(1)}%
+        </p>
+      )}
+      {subtitle && (trend === null || trend === undefined) && (
+        <p className={`text-sm font-bold ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>{subtitle}</p>
+      )}
+    </div>
+
+    {sparkData ? (
+      <Sparkline data={sparkData} color={sparkColor} />
+    ) : progressPercent !== undefined ? (
+      <div className="mt-2">
+        <div className={`h-1.5 rounded-full overflow-hidden ${darkMode ? 'bg-gray-800' : 'bg-gray-200'}`}>
+          <div className="h-full bg-amber-400 rounded-full transition-all" style={{ width: `${Math.min(100, progressPercent)}%` }} />
+        </div>
+        {progressLabel && <p className={`text-sm font-bold mt-1.5 ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>{progressLabel}</p>}
+      </div>
+    ) : null}
   </div>
 ));
 
-// ✅ Helper: Get date range for filter
+// Helper: Get date range for filter
 const getDateRange = (filter, customDate = null) => {
   const now = new Date();
   const start = new Date();
@@ -97,7 +148,6 @@ const getDateRange = (filter, customDate = null) => {
   return { start, end: now };
 };
 
-// ✅ Helper: Filter invoices by date range
 const filterInvoicesByDate = (invoices, filter, customDate = null) => {
   if (filter === 'all') return invoices;
   const range = getDateRange(filter, customDate);
@@ -109,7 +159,6 @@ const filterInvoicesByDate = (invoices, filter, customDate = null) => {
   });
 };
 
-// ✅ Helper: Filter expenses by date range
 const filterExpensesByDate = (expenses, filter, customDate = null) => {
   if (filter === 'all') return expenses;
   const range = getDateRange(filter, customDate);
@@ -145,13 +194,13 @@ const Dashboard = () => {
   const [loading, setLoading] = useState(true);
   const [darkMode, setDarkMode] = useState(() => {
     const saved = localStorage.getItem('darkMode');
-    return saved === 'true';
+    return saved !== null ? saved === 'true' : true;
   });
 
   const [timeFilter, setTimeFilter] = useState('all');
   const [customDate, setCustomDate] = useState('');
   const [showCustomDate, setShowCustomDate] = useState(false);
-  const [chartType, setChartType] = useState('line');
+  const [chartType, setChartType] = useState('bar');
   const [isLowStockOpen, setIsLowStockOpen] = useState(false);
 
   const [products, setProducts] = useState([]);
@@ -306,6 +355,30 @@ const Dashboard = () => {
     }));
   }, [filteredInvoices, filteredExpenses, activeProducts]);
 
+  // NEW: sirf shuru aur aakhir ke khali months hatao (beech waale jaise Jul dikhte rahenge, taake pata chale us month sale nahi hui)
+  const trimmedMonthlyData = useMemo(() => {
+    const hasData = (m) => m.sales > 0 || m.profit > 0 || m.expenses > 0 || m.discount > 0;
+    const firstIdx = monthlyData.findIndex(hasData);
+    if (firstIdx === -1) return monthlyData; // koi data nahi, sab months dikhao
+    let lastIdx = monthlyData.length - 1;
+    while (lastIdx > firstIdx && !hasData(monthlyData[lastIdx])) lastIdx--;
+    return monthlyData.slice(firstIdx, lastIdx + 1);
+  }, [monthlyData]);
+
+  const getTrend = useCallback((key) => {
+    const nonZero = monthlyData.filter(m => m[key] > 0);
+    if (nonZero.length < 2) return null;
+    const last = nonZero[nonZero.length - 1][key];
+    const prev = nonZero[nonZero.length - 2][key];
+    if (!prev) return null;
+    return ((last - prev) / prev) * 100;
+  }, [monthlyData]);
+
+  const salesSpark = useMemo(() => trimmedMonthlyData.map(m => ({ value: m.sales })), [trimmedMonthlyData]);
+  const profitSpark = useMemo(() => trimmedMonthlyData.map(m => ({ value: m.profit })), [trimmedMonthlyData]);
+  const expensesSpark = useMemo(() => trimmedMonthlyData.map(m => ({ value: m.expenses })), [trimmedMonthlyData]);
+  const discountSpark = useMemo(() => trimmedMonthlyData.map(m => ({ value: m.discount })), [trimmedMonthlyData]);
+
   const productSalesData = useMemo(() => {
     const allProducts = activeProducts
       .map(p => ({
@@ -328,7 +401,19 @@ const Dashboard = () => {
     return top;
   }, [activeProducts]);
 
-  const COLORS = useMemo(() => ['#ef4444', '#f97316', '#eab308', '#22c55e', '#3b82f6', '#06b6d4', '#8b5cf6', '#ec4899', '#14b8a6', '#f43f5e'], []);
+  const productSalesTotal = useMemo(() => 
+    productSalesData.reduce((sum, p) => sum + p.value, 0),
+    [productSalesData]
+  );
+
+  const topProductPercent = useMemo(() => 
+    productSalesTotal > 0 && productSalesData.length > 0 
+      ? (productSalesData[0].value / productSalesTotal) * 100 
+      : 0,
+    [productSalesData, productSalesTotal]
+  );
+
+  const COLORS = useMemo(() => ['#fbbf24', '#ef4444', '#22c55e', '#3b82f6', '#a855f7', '#06b6d4', '#f97316', '#ec4899', '#14b8a6', '#94a3b8'], []);
 
   const fetchAllData = useCallback(async () => {
     const abortController = new AbortController();
@@ -461,7 +546,7 @@ const Dashboard = () => {
 
   const getMenuTitle = useCallback(() => {
     const titles = {
-      'all-data': 'Complete Business Overview',
+      'all-data': 'Business Overview',
       inventory: 'Inventory Management',
       'finance-overview': 'Finance Dashboard',
       'finance-expenses': 'Expenses Management',
@@ -471,19 +556,20 @@ const Dashboard = () => {
       'finance-credit': 'Credit Management',
       billing: 'Billing System',
       estimate: 'Estimate / Quotation',
-      'estimate-records': 'Estimate Records', // ✅ NEW
+      'estimate-records': 'Estimate Records',
       battery: 'Battery Sale',
       record: 'Records Archive',
       reminders: 'Reminders',
       users: 'User Management',
-      discarded: 'Drafted Bills'
+      discarded: 'Drafted Bills',
+      leave: 'Leave Application'
     };
     return titles[activeMenu] || 'Dashboard';
   }, [activeMenu]);
 
   const getMenuDescription = useCallback(() => {
     const descriptions = {
-      'all-data': 'Everything at a glance - Sales, Expenses, Products, Invoices',
+      'all-data': 'Everything at a glance – Sales, Expenses, Products, Invoices',
       inventory: 'Manage products, track purchases and sales',
       'finance-overview': 'View daily, weekly and monthly financial overview',
       'finance-expenses': 'Add, edit and manage all expenses',
@@ -493,12 +579,13 @@ const Dashboard = () => {
       'finance-credit': 'Manage vendor credits, payments and history',
       billing: 'Create bills, print invoices, export data',
       estimate: 'Create and print customer estimates / quotations',
-      'estimate-records': 'View all estimate records with search and filters', // ✅ NEW
+      'estimate-records': 'View all estimate records with search and filters',
       battery: 'Sell batteries with trade-in option',
       record: 'View all transaction history',
       reminders: 'Birthday, Tuning & Oil Change reminders',
       users: 'Manage system users and employees',
-      discarded: 'View and restore drafted bills'
+      discarded: 'View and restore drafted bills',
+      leave: 'Record and manage employee leave applications'
     };
     return descriptions[activeMenu] || '';
   }, [activeMenu]);
@@ -515,12 +602,13 @@ const Dashboard = () => {
       'finance-credit': <FiCreditCard className="text-2xl" />,
       billing: <FiFileText className="text-2xl" />,
       estimate: <FiFile className="text-2xl" />,
-      'estimate-records': <FiArchive className="text-2xl" />, // ✅ NEW
+      'estimate-records': <FiArchive className="text-2xl" />,
       battery: <FiBattery className="text-2xl" />,
       record: <FiBarChart2 className="text-2xl" />,
       reminders: <FiBell className="text-2xl" />,
       users: <FiUsers className="text-2xl" />,
-      discarded: <FiClock className="text-2xl" />
+      discarded: <FiClock className="text-2xl" />,
+      leave: <FiCalendar className="text-2xl" />
     };
     return icons[activeMenu] || <FiPackage className="text-2xl" />;
   }, [activeMenu]);
@@ -548,42 +636,53 @@ const Dashboard = () => {
   const renderChart = (data, darkMode) => {
     const commonProps = {
       data: data,
-      margin: { top: 5, right: 30, left: 20, bottom: 5 }
+      margin: { top: 5, right: 5, left: -5, bottom: 5 }
     };
 
     const axisProps = {
-      stroke: darkMode ? '#9ca3af' : '#6b7280'
+      stroke: darkMode ? '#6b7280' : '#9ca3af',
+      tick: { fontSize: 12, fontWeight: 600 }
     };
 
     const gridProps = {
-      stroke: darkMode ? '#374151' : '#e5e7eb',
-      strokeDasharray: '3 3'
+      stroke: darkMode ? '#1f2937' : '#e5e7eb',
+      strokeDasharray: '3 3',
+      vertical: false
     };
 
     const tooltipProps = {
-      contentStyle: { backgroundColor: darkMode ? '#1f2937' : '#ffffff' }
+      contentStyle: { 
+        backgroundColor: darkMode ? '#111827' : '#ffffff',
+        border: darkMode ? '1px solid #1f2937' : '1px solid #e5e7eb',
+        borderRadius: '8px',
+        padding: '10px 14px',
+        fontSize: '13px',
+        fontWeight: 600
+      }
     };
 
     const legendProps = {
-      wrapperStyle: { color: darkMode ? '#ffffff' : '#000000' }
+      wrapperStyle: { color: darkMode ? '#d1d5db' : '#374151', fontSize: '13px', fontWeight: 600 },
+      iconType: 'circle',
+      iconSize: 10
     };
 
     switch (chartType) {
-      case 'bar':
+      case 'line':
         return (
-          <BarChart {...commonProps}>
+          <LineChart {...commonProps}>
             <CartesianGrid {...gridProps} />
             <XAxis dataKey="month" {...axisProps} />
             <YAxis {...axisProps} />
             <Tooltip {...tooltipProps} />
             <Legend {...legendProps} />
-            <Bar dataKey="sales" fill="#ef4444" name="Sales" />
-            <Bar dataKey="profit" fill="#22c55e" name="Profit" />
-            <Bar dataKey="expenses" fill="#3b82f6" name="Expenses" />
-            <Bar dataKey="discount" fill="#0ea5e9" name="Discount" />
-          </BarChart>
+            <Line type="monotone" dataKey="sales" stroke="#fbbf24" name="Sales" strokeWidth={3} dot={false} />
+            <Line type="monotone" dataKey="profit" stroke="#22c55e" name="Profit" strokeWidth={3} dot={false} />
+            <Line type="monotone" dataKey="expenses" stroke="#3b82f6" name="Expenses" strokeWidth={3} dot={false} />
+            <Line type="monotone" dataKey="discount" stroke="#a855f7" name="Discount" strokeWidth={3} dot={false} />
+          </LineChart>
         );
-      
+
       case 'area':
         return (
           <AreaChart {...commonProps}>
@@ -592,13 +691,13 @@ const Dashboard = () => {
             <YAxis {...axisProps} />
             <Tooltip {...tooltipProps} />
             <Legend {...legendProps} />
-            <Area type="monotone" dataKey="sales" stackId="1" stroke="#ef4444" fill="#ef4444" fillOpacity={0.3} name="Sales" />
+            <Area type="monotone" dataKey="sales" stackId="1" stroke="#fbbf24" fill="#fbbf24" fillOpacity={0.3} name="Sales" />
             <Area type="monotone" dataKey="profit" stackId="1" stroke="#22c55e" fill="#22c55e" fillOpacity={0.3} name="Profit" />
             <Area type="monotone" dataKey="expenses" stackId="1" stroke="#3b82f6" fill="#3b82f6" fillOpacity={0.3} name="Expenses" />
-            <Area type="monotone" dataKey="discount" stackId="1" stroke="#0ea5e9" fill="#0ea5e9" fillOpacity={0.3} name="Discount" />
+            <Area type="monotone" dataKey="discount" stackId="1" stroke="#a855f7" fill="#a855f7" fillOpacity={0.3} name="Discount" />
           </AreaChart>
         );
-      
+
       case 'composed':
         return (
           <ComposedChart {...commonProps}>
@@ -607,44 +706,51 @@ const Dashboard = () => {
             <YAxis {...axisProps} />
             <Tooltip {...tooltipProps} />
             <Legend {...legendProps} />
-            <Bar dataKey="expenses" barSize={20} fill="#3b82f6" name="Expenses" />
-            <Bar dataKey="discount" barSize={20} fill="#0ea5e9" name="Discount" />
-            <Line type="monotone" dataKey="sales" stroke="#ef4444" name="Sales" strokeWidth={2} />
-            <Line type="monotone" dataKey="profit" stroke="#22c55e" name="Profit" strokeWidth={2} />
+            <Bar dataKey="expenses" barSize={14} fill="#3b82f6" name="Expenses" radius={[3, 3, 0, 0]} />
+            <Bar dataKey="discount" barSize={14} fill="#a855f7" name="Discount" radius={[3, 3, 0, 0]} />
+            <Line type="monotone" dataKey="sales" stroke="#fbbf24" name="Sales" strokeWidth={3} dot={false} />
+            <Line type="monotone" dataKey="profit" stroke="#22c55e" name="Profit" strokeWidth={3} dot={false} />
           </ComposedChart>
         );
-      
-      case 'line':
+
+      case 'bar':
       default:
         return (
-          <LineChart {...commonProps}>
+          <BarChart {...commonProps} barCategoryGap="35%" barGap={3}>
             <CartesianGrid {...gridProps} />
             <XAxis dataKey="month" {...axisProps} />
             <YAxis {...axisProps} />
             <Tooltip {...tooltipProps} />
             <Legend {...legendProps} />
-            <Line type="monotone" dataKey="sales" stroke="#ef4444" name="Sales" strokeWidth={2} />
-            <Line type="monotone" dataKey="profit" stroke="#22c55e" name="Profit" strokeWidth={2} />
-            <Line type="monotone" dataKey="expenses" stroke="#3b82f6" name="Expenses" strokeWidth={2} />
-            <Line type="monotone" dataKey="discount" stroke="#0ea5e9" name="Discount" strokeWidth={2} />
-          </LineChart>
+            <Bar dataKey="sales" fill="#fbbf24" name="Sales" radius={[4, 4, 0, 0]} maxBarSize={26} />
+            <Bar dataKey="profit" fill="#22c55e" name="Profit" radius={[4, 4, 0, 0]} maxBarSize={26} />
+            <Bar dataKey="expenses" fill="#3b82f6" name="Expenses" radius={[4, 4, 0, 0]} maxBarSize={26} />
+            <Bar dataKey="discount" fill="#a855f7" name="Discount" radius={[4, 4, 0, 0]} maxBarSize={26} />
+          </BarChart>
         );
     }
   };
 
   if (loading) {
     return (
-      <div className={`min-h-screen flex items-center justify-center ${darkMode ? 'bg-gray-900' : 'bg-gray-100'}`}>
+      <div className={`min-h-screen flex items-center justify-center ${darkMode ? 'bg-gray-950' : 'bg-gray-100'}`}>
         <div className="text-center">
-          <FiLoader className="text-5xl text-red-500 animate-spin mx-auto mb-4" />
-          <p className={`${darkMode ? 'text-white' : 'text-gray-700'}`}>Loading dashboard...</p>
+          <FiLoader className="text-6xl text-amber-400 animate-spin mx-auto mb-4" />
+          <p className={`text-base font-bold ${darkMode ? 'text-white' : 'text-gray-700'}`}>Loading dashboard...</p>
         </div>
       </div>
     );
   }
 
+  const statusPillClass = (status) => {
+    if (status === 'Paid') return darkMode ? 'bg-emerald-900/40 text-emerald-400' : 'bg-emerald-100 text-emerald-700';
+    if (status === 'Partial') return darkMode ? 'bg-blue-900/40 text-blue-400' : 'bg-blue-100 text-blue-700';
+    if (status === 'Unpaid') return darkMode ? 'bg-amber-900/40 text-amber-400' : 'bg-amber-100 text-amber-700';
+    return darkMode ? 'bg-red-900/40 text-red-400' : 'bg-red-100 text-red-700';
+  };
+
   return (
-    <div className={`min-h-screen ${darkMode ? 'dark bg-gray-900' : 'bg-gray-100'}`}>
+    <div className={`min-h-screen ${darkMode ? 'dark bg-gray-950' : 'bg-gray-100'}`}>
       <div className="flex h-screen">
         <Sidebar 
           activeMenu={activeMenu} 
@@ -656,347 +762,281 @@ const Dashboard = () => {
         
         <div className="flex-1 flex flex-col overflow-hidden">
           {/* Header */}
-          <div className={`${darkMode ? 'bg-gray-800' : 'bg-white'} shadow-sm px-6 py-3 flex justify-between items-center border-b ${darkMode ? 'border-gray-700' : 'border-gray-200'}`}>
+          <div className={`${darkMode ? 'bg-gray-950 border-gray-800' : 'bg-white border-gray-200'} px-5 py-3 flex justify-between items-center border-b`}>
             <div className="flex items-center gap-3">
               <button
                 onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-                className={`p-2 rounded-lg transition ${darkMode ? 'hover:bg-gray-700 text-white' : 'hover:bg-gray-100 text-gray-800'}`}
+                className={`p-2 rounded-lg transition ${darkMode ? 'hover:bg-gray-800 text-white' : 'hover:bg-gray-100 text-gray-800'}`}
               >
                 {isSidebarOpen ? <FiChevronLeft className="text-xl" /> : <FiMenu className="text-xl" />}
               </button>
-              <div className="text-2xl">{getActiveIcon()}</div>
               <div>
-                <h2 className={`text-xl font-bold ${darkMode ? 'text-white' : 'text-gray-800'}`}>
+                <h2 className={`text-lg font-extrabold ${darkMode ? 'text-white' : 'text-gray-800'}`}>
                   {getMenuTitle()}
                 </h2>
-                <p className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                <p className={`text-sm font-medium ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>
                   {getMenuDescription()}
                 </p>
               </div>
             </div>
             <div className="flex items-center gap-2">
+              {activeMenu === 'all-data' && (
+                <button
+                  onClick={() => setShowCustomDate(!showCustomDate)}
+                  className={`hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-xl text-sm font-bold ${darkMode ? 'bg-gray-900 border border-gray-800 text-gray-300 hover:bg-gray-800' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+                >
+                  <FiCalendar className="text-amber-400 text-base" />
+                  {getFilterLabel()}
+                  <FiChevronDown className="text-sm" />
+                </button>
+              )}
               <button
                 onClick={() => setDarkMode(!darkMode)}
-                className={`p-2 rounded-full transition ${darkMode ? 'text-yellow-400 hover:text-yellow-300' : 'text-gray-600 hover:text-gray-800'}`}
+                className={`p-2 rounded-full transition ${darkMode ? 'bg-gray-900 border border-gray-800 text-amber-400 hover:text-amber-300' : 'bg-gray-100 text-gray-600 hover:text-gray-800'}`}
               >
-                {darkMode ? <FiSun className="text-xl" /> : <FiMoon className="text-xl" />}
+                {darkMode ? <FiSun className="text-lg" /> : <FiMoon className="text-lg" />}
               </button>
-              <button onClick={handleLogout} className={`p-2 rounded-full transition ${darkMode ? 'text-red-400 hover:text-red-300' : 'text-red-500 hover:text-red-600'}`}>
-                <FiLogOut className="text-xl" />
+              <button onClick={handleLogout} className={`p-2 rounded-full transition ${darkMode ? 'bg-gray-900 border border-gray-800 text-red-400 hover:text-red-300' : 'bg-gray-100 text-red-500 hover:text-red-600'}`}>
+                <FiLogOut className="text-lg" />
               </button>
             </div>
           </div>
 
-          {/* Content */}
-          <div className={`flex-1 overflow-y-auto p-8 ${darkMode ? 'bg-gray-900' : 'bg-gray-100'}`}>
+          {/* Content - FULL WIDTH */}
+          <div className={`flex-1 overflow-y-auto p-4 ${darkMode ? 'bg-gray-950' : 'bg-gray-100'}`}>
             
             {/* ALL DATA VIEW - Admin only */}
             {activeMenu === 'all-data' && userRole !== 'employee' && (
-              <div className="space-y-6">
+              <div className="space-y-4">
                 {/* FILTER BUTTONS */}
-                <div className={`flex flex-wrap items-center gap-3 p-4 rounded-xl ${darkMode ? 'bg-gray-800' : 'bg-white'} shadow-lg border ${darkMode ? 'border-gray-700' : 'border-gray-200'}`}>
-                  <div className="flex items-center gap-2 mr-4">
-                    <FiCalendar className={`text-lg ${darkMode ? 'text-gray-400' : 'text-gray-600'}`} />
-                    <span className={`text-sm font-medium ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>Filter:</span>
-                  </div>
-                  <button
-                    onClick={() => { setTimeFilter('all'); setShowCustomDate(false); }}
-                    className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
-                      timeFilter === 'all' 
-                        ? 'bg-red-500 text-white shadow-md' 
-                        : darkMode 
-                          ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' 
-                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                    }`}
-                  >
-                    All Time
-                  </button>
-                  <button
-                    onClick={() => { setTimeFilter('today'); setShowCustomDate(false); }}
-                    className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
-                      timeFilter === 'today' 
-                        ? 'bg-red-500 text-white shadow-md' 
-                        : darkMode 
-                          ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' 
-                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                    }`}
-                  >
-                    Today
-                  </button>
-                  <button
-                    onClick={() => { setTimeFilter('week'); setShowCustomDate(false); }}
-                    className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
-                      timeFilter === 'week' 
-                        ? 'bg-red-500 text-white shadow-md' 
-                        : darkMode 
-                          ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' 
-                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                    }`}
-                  >
-                    This Week
-                  </button>
-                  <button
-                    onClick={() => { setTimeFilter('month'); setShowCustomDate(false); }}
-                    className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
-                      timeFilter === 'month' 
-                        ? 'bg-red-500 text-white shadow-md' 
-                        : darkMode 
-                          ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' 
-                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                    }`}
-                  >
-                    This Month
-                  </button>
-                  <button
-                    onClick={() => { setTimeFilter('year'); setShowCustomDate(false); }}
-                    className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
-                      timeFilter === 'year' 
-                        ? 'bg-red-500 text-white shadow-md' 
-                        : darkMode 
-                          ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' 
-                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                    }`}
-                  >
-                    This Year
-                  </button>
+                <div className={`flex flex-wrap items-center gap-1.5 p-3 rounded-xl border ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200 shadow-sm'}`}>
+                  <span className={`text-sm font-bold mr-1 ${darkMode ? 'text-gray-400' : 'text-gray-700'}`}>Filter:</span>
+                  {[
+                    { key: 'all', label: 'All Time' },
+                    { key: 'today', label: 'Today' },
+                    { key: 'week', label: 'This Week' },
+                    { key: 'month', label: 'This Month' },
+                    { key: 'year', label: 'This Year' },
+                  ].map(f => (
+                    <button
+                      key={f.key}
+                      onClick={() => { setTimeFilter(f.key); setShowCustomDate(false); }}
+                      className={`px-3 py-1.5 rounded-lg text-sm font-bold transition ${timeFilter === f.key ? 'bg-amber-400 text-gray-900 shadow-md' : darkMode ? 'bg-gray-800 text-gray-300 hover:bg-gray-700' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+                    >
+                      {f.label}
+                    </button>
+                  ))}
                   <button
                     onClick={() => setShowCustomDate(!showCustomDate)}
-                    className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
-                      timeFilter === 'custom' 
-                        ? 'bg-red-500 text-white shadow-md' 
-                        : darkMode 
-                          ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' 
-                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                    }`}
+                    className={`px-3 py-1.5 rounded-lg text-sm font-bold transition flex items-center gap-1.5 ${timeFilter === 'custom' ? 'bg-amber-400 text-gray-900 shadow-md' : darkMode ? 'bg-gray-800 text-gray-300 hover:bg-gray-700' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
                   >
-                    📅 Custom Date
+                    <FiCalendar className="text-base" /> Custom
                   </button>
                   {showCustomDate && (
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1.5">
                       <input
                         type="date"
                         value={customDate}
                         onChange={handleCustomDateChange}
-                        className={`px-3 py-2 rounded-lg text-sm border ${darkMode ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-800'}`}
+                        className={`px-3 py-1.5 rounded-lg text-sm font-medium border ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300 text-gray-800'}`}
                       />
                       {customDate && (
                         <button
                           onClick={() => { setCustomDate(''); setTimeFilter('all'); setShowCustomDate(false); }}
-                          className="text-red-500 text-sm hover:text-red-600"
+                          className="text-red-400 text-sm font-bold hover:text-red-300"
                         >
                           ✕
                         </button>
                       )}
                     </div>
                   )}
-                  <span className={`ml-auto text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                    Showing: <strong className={darkMode ? 'text-white' : 'text-gray-800'}>{getFilterLabel()}</strong>
-                  </span>
                 </div>
 
-                {/* CHART TYPE BUTTONS */}
-                <div className={`flex flex-wrap items-center gap-3 p-4 rounded-xl ${darkMode ? 'bg-gray-800' : 'bg-white'} shadow-lg border ${darkMode ? 'border-gray-700' : 'border-gray-200'}`}>
-                  <div className="flex items-center gap-2 mr-4">
-                    <FiBarChart2 className={`text-lg ${darkMode ? 'text-gray-400' : 'text-gray-600'}`} />
-                    <span className={`text-sm font-medium ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>Chart Type:</span>
-                  </div>
-                  <button
-                    onClick={() => setChartType('line')}
-                    className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
-                      chartType === 'line' 
-                        ? 'bg-red-500 text-white shadow-md' 
-                        : darkMode 
-                          ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' 
-                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                    }`}
-                  >
-                    Line
-                  </button>
-                  <button
-                    onClick={() => setChartType('bar')}
-                    className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
-                      chartType === 'bar' 
-                        ? 'bg-red-500 text-white shadow-md' 
-                        : darkMode 
-                          ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' 
-                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                    }`}
-                  >
-                    Bar
-                  </button>
-                  <button
-                    onClick={() => setChartType('area')}
-                    className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
-                      chartType === 'area' 
-                        ? 'bg-red-500 text-white shadow-md' 
-                        : darkMode 
-                          ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' 
-                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                    }`}
-                  >
-                    Area
-                  </button>
-                  <button
-                    onClick={() => setChartType('composed')}
-                    className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
-                      chartType === 'composed' 
-                        ? 'bg-red-500 text-white shadow-md' 
-                        : darkMode 
-                          ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' 
-                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                    }`}
-                  >
-                    Composed
-                  </button>
-                </div>
-
-                {/* STATS CARDS */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6">
+                {/* STATS CARDS - Full width, no gaps */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
                   <StatsCard 
                     title="Total Sales" 
                     value={`Rs. ${totalSales.toLocaleString()}`} 
                     icon={FiDollarSign} 
-                    color="from-red-500 to-red-600" 
+                    iconBg="bg-amber-400/15" 
+                    iconColor="text-amber-400"
+                    trend={getTrend('sales')}
+                    sparkData={salesSpark}
+                    sparkColor="#fbbf24"
                     darkMode={darkMode} 
                   />
                   <StatsCard 
                     title="Total Profit" 
                     value={`Rs. ${totalProfitCalc.toLocaleString()}`} 
-                    subtitle={`Margin: ${profitMargin.toFixed(1)}%`} 
+                    subtitle={`Margin: ${profitMargin.toFixed(1)}%`}
                     icon={FiTrendingUp} 
-                    color="from-green-500 to-green-600" 
+                    iconBg="bg-emerald-500/15" 
+                    iconColor="text-emerald-400"
+                    trend={null}
+                    sparkData={profitSpark}
+                    sparkColor="#22c55e"
                     darkMode={darkMode} 
                   />
                   <StatsCard 
                     title="Total Expenses" 
                     value={`Rs. ${totalExpensesSum.toLocaleString()}`} 
                     icon={FiShoppingCart} 
-                    color="from-blue-500 to-blue-600" 
+                    iconBg="bg-blue-500/15" 
+                    iconColor="text-blue-400"
+                    trend={getTrend('expenses')}
+                    sparkData={expensesSpark}
+                    sparkColor="#3b82f6"
                     darkMode={darkMode} 
                   />
                   <StatsCard 
                     title="Active Products" 
                     value={totalProductsCount} 
-                    subtitle={`${totalStock} units in stock`} 
                     icon={FiPackage} 
-                    color="from-purple-500 to-purple-600" 
+                    iconBg="bg-purple-500/15" 
+                    iconColor="text-purple-400"
+                    progressPercent={Math.min(100, (totalStock / 50) * 100)}
+                    progressLabel={`${totalStock} units`}
                     darkMode={darkMode} 
                   />
                   <StatsCard 
                     title="Total Discount" 
                     value={`Rs. ${totalDiscount.toLocaleString()}`} 
                     icon={FiGift} 
-                    color="from-sky-400 to-sky-500" 
+                    iconBg="bg-orange-500/15" 
+                    iconColor="text-orange-400"
+                    trend={getTrend('discount')}
+                    sparkData={discountSpark}
+                    sparkColor="#f97316"
                     darkMode={darkMode} 
                   />
                 </div>
 
-                {/* CHARTS */}
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                  <div className={`lg:col-span-2 ${darkMode ? 'bg-gray-800' : 'bg-white'} rounded-2xl shadow-lg p-6 border ${darkMode ? 'border-gray-700' : 'border-gray-200'}`}>
-                    <div className="flex justify-between items-center mb-4">
-                      <h3 className={`text-lg font-semibold flex items-center gap-2 ${darkMode ? 'text-white' : 'text-gray-800'}`}>
-                        <FiTrendingUp className="text-red-500" /> Monthly Sales, Profit, Expenses & Discount
-                        <span className={`text-xs font-normal ml-2 px-2 py-1 rounded-full ${darkMode ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-600'}`}>
-                          {chartType.toUpperCase()}
-                        </span>
+                {/* CHARTS - Full width */}
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+                  <div className={`lg:col-span-2 rounded-xl p-4 border flex flex-col ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200 shadow-sm'}`} style={{ height: '430px' }}>
+                    <div className="flex justify-between items-center mb-3 flex-shrink-0">
+                      <h3 className={`text-base font-extrabold flex items-center gap-2 ${darkMode ? 'text-white' : 'text-gray-800'}`}>
+                        <FiTrendingUp className="text-amber-400 text-xl" /> Monthly Sales, Profit, Expenses & Discount
                       </h3>
-                      <span className={`text-xs px-2 py-1 rounded-full ${darkMode ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-600'}`}>
-                        {getFilterLabel()}
-                      </span>
+                      <select
+                        value={chartType}
+                        onChange={(e) => setChartType(e.target.value)}
+                        className={`text-sm font-bold px-3 py-1 rounded-lg border ${darkMode ? 'bg-gray-800 border-gray-700 text-gray-300' : 'bg-gray-100 border-gray-200 text-gray-700'}`}
+                      >
+                        <option value="bar">Bar</option>
+                        <option value="line">Line</option>
+                        <option value="area">Area</option>
+                        <option value="composed">Composed</option>
+                      </select>
                     </div>
-                    <div className="h-80">
+                    <div className="flex-1 min-h-0">
                       <ResponsiveContainer width="100%" height="100%">
-                        {renderChart(monthlyData, darkMode)}
+                        {renderChart(trimmedMonthlyData, darkMode)}
                       </ResponsiveContainer>
                     </div>
                   </div>
 
                   {productSalesData.length > 0 && (
-                    <div className={`lg:col-span-1 ${darkMode ? 'bg-gray-800' : 'bg-white'} rounded-2xl shadow-lg p-6 border ${darkMode ? 'border-gray-700' : 'border-gray-200'}`}>
-                      <h3 className={`text-lg font-semibold mb-4 flex items-center gap-2 ${darkMode ? 'text-white' : 'text-gray-800'}`}>
-                        <FiBarChart2 className="text-red-500" /> Product Sales Distribution
+                    <div className={`lg:col-span-1 rounded-xl p-4 border flex flex-col ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200 shadow-sm'}`} style={{ height: '430px' }}>
+                      <h3 className={`text-base font-extrabold mb-2 flex items-center gap-2 flex-shrink-0 ${darkMode ? 'text-white' : 'text-gray-800'}`}>
+                        <FiBarChart2 className="text-amber-400 text-xl" /> Product Sales
                       </h3>
-                      <div className="h-64">
+                      <div className="h-48 flex-shrink-0 relative">
                         <ResponsiveContainer width="100%" height="100%">
                           <PieChart>
                             <Pie 
                               data={productSalesData} 
                               cx="50%" 
                               cy="50%" 
-                              labelLine={false} 
-                              label={({ percent }) => percent > 0.08 ? `${(percent * 100).toFixed(0)}%` : ''} 
-                              outerRadius={85} 
+                              innerRadius={45}
+                              outerRadius={70} 
+                              paddingAngle={2}
                               dataKey="value"
                             >
                               {productSalesData.map((entry, index) => (
-                                <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                                <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} stroke="none" />
                               ))}
                             </Pie>
-                            <Tooltip formatter={(value) => `Rs. ${value.toLocaleString()}`} contentStyle={{ backgroundColor: darkMode ? '#1f2937' : '#ffffff' }} />
+                            <Tooltip formatter={(value) => `Rs. ${value.toLocaleString()}`} contentStyle={{ backgroundColor: darkMode ? '#111827' : '#ffffff', border: darkMode ? '1px solid #1f2937' : '1px solid #e5e7eb', borderRadius: '8px', padding: '8px 12px', fontSize: '13px', fontWeight: 600 }} />
                           </PieChart>
                         </ResponsiveContainer>
+                        <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                          <span className={`text-sm font-bold ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Total</span>
+                          <span className={`text-lg font-extrabold ${darkMode ? 'text-white' : 'text-gray-900'}`}>{topProductPercent.toFixed(0)}%</span>
+                        </div>
                       </div>
-                      <div className={`mt-3 max-h-36 overflow-y-auto pr-1 space-y-1.5 border-t pt-3 ${darkMode ? 'border-gray-700' : 'border-gray-200'}`}>
+
+                      <div className={`flex justify-between text-sm font-bold mt-2 pb-1.5 border-b flex-shrink-0 ${darkMode ? 'text-gray-500 border-gray-800' : 'text-gray-400 border-gray-200'}`}>
+                        <span>PRODUCT</span>
+                        <span>SALES</span>
+                      </div>
+                      <div className="mt-1 flex-1 min-h-0 overflow-y-auto pr-1 space-y-1">
                         {productSalesData.map((entry, index) => (
-                          <div key={`legend-${index}`} className="flex items-center gap-2 text-xs">
+                          <div key={`legend-${index}`} className="flex items-center gap-2 text-sm">
                             <span 
-                              className="w-2.5 h-2.5 rounded-sm flex-shrink-0" 
+                              className="w-2.5 h-2.5 rounded-full flex-shrink-0" 
                               style={{ backgroundColor: COLORS[index % COLORS.length] }}
                             ></span>
-                            <span className={`truncate flex-1 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`} title={entry.name}>
+                            <span className={`truncate flex-1 font-bold ${darkMode ? 'text-gray-300' : 'text-gray-700'}`} title={entry.name}>
                               {entry.name}
                             </span>
-                            <span className={`flex-shrink-0 font-medium ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                            <span className={`flex-shrink-0 font-bold ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
                               Rs. {entry.value.toLocaleString()}
                             </span>
                           </div>
                         ))}
                       </div>
+                      <button 
+                        onClick={() => setActiveMenu('finance-reports')}
+                        className="w-full mt-2 py-2 bg-amber-400 text-gray-900 rounded-lg text-sm font-extrabold hover:bg-amber-300 transition flex-shrink-0"
+                      >
+                        View Full Report
+                      </button>
                     </div>
                   )}
                 </div>
 
                 {/* Recent Invoices */}
-                <div className={`${darkMode ? 'bg-gray-800' : 'bg-white'} rounded-2xl shadow-lg overflow-hidden border ${darkMode ? 'border-gray-700' : 'border-gray-200'}`}>
-                  <div className="px-6 py-4 border-b flex justify-between items-center">
-                    <h3 className={`font-semibold flex items-center gap-2 ${darkMode ? 'text-white' : 'text-gray-800'}`}>
-                      <FiFileText className="text-red-500" /> Recent Invoices
-                      <span className={`text-xs font-normal ml-2 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                        ({getFilterLabel()})
-                      </span>
+                <div className={`rounded-xl overflow-hidden border ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200 shadow-sm'}`}>
+                  <div className="px-4 py-2.5 flex justify-between items-center">
+                    <h3 className={`font-extrabold flex items-center gap-2 text-base ${darkMode ? 'text-white' : 'text-gray-800'}`}>
+                      <FiFileText className="text-amber-400 text-xl" /> Recent Invoices
                     </h3>
-                    <button onClick={() => setActiveMenu('record')} className="text-red-500 text-sm hover:text-red-600 flex items-center gap-1">
-                      View All <FiArrowRight className="text-xs" />
+                    <button onClick={() => setActiveMenu('record')} className="text-amber-400 text-sm font-bold hover:text-amber-300 flex items-center gap-1">
+                      View All <FiArrowRight className="text-sm" />
                     </button>
                   </div>
                   <div className="overflow-x-auto">
-                    <table className="w-full">
-                      <thead className={darkMode ? 'bg-gray-700' : 'bg-gray-50'}>
-                        <tr>
-                          <th className="px-6 py-3 text-left text-xs font-medium uppercase">Invoice #</th>
-                          <th className="px-6 py-3 text-left text-xs font-medium uppercase">Customer</th>
-                          <th className="px-6 py-3 text-right text-xs font-medium uppercase">Amount</th>
-                          <th className="px-6 py-3 text-center text-xs font-medium uppercase">Status</th>
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className={darkMode ? 'text-gray-500' : 'text-gray-500'}>
+                          <th className="px-4 py-2 text-left text-sm font-bold uppercase">Invoice #</th>
+                          <th className="px-4 py-2 text-left text-sm font-bold uppercase">Customer</th>
+                          <th className="px-4 py-2 text-left text-sm font-bold uppercase">Date</th>
+                          <th className="px-4 py-2 text-right text-sm font-bold uppercase">Amount</th>
+                          <th className="px-4 py-2 text-center text-sm font-bold uppercase">Status</th>
                         </tr>
                       </thead>
-                      <tbody className={`divide-y ${darkMode ? 'divide-gray-700' : 'divide-gray-200'}`}>
+                      <tbody className={`divide-y ${darkMode ? 'divide-gray-800' : 'divide-gray-100'}`}>
                         {recentInvoices.length === 0 ? (
                           <tr>
-                            <td colSpan="4" className="px-6 py-8 text-center">
-                              <p className={`text-sm ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                                No invoices found for {getFilterLabel().toLowerCase()}
+                            <td colSpan="5" className="px-4 py-5 text-center">
+                              <p className={`text-sm font-bold ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>
+                                No invoices found
                               </p>
                             </td>
                           </tr>
                         ) : (
                           recentInvoices.map(inv => (
-                            <tr key={inv.id} className={darkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-50'}>
-                              <td className="px-6 py-4 text-sm font-medium">{inv.invoice_no || inv.invoiceNo}</td>
-                              <td className="px-6 py-4 text-sm">{inv.customer_name || inv.customer?.name || 'Walk-in'}</td>
-                              <td className="px-6 py-4 text-sm font-semibold text-red-500 text-right">Rs. {(inv.total_amount || inv.total || 0).toLocaleString()}</td>
-                              <td className="px-6 py-4 text-sm text-center">
-                                <span className={`px-2 py-1 rounded-full text-xs ${inv.status === 'Paid' ? 'bg-green-100 text-green-700' : inv.status === 'Partial' ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'}`}>
+                            <tr key={inv.id} className={darkMode ? 'hover:bg-gray-800/50' : 'hover:bg-gray-50'}>
+                              <td className={`px-4 py-2.5 text-sm font-bold ${darkMode ? 'text-gray-200' : 'text-gray-800'}`}>{inv.invoice_no || inv.invoiceNo}</td>
+                              <td className={`px-4 py-2.5 text-sm font-bold ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>{inv.customer_name || inv.customer?.name || 'Walk-in'}</td>
+                              <td className={`px-4 py-2.5 text-sm font-bold ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                                {inv.invoice_date ? new Date(inv.invoice_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '-'}
+                              </td>
+                              <td className={`px-4 py-2.5 text-sm font-extrabold text-right ${darkMode ? 'text-gray-100' : 'text-gray-900'}`}>Rs. {(inv.total_amount || inv.total || 0).toLocaleString()}</td>
+                              <td className="px-4 py-2.5 text-sm text-center">
+                                <span className={`px-3 py-1 rounded-full text-sm font-bold ${statusPillClass(inv.status)}`}>
                                   {inv.status || 'Pending'}
                                 </span>
                               </td>
@@ -1009,68 +1049,65 @@ const Dashboard = () => {
                 </div>
 
                 {/* Low Stock Alerts */}
-                <div className={`${darkMode ? 'bg-gray-800' : 'bg-white'} rounded-2xl shadow-lg overflow-hidden border ${darkMode ? 'border-gray-700' : 'border-gray-200'}`}>
+                <div className={`rounded-xl overflow-hidden border ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200 shadow-sm'}`}>
                   <div 
-                    className={`px-6 py-4 border-b ${darkMode ? 'border-gray-700' : 'border-gray-200'} flex justify-between items-center cursor-pointer hover:opacity-80 transition`}
+                    className={`px-4 py-2.5 flex justify-between items-center cursor-pointer hover:opacity-80 transition`}
                     onClick={() => setIsLowStockOpen(!isLowStockOpen)}
                   >
-                    <h3 className={`font-semibold flex items-center gap-2 ${darkMode ? 'text-white' : 'text-gray-800'}`}>
-                      <FiAlertCircle className="text-red-500" /> Low Stock Alerts
-                      <span className={`text-xs font-normal ml-2 ${lowStockProducts.length > 0 ? 'text-red-500 font-bold' : darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                        ({lowStockProducts.length} products)
+                    <h3 className={`font-extrabold flex items-center gap-2 text-base ${darkMode ? 'text-white' : 'text-gray-800'}`}>
+                      <FiAlertCircle className="text-amber-400 text-xl" /> Low Stock Alerts
+                      <span className={`text-sm font-bold ml-1 ${lowStockProducts.length > 0 ? 'text-amber-400' : darkMode ? 'text-gray-500' : 'text-gray-500'}`}>
+                        ({lowStockProducts.length})
                       </span>
                     </h3>
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2">
                       {lowStockProducts.length > 0 && (
-                        <span className="text-xs bg-red-500 text-white px-2 py-1 rounded-full animate-pulse">
-                          ⚠️ Needs Attention
+                        <span className="text-sm bg-red-500 text-white px-2 py-0.5 rounded-full animate-pulse font-bold">
+                          ⚠️
                         </span>
                       )}
                       {isLowStockOpen ? (
-                        <FiChevronUp className={`text-xl ${darkMode ? 'text-gray-400' : 'text-gray-500'}`} />
+                        <FiChevronUp className={`text-lg ${darkMode ? 'text-gray-500' : 'text-gray-500'}`} />
                       ) : (
-                        <FiChevronDown className={`text-xl ${darkMode ? 'text-gray-400' : 'text-gray-500'}`} />
+                        <FiChevronDown className={`text-lg ${darkMode ? 'text-gray-500' : 'text-gray-500'}`} />
                       )}
                     </div>
                   </div>
                   {isLowStockOpen && (
-                    <div className="p-4">
+                    <div className="px-4 pb-2.5">
                       {lowStockProducts.length === 0 ? (
-                        <div className="text-center py-8">
-                          <FiCheckCircle className="text-5xl mx-auto text-green-500 mb-2" />
-                          <p className={`text-sm ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                            All active products have sufficient stock
-                          </p>
-                          <p className={`text-xs mt-1 ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>
-                            Each product uses its own threshold setting
+                        <div className="text-center py-5">
+                          <FiCheckCircle className="text-4xl mx-auto text-emerald-400 mb-1.5" />
+                          <p className={`text-sm font-bold ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>
+                            All products have sufficient stock
                           </p>
                         </div>
                       ) : (
-                        <div className="space-y-2">
+                        <div className="space-y-1.5">
                           {lowStockProducts.map(p => {
                             const threshold = p.low_stock_threshold ?? 5;
                             return (
-                              <div key={p.id} className={`flex justify-between items-center p-4 rounded-lg border-2 ${p.quantity <= 3 ? 'bg-red-50 dark:bg-red-900/30 border-red-500 dark:border-red-700' : 'bg-orange-50 dark:bg-orange-900/20 border-orange-400 dark:border-orange-700'}`}>
-                                <div className="flex items-center gap-4">
-                                  <div className={`w-2 h-12 rounded-full ${p.quantity <= 3 ? 'bg-red-500' : 'bg-orange-500'}`}></div>
+                              <div key={p.id} className={`flex justify-between items-center p-2.5 rounded-lg border ${p.quantity <= 3 ? (darkMode ? 'bg-red-900/20 border-red-800' : 'bg-red-50 border-red-200') : (darkMode ? 'bg-orange-900/10 border-orange-900/40' : 'bg-orange-50 border-orange-200')}`}>
+                                <div className="flex items-center gap-2.5">
+                                  <div className={`w-1.5 h-8 rounded-full ${p.quantity <= 3 ? 'bg-red-500' : 'bg-orange-400'}`}></div>
                                   <div>
-                                    <span className={`font-semibold text-base ${darkMode ? 'text-white' : 'text-gray-900'}`}>
+                                    <span className={`font-extrabold text-sm ${darkMode ? 'text-white' : 'text-gray-900'}`}>
                                       {p.name}
                                     </span>
-                                    <span className={`text-xs ml-3 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                                      Stock: {p.quantity} units (Threshold: {threshold})
+                                    <span className={`text-sm font-bold ml-1.5 ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>
+                                      {p.quantity} (Threshold: {threshold})
                                     </span>
                                   </div>
                                 </div>
-                                <div className="flex items-center gap-4">
-                                  <span className={`font-bold text-lg ${p.quantity <= 3 ? 'text-red-600 dark:text-red-400' : 'text-orange-600 dark:text-orange-400'}`}>
+                                <div className="flex items-center gap-2.5">
+                                  <span className={`font-extrabold text-sm ${p.quantity <= 3 ? 'text-red-400' : 'text-orange-400'}`}>
                                     {p.quantity} left
                                   </span>
                                   <button 
                                     onClick={() => setActiveMenu('inventory')} 
-                                    className="px-4 py-2 bg-red-500 text-white rounded-lg text-sm hover:bg-red-600 transition font-medium shadow-md flex items-center gap-2"
+                                    className="px-3 py-1 bg-amber-400 text-gray-900 rounded-lg text-sm font-extrabold hover:bg-amber-300 transition flex items-center gap-1"
                                   >
-                                    <FiPackage className="text-sm" /> Restock Now
+                                    <FiPackage className="text-sm" /> Restock
                                   </button>
                                 </div>
                               </div>
@@ -1083,27 +1120,27 @@ const Dashboard = () => {
                 </div>
 
                 {/* Quick Actions */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <button onClick={() => setActiveMenu('billing')} className="w-full py-3 bg-red-500 text-white rounded-xl font-semibold hover:bg-red-600 transition shadow-md flex items-center justify-center gap-2">
-                    <FiFileText /> New Bill
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  <button onClick={() => setActiveMenu('billing')} className="w-full py-2.5 bg-amber-400 text-gray-900 rounded-xl font-extrabold hover:bg-amber-300 transition shadow-md flex items-center justify-center gap-2 text-base">
+                    <FiFileText className="text-lg" /> New Bill
                   </button>
-                  <button onClick={() => setActiveMenu('inventory')} className="w-full py-3 bg-gray-800 text-white rounded-xl font-semibold hover:bg-gray-700 transition shadow-md flex items-center justify-center gap-2">
-                    <FiPackage /> Add Product
+                  <button onClick={() => setActiveMenu('inventory')} className={`w-full py-2.5 rounded-xl font-extrabold transition shadow-md flex items-center justify-center gap-2 text-base ${darkMode ? 'bg-gray-800 text-white hover:bg-gray-700' : 'bg-gray-800 text-white hover:bg-gray-700'}`}>
+                    <FiPackage className="text-lg" /> Add Product
                   </button>
-                  <button onClick={() => setActiveMenu('record')} className="w-full py-3 bg-gray-800 text-white rounded-xl font-semibold hover:bg-gray-700 transition shadow-md flex items-center justify-center gap-2">
-                    <FiShoppingCart /> View Records
+                  <button onClick={() => setActiveMenu('record')} className={`w-full py-2.5 rounded-xl font-extrabold transition shadow-md flex items-center justify-center gap-2 text-base ${darkMode ? 'bg-gray-800 text-white hover:bg-gray-700' : 'bg-gray-800 text-white hover:bg-gray-700'}`}>
+                    <FiShoppingCart className="text-lg" /> View Records
                   </button>
                   <button 
                     onClick={() => setActiveMenu('finance-expenses')} 
-                    className="w-full py-3 bg-blue-500 text-white rounded-xl font-semibold hover:bg-blue-600 transition shadow-md flex items-center justify-center gap-2"
+                    className="w-full py-2.5 bg-blue-500 text-white rounded-xl font-extrabold hover:bg-blue-600 transition shadow-md flex items-center justify-center gap-2 text-base"
                   >
-                    <FiDollarSign /> Add Expense
+                    <FiDollarSign className="text-lg" /> Add Expense
                   </button>
                 </div>
               </div>
             )}
 
-            {/* Other Components with Suspense for lazy loading */}
+            {/* Other Components with Suspense */}
             <Suspense fallback={<LoadingFallback darkMode={darkMode} />}>
               {activeMenu === 'inventory' && (
                 <Inventory products={productsArray} darkMode={darkMode} onAddProduct={handleAddProduct} onUpdateProduct={handleUpdateProduct} />
@@ -1144,12 +1181,10 @@ const Dashboard = () => {
                 <EstimatedBill darkMode={darkMode} />
               )}
 
-              {/* ✅ Estimate Records */}
               {activeMenu === 'estimate-records' && (
                 <EstimateRecords darkMode={darkMode} />
               )}
 
-              {/* Battery Page */}
               {activeMenu === 'battery' && (
                 <BatteryPage darkMode={darkMode} />
               )}
@@ -1168,6 +1203,11 @@ const Dashboard = () => {
 
               {activeMenu === 'discarded' && (
                 <DiscardedBillsPage darkMode={darkMode} />
+              )}
+
+              {/* ✅ LEAVE APPLICATION - Add this */}
+              {activeMenu === 'leave' && (
+                <LeaveApplication darkMode={darkMode} />
               )}
             </Suspense>
           </div>

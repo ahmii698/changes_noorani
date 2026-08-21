@@ -1,4 +1,5 @@
 // src/components/finance/FinanceOverview.jsx
+
 import React, { useState, useEffect, useCallback, useMemo, lazy, Suspense } from 'react';
 import { FiCalendar, FiTrendingUp, FiDollarSign, FiPackage, FiBarChart2, FiChevronDown, FiChevronUp, FiDownload, FiFileText, FiLoader, FiClock, FiTrendingDown, FiChevronLeft, FiChevronRight, FiPercent, FiGift } from 'react-icons/fi';
 import * as XLSX from 'xlsx';
@@ -25,7 +26,6 @@ const getDateRange = (filter, customDate = null) => {
   const now = new Date();
   const start = new Date();
   
-  // Custom date filter
   if (filter === 'custom' && customDate) {
     const date = new Date(customDate);
     start.setFullYear(date.getFullYear(), date.getMonth(), date.getDate());
@@ -291,18 +291,17 @@ const FinanceOverview = ({ darkMode }) => {
     return labels[timeFilter] || 'All Time';
   }, [timeFilter, customDate]);
 
-  // ✅ Handle custom date change - FIXED: No page refresh, just update filter
+  // ✅ Handle custom date change
   const handleCustomDateChange = (e) => {
     const date = e.target.value;
     setCustomDate(date);
     if (date) {
       setTimeFilter('custom');
-      // ✅ Keep date picker open after selection
       setShowCustomDate(true);
     }
   };
 
-  // ✅ Toggle custom date picker - FIXED: Toggle without closing on selection
+  // ✅ Toggle custom date picker
   const toggleCustomDate = () => {
     setShowCustomDate(!showCustomDate);
   };
@@ -334,7 +333,6 @@ const FinanceOverview = ({ darkMode }) => {
 
   // ✅ Calculate filtered data based on time filter
   const calculateFilteredData = useCallback((invoicesList, expensesList, productsMap) => {
-    // Filter invoices by date
     const filteredInvoices = filterInvoicesByDate(invoicesList, timeFilter, customDate || null);
     const filteredExpenses = filterExpensesByDate(expensesList, timeFilter, customDate || null);
     
@@ -812,7 +810,7 @@ const FinanceOverview = ({ darkMode }) => {
     return (
       <div className={`min-h-[400px] flex items-center justify-center ${darkMode ? 'bg-gray-900' : 'bg-gray-100'}`}>
         <div className="text-center">
-          <FiLoader className="text-5xl text-red-500 animate-spin mx-auto mb-4" />
+          <FiLoader className="text-5xl text-amber-400 animate-spin mx-auto mb-4" />
           <p className={`${darkMode ? 'text-white' : 'text-gray-700'}`}>Loading finance data...</p>
         </div>
       </div>
@@ -820,189 +818,144 @@ const FinanceOverview = ({ darkMode }) => {
   }
 
   return (
-    <div className={`space-y-6 ${darkMode ? 'text-white' : 'text-gray-900'}`}>
-      {/* ✅ FILTER BUTTONS with Custom Date - FIXED: Date picker stays open */}
-      <div className={`flex flex-wrap items-center gap-3 p-4 rounded-xl ${darkMode ? 'bg-gray-800' : 'bg-white'} shadow-lg border ${darkMode ? 'border-gray-700' : 'border-gray-200'}`}>
-        <div className="flex items-center gap-2 mr-4">
-          <FiCalendar className={`text-lg ${darkMode ? 'text-gray-400' : 'text-gray-600'}`} />
-          <span className={`text-sm font-medium ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>Filter:</span>
-        </div>
-        <button
-          onClick={() => { setTimeFilter('all'); setShowCustomDate(false); }}
-          className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
-            timeFilter === 'all' 
-              ? 'bg-red-500 text-white shadow-md' 
-              : darkMode 
-                ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' 
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-          }`}
-        >
-          All Time
-        </button>
-        <button
-          onClick={() => { setTimeFilter('today'); setShowCustomDate(false); }}
-          className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
-            timeFilter === 'today' 
-              ? 'bg-red-500 text-white shadow-md' 
-              : darkMode 
-                ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' 
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-          }`}
-        >
-          Today
-        </button>
-        <button
-          onClick={() => { setTimeFilter('week'); setShowCustomDate(false); }}
-          className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
-            timeFilter === 'week' 
-              ? 'bg-red-500 text-white shadow-md' 
-              : darkMode 
-                ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' 
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-          }`}
-        >
-          This Week
-        </button>
-        <button
-          onClick={() => { setTimeFilter('month'); setShowCustomDate(false); }}
-          className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
-            timeFilter === 'month' 
-              ? 'bg-red-500 text-white shadow-md' 
-              : darkMode 
-                ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' 
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-          }`}
-        >
-          This Month
-        </button>
-        <button
-          onClick={() => { setTimeFilter('year'); setShowCustomDate(false); }}
-          className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
-            timeFilter === 'year' 
-              ? 'bg-red-500 text-white shadow-md' 
-              : darkMode 
-                ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' 
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-          }`}
-        >
-          This Year
-        </button>
-        
-        {/* Custom Date Button - FIXED: Toggle without closing on selection */}
+    <div className={`space-y-4 ${darkMode ? 'text-white' : 'text-gray-900'}`}>
+      {/* ✅ FILTER BUTTONS */}
+      <div className={`flex flex-wrap items-center gap-1.5 p-3 rounded-xl border ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200 shadow-sm'}`}>
+        <span className={`text-xs font-medium mr-1 ${darkMode ? 'text-gray-400' : 'text-gray-700'}`}>Filter:</span>
+        {[
+          { key: 'all', label: 'All Time' },
+          { key: 'today', label: 'Today' },
+          { key: 'week', label: 'This Week' },
+          { key: 'month', label: 'This Month' },
+          { key: 'year', label: 'This Year' },
+        ].map(f => (
+          <button
+            key={f.key}
+            onClick={() => { setTimeFilter(f.key); setShowCustomDate(false); }}
+            className={`px-2.5 py-1 rounded-lg text-xs font-medium transition ${
+              timeFilter === f.key 
+                ? 'bg-amber-400 text-gray-900 shadow-md' 
+                : darkMode 
+                  ? 'bg-gray-800 text-gray-300 hover:bg-gray-700' 
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+          >
+            {f.label}
+          </button>
+        ))}
         <button
           onClick={toggleCustomDate}
-          className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
+          className={`px-2.5 py-1 rounded-lg text-xs font-medium transition flex items-center gap-1 ${
             timeFilter === 'custom' 
-              ? 'bg-red-500 text-white shadow-md' 
+              ? 'bg-amber-400 text-gray-900 shadow-md' 
               : darkMode 
-                ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' 
+                ? 'bg-gray-800 text-gray-300 hover:bg-gray-700' 
                 : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
           }`}
         >
-          📅 Custom Date
+          <FiCalendar className="text-sm" /> Custom
         </button>
-        
-        {/* Custom Date Input - FIXED: Stays open after selection */}
         {showCustomDate && (
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1">
             <input
               type="date"
               value={customDate}
               onChange={handleCustomDateChange}
-              className={`px-3 py-2 rounded-lg text-sm border ${darkMode ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-800'}`}
+              className={`px-2 py-1 rounded-lg text-xs border ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300 text-gray-800'}`}
             />
             {customDate && (
               <button
                 onClick={clearCustomDate}
-                className="text-red-500 text-sm hover:text-red-600"
+                className="text-red-400 text-xs hover:text-red-300"
               >
-                ✕ Clear
+                ✕
               </button>
             )}
           </div>
         )}
-        
-        <span className={`ml-auto text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+        <span className={`ml-auto text-xs ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>
           Showing: <strong className={darkMode ? 'text-white' : 'text-gray-800'}>{getFilterLabel()}</strong>
         </span>
       </div>
 
       {/* ✅ DYNAMIC FILTERED SALES CARD */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-gradient-to-r from-blue-500 to-blue-600 rounded-2xl p-6 text-white shadow-lg">
-          <div className="flex justify-between items-start">
-            <div>
-              <p className="text-sm opacity-90">{getFilterLabel()} Sales</p>
-              <p className="text-3xl font-bold mt-2">Rs. {filteredSalesData.total.toLocaleString()}</p>
-              <p className="text-xs opacity-75 mt-1">{filteredSalesData.items} items sold</p>
-              <p className="text-xs opacity-75 mt-1">Profit: Rs. {filteredSalesData.profit.toLocaleString()}</p>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className={`rounded-xl p-4 border ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200 shadow-sm'}`}>
+          <div className="flex items-center gap-2 mb-1">
+            <div className="p-1.5 rounded-full bg-amber-500/15">
+              <FiDollarSign className="text-sm text-amber-400" />
             </div>
-            <FiDollarSign className="text-3xl opacity-50" />
+            <span className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>{getFilterLabel()} Sales</span>
           </div>
+          <p className={`text-lg font-bold ${darkMode ? 'text-white' : 'text-gray-900'}`}>Rs. {filteredSalesData.total.toLocaleString()}</p>
+          <p className={`text-xs ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>{filteredSalesData.items} items sold</p>
+          <p className={`text-xs text-emerald-400`}>Profit: Rs. {filteredSalesData.profit.toLocaleString()}</p>
         </div>
         
-        <div className="bg-gradient-to-r from-red-500 to-red-600 rounded-2xl p-6 text-white shadow-lg">
-          <div className="flex justify-between items-start">
-            <div>
-              <p className="text-sm opacity-90">{getFilterLabel()} Expenses</p>
-              <p className="text-3xl font-bold mt-2">Rs. {filteredStats.expenses.toLocaleString()}</p>
-              <p className="text-xs opacity-75 mt-1">{filteredStats.expenseCount} transactions</p>
+        <div className={`rounded-xl p-4 border ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200 shadow-sm'}`}>
+          <div className="flex items-center gap-2 mb-1">
+            <div className="p-1.5 rounded-full bg-blue-500/15">
+              <FiTrendingDown className="text-sm text-blue-400" />
             </div>
-            <FiTrendingDown className="text-3xl opacity-50" />
+            <span className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>{getFilterLabel()} Expenses</span>
           </div>
+          <p className={`text-lg font-bold ${darkMode ? 'text-white' : 'text-gray-900'}`}>Rs. {filteredStats.expenses.toLocaleString()}</p>
+          <p className={`text-xs ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>{filteredStats.expenseCount} transactions</p>
         </div>
         
-        <div className={`bg-gradient-to-r ${filteredStats.profit >= 0 ? 'from-green-500 to-green-600' : 'from-red-500 to-red-600'} rounded-2xl p-6 text-white shadow-lg`}>
-          <div className="flex justify-between items-start">
-            <div>
-              <p className="text-sm opacity-90">{getFilterLabel()} Profit</p>
-              <p className="text-3xl font-bold mt-2">Rs. {filteredStats.profit.toLocaleString()}</p>
-              <p className="text-xs opacity-75 mt-1">After expenses</p>
+        <div className={`rounded-xl p-4 border ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200 shadow-sm'}`}>
+          <div className="flex items-center gap-2 mb-1">
+            <div className={`p-1.5 rounded-full ${filteredStats.profit >= 0 ? 'bg-emerald-500/15' : 'bg-red-500/15'}`}>
+              <FiTrendingUp className={`text-sm ${filteredStats.profit >= 0 ? 'text-emerald-400' : 'text-red-400'}`} />
             </div>
-            <FiTrendingUp className="text-3xl opacity-50" />
+            <span className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>{getFilterLabel()} Profit</span>
           </div>
+          <p className={`text-lg font-bold ${filteredStats.profit >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+            Rs. {filteredStats.profit.toLocaleString()}
+          </p>
+          <p className={`text-xs ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>After expenses</p>
         </div>
       </div>
 
-      {/* Today's Sales Card */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-gradient-to-r from-blue-500 to-blue-600 rounded-2xl p-6 text-white shadow-lg cursor-pointer hover:scale-105 transition-transform" onClick={() => setShowTodayDetails(!showTodayDetails)}>
-          <div className="flex justify-between items-start">
-            <div>
-              <p className="text-sm opacity-90">Today's Sales</p>
-              <p className="text-3xl font-bold mt-2">Rs. {todaySales.total.toLocaleString()}</p>
-              <p className="text-xs opacity-75 mt-1">{todaySales.items} items sold</p>
-              <p className="text-xs opacity-75 mt-1">Profit: Rs. {todaySales.profit.toLocaleString()}</p>
-              <p className="text-xs opacity-75 mt-2 flex items-center gap-1"><FiClock /> Click for details</p>
+      {/* Sales Cards - Clean Design */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className={`rounded-xl p-4 border cursor-pointer hover:scale-[1.02] transition ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200 shadow-sm'}`} onClick={() => setShowTodayDetails(!showTodayDetails)}>
+          <div className="flex items-center gap-2 mb-1">
+            <div className="p-1.5 rounded-full bg-amber-500/15">
+              <FiCalendar className="text-sm text-amber-400" />
             </div>
-            <FiCalendar className="text-3xl opacity-50" />
+            <span className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Today's Sales</span>
           </div>
+          <p className={`text-lg font-bold ${darkMode ? 'text-white' : 'text-gray-900'}`}>Rs. {todaySales.total.toLocaleString()}</p>
+          <p className={`text-xs ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>{todaySales.items} items sold</p>
+          <p className={`text-xs text-emerald-400`}>Profit: Rs. {todaySales.profit.toLocaleString()}</p>
+          <p className={`text-xs mt-1 flex items-center gap-1 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}><FiClock className="text-xs" /> Click for details</p>
         </div>
         
-        <div className="bg-gradient-to-r from-blue-500 to-blue-600 rounded-2xl p-6 text-white shadow-lg cursor-pointer hover:scale-105 transition-transform" onClick={() => setShowWeekDetails(!showWeekDetails)}>
-          <div className="flex justify-between items-start">
-            <div>
-              <p className="text-sm opacity-90">This Week's Sales</p>
-              <p className="text-3xl font-bold mt-2">Rs. {weeklySales.total.toLocaleString()}</p>
-              <p className="text-xs opacity-75 mt-1">{weeklySales.items} items sold</p>
-              <p className="text-xs opacity-75 mt-1">Profit: Rs. {weeklySales.profit.toLocaleString()}</p>
-              <p className="text-xs opacity-75 mt-2 flex items-center gap-1"><FiClock /> Click for details</p>
+        <div className={`rounded-xl p-4 border cursor-pointer hover:scale-[1.02] transition ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200 shadow-sm'}`} onClick={() => setShowWeekDetails(!showWeekDetails)}>
+          <div className="flex items-center gap-2 mb-1">
+            <div className="p-1.5 rounded-full bg-amber-500/15">
+              <FiTrendingUp className="text-sm text-amber-400" />
             </div>
-            <FiTrendingUp className="text-3xl opacity-50" />
+            <span className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>This Week's Sales</span>
           </div>
+          <p className={`text-lg font-bold ${darkMode ? 'text-white' : 'text-gray-900'}`}>Rs. {weeklySales.total.toLocaleString()}</p>
+          <p className={`text-xs ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>{weeklySales.items} items sold</p>
+          <p className={`text-xs text-emerald-400`}>Profit: Rs. {weeklySales.profit.toLocaleString()}</p>
+          <p className={`text-xs mt-1 flex items-center gap-1 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}><FiClock className="text-xs" /> Click for details</p>
         </div>
         
-        <div className="bg-gradient-to-r from-blue-500 to-blue-600 rounded-2xl p-6 text-white shadow-lg cursor-pointer hover:scale-105 transition-transform" onClick={() => setShowMonthDetails(!showMonthDetails)}>
-          <div className="flex justify-between items-start">
-            <div>
-              <p className="text-sm opacity-90">This Month's Sales</p>
-              <p className="text-3xl font-bold mt-2">Rs. {monthlySales.total.toLocaleString()}</p>
-              <p className="text-xs opacity-75 mt-1">{monthlySales.items} items sold</p>
-              <p className="text-xs opacity-75 mt-1">Profit: Rs. {monthlySales.profit.toLocaleString()}</p>
-              <p className="text-xs opacity-75 mt-2 flex items-center gap-1"><FiClock /> Click for details</p>
+        <div className={`rounded-xl p-4 border cursor-pointer hover:scale-[1.02] transition ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200 shadow-sm'}`} onClick={() => setShowMonthDetails(!showMonthDetails)}>
+          <div className="flex items-center gap-2 mb-1">
+            <div className="p-1.5 rounded-full bg-amber-500/15">
+              <FiDollarSign className="text-sm text-amber-400" />
             </div>
-            <FiDollarSign className="text-3xl opacity-50" />
+            <span className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>This Month's Sales</span>
           </div>
+          <p className={`text-lg font-bold ${darkMode ? 'text-white' : 'text-gray-900'}`}>Rs. {monthlySales.total.toLocaleString()}</p>
+          <p className={`text-xs ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>{monthlySales.items} items sold</p>
+          <p className={`text-xs text-emerald-400`}>Profit: Rs. {monthlySales.profit.toLocaleString()}</p>
+          <p className={`text-xs mt-1 flex items-center gap-1 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}><FiClock className="text-xs" /> Click for details</p>
         </div>
       </div>
 
@@ -1011,41 +964,41 @@ const FinanceOverview = ({ darkMode }) => {
       {showMonthDetails && <InvoiceDetails title="This Month's Sales" data={monthlySales} darkMode={darkMode} onClose={() => setShowMonthDetails(false)} />}
 
       {/* Expense Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-gradient-to-r from-red-500 to-red-600 rounded-2xl p-6 text-white shadow-lg cursor-pointer hover:scale-105 transition-transform" onClick={() => setShowTodayExpenses(!showTodayExpenses)}>
-          <div className="flex justify-between items-start">
-            <div>
-              <p className="text-sm opacity-90">Today's Expenses</p>
-              <p className="text-3xl font-bold mt-2">Rs. {stats.todayExpenses.toLocaleString()}</p>
-              <p className="text-xs opacity-75 mt-1">{stats.todayExpenseCount} transactions</p>
-              <p className="text-xs opacity-75 mt-2 flex items-center gap-1"><FiClock /> Click for details</p>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className={`rounded-xl p-4 border cursor-pointer hover:scale-[1.02] transition ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200 shadow-sm'}`} onClick={() => setShowTodayExpenses(!showTodayExpenses)}>
+          <div className="flex items-center gap-2 mb-1">
+            <div className="p-1.5 rounded-full bg-blue-500/15">
+              <FiTrendingDown className="text-sm text-blue-400" />
             </div>
-            <FiTrendingDown className="text-3xl opacity-50" />
+            <span className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Today's Expenses</span>
           </div>
+          <p className={`text-lg font-bold ${darkMode ? 'text-white' : 'text-gray-900'}`}>Rs. {stats.todayExpenses.toLocaleString()}</p>
+          <p className={`text-xs ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>{stats.todayExpenseCount} transactions</p>
+          <p className={`text-xs mt-1 flex items-center gap-1 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}><FiClock className="text-xs" /> Click for details</p>
         </div>
         
-        <div className="bg-gradient-to-r from-red-500 to-red-600 rounded-2xl p-6 text-white shadow-lg cursor-pointer hover:scale-105 transition-transform" onClick={() => setShowWeekExpenses(!showWeekExpenses)}>
-          <div className="flex justify-between items-start">
-            <div>
-              <p className="text-sm opacity-90">This Week's Expenses</p>
-              <p className="text-3xl font-bold mt-2">Rs. {stats.weekExpenses.toLocaleString()}</p>
-              <p className="text-xs opacity-75 mt-1">{stats.weekExpenseCount} transactions</p>
-              <p className="text-xs opacity-75 mt-2 flex items-center gap-1"><FiClock /> Click for details</p>
+        <div className={`rounded-xl p-4 border cursor-pointer hover:scale-[1.02] transition ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200 shadow-sm'}`} onClick={() => setShowWeekExpenses(!showWeekExpenses)}>
+          <div className="flex items-center gap-2 mb-1">
+            <div className="p-1.5 rounded-full bg-blue-500/15">
+              <FiTrendingDown className="text-sm text-blue-400" />
             </div>
-            <FiTrendingDown className="text-3xl opacity-50" />
+            <span className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>This Week's Expenses</span>
           </div>
+          <p className={`text-lg font-bold ${darkMode ? 'text-white' : 'text-gray-900'}`}>Rs. {stats.weekExpenses.toLocaleString()}</p>
+          <p className={`text-xs ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>{stats.weekExpenseCount} transactions</p>
+          <p className={`text-xs mt-1 flex items-center gap-1 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}><FiClock className="text-xs" /> Click for details</p>
         </div>
         
-        <div className="bg-gradient-to-r from-red-500 to-red-600 rounded-2xl p-6 text-white shadow-lg cursor-pointer hover:scale-105 transition-transform" onClick={() => setShowMonthExpenses(!showMonthExpenses)}>
-          <div className="flex justify-between items-start">
-            <div>
-              <p className="text-sm opacity-90">This Month's Expenses</p>
-              <p className="text-3xl font-bold mt-2">Rs. {stats.monthExpenses.toLocaleString()}</p>
-              <p className="text-xs opacity-75 mt-1">{stats.monthExpenseCount} transactions</p>
-              <p className="text-xs opacity-75 mt-2 flex items-center gap-1"><FiClock /> Click for details</p>
+        <div className={`rounded-xl p-4 border cursor-pointer hover:scale-[1.02] transition ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200 shadow-sm'}`} onClick={() => setShowMonthExpenses(!showMonthExpenses)}>
+          <div className="flex items-center gap-2 mb-1">
+            <div className="p-1.5 rounded-full bg-blue-500/15">
+              <FiTrendingDown className="text-sm text-blue-400" />
             </div>
-            <FiTrendingDown className="text-3xl opacity-50" />
+            <span className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>This Month's Expenses</span>
           </div>
+          <p className={`text-lg font-bold ${darkMode ? 'text-white' : 'text-gray-900'}`}>Rs. {stats.monthExpenses.toLocaleString()}</p>
+          <p className={`text-xs ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>{stats.monthExpenseCount} transactions</p>
+          <p className={`text-xs mt-1 flex items-center gap-1 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}><FiClock className="text-xs" /> Click for details</p>
         </div>
       </div>
 
@@ -1054,218 +1007,217 @@ const FinanceOverview = ({ darkMode }) => {
       {showMonthExpenses && <ExpenseDetails title="This Month's Expenses" expenses={monthExpenseDetails} darkMode={darkMode} onClose={() => setShowMonthExpenses(false)} />}
 
       {/* Profit Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-gradient-to-r from-green-500 to-green-600 rounded-2xl p-6 text-white shadow-lg">
-          <div className="flex justify-between items-start">
-            <div>
-              <p className="text-sm opacity-90">Today's Profit</p>
-              <p className="text-3xl font-bold mt-2">Rs. {stats.todayProfit?.toLocaleString() || 0}</p>
-              <p className="text-xs opacity-75 mt-1">After expenses</p>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className={`rounded-xl p-4 border ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200 shadow-sm'}`}>
+          <div className="flex items-center gap-2 mb-1">
+            <div className={`p-1.5 rounded-full ${stats.todayProfit >= 0 ? 'bg-emerald-500/15' : 'bg-red-500/15'}`}>
+              <FiTrendingUp className={`text-sm ${stats.todayProfit >= 0 ? 'text-emerald-400' : 'text-red-400'}`} />
             </div>
-            <FiTrendingUp className="text-3xl opacity-50" />
+            <span className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Today's Profit</span>
           </div>
+          <p className={`text-lg font-bold ${stats.todayProfit >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+            Rs. {stats.todayProfit?.toLocaleString() || 0}
+          </p>
+          <p className={`text-xs ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>After expenses</p>
         </div>
         
-        <div className="bg-gradient-to-r from-green-500 to-green-600 rounded-2xl p-6 text-white shadow-lg">
-          <div className="flex justify-between items-start">
-            <div>
-              <p className="text-sm opacity-90">This Week's Profit</p>
-              <p className="text-3xl font-bold mt-2">Rs. {stats.weekProfit?.toLocaleString() || 0}</p>
-              <p className="text-xs opacity-75 mt-1">After expenses</p>
+        <div className={`rounded-xl p-4 border ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200 shadow-sm'}`}>
+          <div className="flex items-center gap-2 mb-1">
+            <div className={`p-1.5 rounded-full ${stats.weekProfit >= 0 ? 'bg-emerald-500/15' : 'bg-red-500/15'}`}>
+              <FiTrendingUp className={`text-sm ${stats.weekProfit >= 0 ? 'text-emerald-400' : 'text-red-400'}`} />
             </div>
-            <FiTrendingUp className="text-3xl opacity-50" />
+            <span className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>This Week's Profit</span>
           </div>
+          <p className={`text-lg font-bold ${stats.weekProfit >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+            Rs. {stats.weekProfit?.toLocaleString() || 0}
+          </p>
+          <p className={`text-xs ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>After expenses</p>
         </div>
         
-        <div className="bg-gradient-to-r from-green-500 to-green-600 rounded-2xl p-6 text-white shadow-lg">
-          <div className="flex justify-between items-start">
-            <div>
-              <p className="text-sm opacity-90">This Month's Profit</p>
-              <p className="text-3xl font-bold mt-2">Rs. {stats.monthProfit?.toLocaleString() || 0}</p>
-              <p className="text-xs opacity-75 mt-1">After expenses</p>
+        <div className={`rounded-xl p-4 border ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200 shadow-sm'}`}>
+          <div className="flex items-center gap-2 mb-1">
+            <div className={`p-1.5 rounded-full ${stats.monthProfit >= 0 ? 'bg-emerald-500/15' : 'bg-red-500/15'}`}>
+              <FiTrendingUp className={`text-sm ${stats.monthProfit >= 0 ? 'text-emerald-400' : 'text-red-400'}`} />
             </div>
-            <FiTrendingUp className="text-3xl opacity-50" />
+            <span className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>This Month's Profit</span>
           </div>
+          <p className={`text-lg font-bold ${stats.monthProfit >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+            Rs. {stats.monthProfit?.toLocaleString() || 0}
+          </p>
+          <p className={`text-xs ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>After expenses</p>
         </div>
       </div>
 
       {/* Discount Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-gradient-to-r from-sky-400 to-sky-500 rounded-2xl p-6 text-white shadow-lg">
-          <div className="flex justify-between items-start">
-            <div>
-              <p className="text-sm opacity-90">Today's Discount</p>
-              <p className="text-3xl font-bold mt-2">Rs. {stats.todayDiscount?.toLocaleString() || 0}</p>
-              <p className="text-xs opacity-75 mt-1">Given today</p>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className={`rounded-xl p-4 border ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200 shadow-sm'}`}>
+          <div className="flex items-center gap-2 mb-1">
+            <div className="p-1.5 rounded-full bg-purple-500/15">
+              <FiGift className="text-sm text-purple-400" />
             </div>
-            <FiGift className="text-3xl opacity-50" />
+            <span className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Today's Discount</span>
           </div>
+          <p className={`text-lg font-bold ${darkMode ? 'text-white' : 'text-gray-900'}`}>Rs. {stats.todayDiscount?.toLocaleString() || 0}</p>
+          <p className={`text-xs ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>Given today</p>
         </div>
         
-        <div className="bg-gradient-to-r from-sky-400 to-sky-500 rounded-2xl p-6 text-white shadow-lg">
-          <div className="flex justify-between items-start">
-            <div>
-              <p className="text-sm opacity-90">This Week's Discount</p>
-              <p className="text-3xl font-bold mt-2">Rs. {stats.weekDiscount?.toLocaleString() || 0}</p>
-              <p className="text-xs opacity-75 mt-1">Given this week</p>
+        <div className={`rounded-xl p-4 border ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200 shadow-sm'}`}>
+          <div className="flex items-center gap-2 mb-1">
+            <div className="p-1.5 rounded-full bg-purple-500/15">
+              <FiGift className="text-sm text-purple-400" />
             </div>
-            <FiGift className="text-3xl opacity-50" />
+            <span className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>This Week's Discount</span>
           </div>
+          <p className={`text-lg font-bold ${darkMode ? 'text-white' : 'text-gray-900'}`}>Rs. {stats.weekDiscount?.toLocaleString() || 0}</p>
+          <p className={`text-xs ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>Given this week</p>
         </div>
         
-        <div className="bg-gradient-to-r from-sky-400 to-sky-500 rounded-2xl p-6 text-white shadow-lg">
-          <div className="flex justify-between items-start">
-            <div>
-              <p className="text-sm opacity-90">This Month's Discount</p>
-              <p className="text-3xl font-bold mt-2">Rs. {stats.monthDiscount?.toLocaleString() || 0}</p>
-              <p className="text-xs opacity-75 mt-1">Given this month</p>
+        <div className={`rounded-xl p-4 border ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200 shadow-sm'}`}>
+          <div className="flex items-center gap-2 mb-1">
+            <div className="p-1.5 rounded-full bg-purple-500/15">
+              <FiGift className="text-sm text-purple-400" />
             </div>
-            <FiGift className="text-3xl opacity-50" />
+            <span className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>This Month's Discount</span>
           </div>
+          <p className={`text-lg font-bold ${darkMode ? 'text-white' : 'text-gray-900'}`}>Rs. {stats.monthDiscount?.toLocaleString() || 0}</p>
+          <p className={`text-xs ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>Given this month</p>
         </div>
       </div>
 
       {/* Monthly Breakdown */}
-      <div className={`${darkMode ? 'bg-gray-800' : 'bg-white'} rounded-2xl p-6 shadow-lg border ${darkMode ? 'border-gray-700' : 'border-gray-200'}`}>
-        <h3 className="font-semibold mb-4 flex items-center gap-2">
-          <FiBarChart2 className="text-red-500" /> Monthly Financial Summary
-          <span className={`text-xs font-normal ml-2 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-            ({getFilterLabel()})
-          </span>
-        </h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className={`p-4 rounded-xl ${darkMode ? 'bg-gray-700' : 'bg-gray-100'}`}>
-            <p className="text-sm text-gray-500">Revenue</p>
-            <p className="text-xl font-bold text-blue-500">Rs. {filteredSalesData.total.toLocaleString()}</p>
+      <div className={`rounded-xl border ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200 shadow-sm'}`}>
+        <div className="px-4 py-3 border-b">
+          <h3 className="font-semibold flex items-center gap-2 text-sm">
+            <FiBarChart2 className="text-amber-400" /> Monthly Financial Summary
+            <span className={`text-xs font-normal ml-2 ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>
+              ({getFilterLabel()})
+            </span>
+          </h3>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 p-4">
+          <div className={`p-3 rounded-lg ${darkMode ? 'bg-gray-800' : 'bg-gray-100'}`}>
+            <p className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Revenue</p>
+            <p className="text-lg font-bold text-amber-400">Rs. {filteredSalesData.total.toLocaleString()}</p>
           </div>
-          <div className={`p-4 rounded-xl ${darkMode ? 'bg-gray-700' : 'bg-gray-100'}`}>
-            <p className="text-sm text-gray-500">Expenses</p>
-            <p className="text-xl font-bold text-red-500">Rs. {filteredStats.expenses.toLocaleString()}</p>
+          <div className={`p-3 rounded-lg ${darkMode ? 'bg-gray-800' : 'bg-gray-100'}`}>
+            <p className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Expenses</p>
+            <p className="text-lg font-bold text-blue-400">Rs. {filteredStats.expenses.toLocaleString()}</p>
           </div>
-          <div className={`p-4 rounded-xl ${darkMode ? 'bg-gray-700' : 'bg-gray-100'}`}>
-            <p className="text-sm text-gray-500">Discount Given</p>
-            <p className="text-xl font-bold text-sky-500">Rs. {filteredSalesData.discount.toLocaleString()}</p>
+          <div className={`p-3 rounded-lg ${darkMode ? 'bg-gray-800' : 'bg-gray-100'}`}>
+            <p className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Discount</p>
+            <p className="text-lg font-bold text-purple-400">Rs. {filteredSalesData.discount.toLocaleString()}</p>
           </div>
-          <div className={`p-4 rounded-xl ${darkMode ? 'bg-gray-700' : 'bg-gray-100'}`}>
-            <p className="text-sm text-gray-500">Net Profit</p>
-            <p className={`text-xl font-bold ${filteredStats.profit >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+          <div className={`p-3 rounded-lg ${darkMode ? 'bg-gray-800' : 'bg-gray-100'}`}>
+            <p className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Net Profit</p>
+            <p className={`text-lg font-bold ${filteredStats.profit >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
               Rs. {filteredStats.profit.toLocaleString()}
             </p>
           </div>
         </div>
       </div>
 
-      {/* Yearly Report Section with Pagination */}
-      <div className={`${darkMode ? 'bg-gray-800' : 'bg-white'} rounded-2xl shadow-lg overflow-hidden border ${darkMode ? 'border-gray-700' : 'border-gray-200'}`}>
-        <button onClick={() => setShowYearlyReport(!showYearlyReport)} className="w-full px-6 py-4 flex justify-between items-center hover:bg-red-50 dark:hover:bg-red-900/20 transition">
+      {/* Yearly Report Section */}
+      <div className={`rounded-xl border ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200 shadow-sm'}`}>
+        <button onClick={() => setShowYearlyReport(!showYearlyReport)} className="w-full px-4 py-3 flex justify-between items-center hover:bg-amber-50 dark:hover:bg-amber-900/20 transition">
           <div className="flex items-center gap-2">
-            <FiBarChart2 className="text-red-500 text-xl" />
-            <h3 className="text-lg font-semibold">📊 Yearly Sales Report</h3>
+            <FiBarChart2 className="text-amber-400 text-lg" />
+            <h3 className="text-sm font-semibold">📊 Yearly Sales Report</h3>
           </div>
-          {showYearlyReport ? <FiChevronUp /> : <FiChevronDown />}
+          {showYearlyReport ? <FiChevronUp className="text-gray-500" /> : <FiChevronDown className="text-gray-500" />}
         </button>
         
         {showYearlyReport && (
-          <div className="p-6 border-t border-gray-200 dark:border-gray-700">
-            <div className="flex flex-wrap justify-between items-center gap-4 mb-6">
-              <div className="flex gap-3 items-center">
-                <label className="text-sm font-medium">Select Year:</label>
-                <select value={selectedYear} onChange={(e) => setSelectedYear(parseInt(e.target.value))} className={`px-4 py-2 rounded-lg border focus:ring-2 focus:ring-red-500 outline-none ${darkMode ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300'}`}>
+          <div className="p-4 border-t border-gray-200 dark:border-gray-800">
+            <div className="flex flex-wrap justify-between items-center gap-3 mb-4">
+              <div className="flex gap-2 items-center">
+                <label className="text-xs font-medium">Select Year:</label>
+                <select value={selectedYear} onChange={(e) => setSelectedYear(parseInt(e.target.value))} className={`px-2.5 py-1 rounded-lg text-xs border focus:ring-2 focus:ring-amber-400 outline-none ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300'}`}>
                   {[2024, 2025, 2026, 2027].map(year => (<option key={year} value={year}>{year}</option>))}
                 </select>
               </div>
-              <div className="flex gap-3">
-                <button onClick={exportToExcel} className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition flex items-center gap-2"><FiFileText /> Export Excel</button>
-                <button onClick={exportToPDF} className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition flex items-center gap-2"><FiDownload /> Export PDF</button>
+              <div className="flex gap-2">
+                <button onClick={exportToExcel} className="px-2.5 py-1.5 bg-emerald-500 text-white rounded-lg text-xs hover:bg-emerald-600 transition flex items-center gap-1 font-semibold"><FiFileText className="text-xs" /> Excel</button>
+                <button onClick={exportToPDF} className="px-2.5 py-1.5 bg-red-500 text-white rounded-lg text-xs hover:bg-red-600 transition flex items-center gap-1 font-semibold"><FiDownload className="text-xs" /> PDF</button>
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-              <div className={`p-4 rounded-xl text-center ${darkMode ? 'bg-gray-700' : 'bg-gray-100'}`}>
-                <p className="text-sm opacity-70">Total Sales</p>
-                <p className="text-2xl font-bold text-blue-500">Rs. {selectedYearData.total.toLocaleString()}</p>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
+              <div className={`p-3 rounded-lg text-center ${darkMode ? 'bg-gray-800' : 'bg-gray-100'}`}>
+                <p className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Total Sales</p>
+                <p className="text-lg font-bold text-amber-400">Rs. {selectedYearData.total.toLocaleString()}</p>
               </div>
-              <div className={`p-4 rounded-xl text-center ${darkMode ? 'bg-gray-700' : 'bg-gray-100'}`}>
-                <p className="text-sm opacity-70">Total Invoices</p>
-                <p className="text-2xl font-bold">{selectedYearData.count}</p>
+              <div className={`p-3 rounded-lg text-center ${darkMode ? 'bg-gray-800' : 'bg-gray-100'}`}>
+                <p className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Invoices</p>
+                <p className="text-lg font-bold">{selectedYearData.count}</p>
               </div>
-              <div className={`p-4 rounded-xl text-center ${darkMode ? 'bg-gray-700' : 'bg-gray-100'}`}>
-                <p className="text-sm opacity-70">Total Profit</p>
-                <p className="text-2xl font-bold text-green-500">Rs. {selectedYearData.profit.toLocaleString()}</p>
+              <div className={`p-3 rounded-lg text-center ${darkMode ? 'bg-gray-800' : 'bg-gray-100'}`}>
+                <p className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Profit</p>
+                <p className="text-lg font-bold text-emerald-400">Rs. {selectedYearData.profit.toLocaleString()}</p>
               </div>
             </div>
 
             <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className={darkMode ? 'bg-gray-700' : 'bg-gray-50'}>
+              <table className="w-full text-sm">
+                <thead className={darkMode ? 'bg-gray-800' : 'bg-gray-50'}>
                   <tr>
-                    <th className="px-4 py-3 text-left">Date</th>
-                    <th className="px-4 py-3 text-left">Invoice</th>
-                    <th className="px-4 py-3 text-left">Customer</th>
-                    <th className="px-4 py-3 text-left">Item</th>
-                    <th className="px-4 py-3 text-left">Type</th>
-                    <th className="px-4 py-3 text-center">Qty</th>
-                    <th className="px-4 py-3 text-right">Purchase</th>
-                    <th className="px-4 py-3 text-right">Sell</th>
-                    <th className="px-4 py-3 text-right">Unit Profit</th>
-                    <th className="px-4 py-3 text-right">Total Profit</th>
+                    <th className="px-3 py-2 text-left text-xs font-medium uppercase">Date</th>
+                    <th className="px-3 py-2 text-left text-xs font-medium uppercase">Invoice</th>
+                    <th className="px-3 py-2 text-left text-xs font-medium uppercase">Customer</th>
+                    <th className="px-3 py-2 text-left text-xs font-medium uppercase">Item</th>
+                    <th className="px-3 py-2 text-left text-xs font-medium uppercase">Type</th>
+                    <th className="px-3 py-2 text-center text-xs font-medium uppercase">Qty</th>
+                    <th className="px-3 py-2 text-right text-xs font-medium uppercase">Purchase</th>
+                    <th className="px-3 py-2 text-right text-xs font-medium uppercase">Sell</th>
+                    <th className="px-3 py-2 text-right text-xs font-medium uppercase">Unit Profit</th>
+                    <th className="px-3 py-2 text-right text-xs font-medium uppercase">Total Profit</th>
                   </tr>
                 </thead>
                 <tbody>
                   {currentItems.length === 0 ? (
                     <tr>
-                      <td colSpan="10" className="px-4 py-8 text-center">No invoices found</td>
+                      <td colSpan="10" className="px-3 py-6 text-center text-sm text-gray-400">No invoices found</td>
                     </tr>
                   ) : (
                     currentItems.map((item, idx) => (
-                      <tr key={idx} className={darkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-50'}>
-                        <td className="px-4 py-3 text-sm">{new Date(item.inv.date).toLocaleDateString()}</td>
-                        <td className="px-4 py-3 font-mono text-sm">{item.inv.invoiceNo}</td>
-                        <td className="px-4 py-3">{item.inv.customer}</td>
-                        <td className="px-4 py-3">{item.service_name}</td>
-                        <td className="px-4 py-3">
-                          <span className={`px-2 py-1 rounded text-xs ${item.isProduct ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700'}`}>
+                      <tr key={idx} className={darkMode ? 'hover:bg-gray-800' : 'hover:bg-gray-50'}>
+                        <td className="px-3 py-2 text-xs">{new Date(item.inv.date).toLocaleDateString()}</td>
+                        <td className="px-3 py-2 font-mono text-xs">{item.inv.invoiceNo}</td>
+                        <td className="px-3 py-2 text-xs">{item.inv.customer}</td>
+                        <td className="px-3 py-2 text-xs">{item.service_name}</td>
+                        <td className="px-3 py-2">
+                          <span className={`px-2 py-0.5 rounded text-xs ${item.isProduct ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' : 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400'}`}>
                             {item.isProduct ? 'Product' : 'Service'}
                           </span>
                         </td>
-                        <td className="px-4 py-3 text-center">{item.quantity}</td>
-                        <td className="px-4 py-3 text-right">{item.purchasePrice > 0 ? `Rs. ${item.purchasePrice.toLocaleString()}` : '-'}</td>
-                        <td className="px-4 py-3 text-right">Rs. {item.price.toLocaleString()}</td>
-                        <td className="px-4 py-3 text-right text-green-500">+ Rs. {item.unitProfit.toLocaleString()}</td>
-                        <td className="px-4 py-3 text-right text-green-500">Rs. {(item.unitProfit * item.quantity).toLocaleString()}</td>
+                        <td className="px-3 py-2 text-center text-xs">{item.quantity}</td>
+                        <td className="px-3 py-2 text-right text-xs">{item.purchasePrice > 0 ? `Rs. ${item.purchasePrice.toLocaleString()}` : '-'}</td>
+                        <td className="px-3 py-2 text-right text-xs">Rs. {item.price.toLocaleString()}</td>
+                        <td className="px-3 py-2 text-right text-xs text-emerald-400">+ Rs. {item.unitProfit.toLocaleString()}</td>
+                        <td className="px-3 py-2 text-right text-xs text-emerald-400">Rs. {(item.unitProfit * item.quantity).toLocaleString()}</td>
                       </tr>
                     ))
                   )}
                 </tbody>
-                <tfoot className={darkMode ? 'bg-gray-700' : 'bg-gray-100'}>
+                <tfoot className={darkMode ? 'bg-gray-800' : 'bg-gray-100'}>
                   <tr>
-                    <td colSpan="9" className="px-4 py-3 text-right font-bold">Total Profit:</td>
-                    <td className="px-4 py-3 text-right font-bold text-green-500">Rs. {selectedYearData.profit.toLocaleString()}</td>
+                    <td colSpan="9" className="px-3 py-2 text-right text-xs font-bold">Total Profit:</td>
+                    <td className="px-3 py-2 text-right text-xs font-bold text-emerald-400">Rs. {selectedYearData.profit.toLocaleString()}</td>
                   </tr>
                 </tfoot>
               </table>
             </div>
 
-            {/* Pagination Controls */}
+            {/* Pagination */}
             {totalPages > 1 && (
-              <div className="flex justify-between items-center mt-6 pt-4 border-t border-gray-200 dark:border-gray-700">
-                <div className="text-sm text-gray-500">
+              <div className="flex justify-between items-center mt-4 pt-3 border-t border-gray-200 dark:border-gray-800">
+                <div className={`text-xs ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>
                   Showing {indexOfFirstItem + 1} to {Math.min(indexOfLastItem, totalItems)} of {totalItems} items
                 </div>
-                <div className="flex gap-2">
-                  <button
-                    onClick={goToPrevPage}
-                    disabled={currentPage === 1}
-                    className={`px-3 py-1 rounded-lg flex items-center gap-1 transition ${
-                      currentPage === 1
-                        ? 'bg-gray-100 dark:bg-gray-700 text-gray-400 cursor-not-allowed'
-                        : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
-                    }`}
-                  >
-                    <FiChevronLeft /> Previous
+                <div className="flex gap-1">
+                  <button onClick={goToPrevPage} disabled={currentPage === 1} className={`px-2 py-1 rounded-lg text-xs flex items-center gap-0.5 transition ${currentPage === 1 ? 'bg-gray-100 dark:bg-gray-800 text-gray-400 cursor-not-allowed' : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'}`}>
+                    <FiChevronLeft className="text-sm" /> Prev
                   </button>
-                  
-                  <div className="flex gap-1">
+                  <div className="flex gap-0.5">
                     {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
                       let pageNum;
                       if (totalPages <= 5) {
@@ -1277,33 +1229,15 @@ const FinanceOverview = ({ darkMode }) => {
                       } else {
                         pageNum = currentPage - 2 + i;
                       }
-                      
                       return (
-                        <button
-                          key={pageNum}
-                          onClick={() => paginate(pageNum)}
-                          className={`w-8 h-8 rounded-lg transition ${
-                            currentPage === pageNum
-                              ? 'bg-red-500 text-white'
-                              : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
-                          }`}
-                        >
+                        <button key={pageNum} onClick={() => paginate(pageNum)} className={`w-7 h-7 rounded-lg text-xs transition ${currentPage === pageNum ? 'bg-amber-400 text-gray-900 font-bold' : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'}`}>
                           {pageNum}
                         </button>
                       );
                     })}
                   </div>
-                  
-                  <button
-                    onClick={goToNextPage}
-                    disabled={currentPage === totalPages}
-                    className={`px-3 py-1 rounded-lg flex items-center gap-1 transition ${
-                      currentPage === totalPages
-                        ? 'bg-gray-100 dark:bg-gray-700 text-gray-400 cursor-not-allowed'
-                        : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
-                    }`}
-                  >
-                    Next <FiChevronRight />
+                  <button onClick={goToNextPage} disabled={currentPage === totalPages} className={`px-2 py-1 rounded-lg text-xs flex items-center gap-0.5 transition ${currentPage === totalPages ? 'bg-gray-100 dark:bg-gray-800 text-gray-400 cursor-not-allowed' : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'}`}>
+                    Next <FiChevronRight className="text-sm" />
                   </button>
                 </div>
               </div>
@@ -1312,7 +1246,7 @@ const FinanceOverview = ({ darkMode }) => {
         )}
       </div>
 
-      {error && (<div className="p-4 bg-red-50 dark:bg-red-900/20 rounded-lg text-center"><p className="text-sm text-red-700">⚠️ {error}</p></div>)}
+      {error && (<div className="p-4 bg-red-50 dark:bg-red-900/20 rounded-xl text-center"><p className="text-sm text-red-700">⚠️ {error}</p></div>)}
     </div>
   );
 };

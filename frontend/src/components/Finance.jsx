@@ -1,133 +1,123 @@
-// src/components/Finance.jsx
-import React, { useState, useEffect } from 'react';
-import StatsCards from './finance/StatsCards';
-import UpcomingPayments from './finance/UpcomingPayments';
-import ExpensesRecord from './finance/ExpensesRecord';
-import FinancialCharts from './finance/FinancialCharts';
-import ExpenseDistribution from './finance/ExpenseDistribution';
+// src/components/finance/ExpenseDistribution.jsx
 
-const Finance = ({ products, expenses: initialExpenses, onAddExpense, onUpdateExpense, darkMode }) => {
-  const [expenses, setExpenses] = useState(initialExpenses || []);
-  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
-  const [compareYear, setCompareYear] = useState(null);
-  const [chartType, setChartType] = useState('line');
+import React from 'react';
+import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
+import { FiPieChart } from 'react-icons/fi';
 
-  useEffect(() => {
-    setExpenses(initialExpenses);
-  }, [initialExpenses]);
+const COLORS = ['#fbbf24', '#3b82f6', '#22c55e', '#ef4444', '#a855f7', '#f97316'];
 
-  const inventoryStats = products.reduce((acc, product) => {
-    acc.totalPurchase += product.purchasePrice * product.quantity;
-    acc.totalSelling += product.sellingPrice * product.quantity;
-    acc.totalProfit += (product.sellingPrice - product.purchasePrice) * product.quantity;
-    return acc;
-  }, { totalPurchase: 0, totalSelling: 0, totalProfit: 0 });
-
-  const getPeriodStats = (period) => {
-    const now = new Date();
-    let filteredExpenses = [];
-    
-    if (period === 'daily') {
-      filteredExpenses = expenses.filter(exp => new Date(exp.date).toDateString() === now.toDateString());
-    } else if (period === 'weekly') {
-      const weekAgo = new Date(now.setDate(now.getDate() - 7));
-      filteredExpenses = expenses.filter(exp => new Date(exp.date) >= weekAgo);
-    } else if (period === 'monthly') {
-      filteredExpenses = expenses.filter(exp => new Date(exp.date).getMonth() === now.getMonth() && new Date(exp.date).getFullYear() === now.getFullYear());
-    } else if (period === 'yearly') {
-      filteredExpenses = expenses.filter(exp => new Date(exp.date).getFullYear() === now.getFullYear());
-    }
-    
-    const totalExpenses = filteredExpenses.reduce((sum, exp) => sum + exp.amount, 0);
-    const totalRevenue = inventoryStats.totalSelling;
-    const netProfit = totalRevenue - inventoryStats.totalPurchase - totalExpenses;
-    const profitMargin = totalRevenue > 0 ? (netProfit / totalRevenue) * 100 : 0;
-    
-    return { totalExpenses, totalRevenue, netProfit, profitMargin, count: filteredExpenses.length };
-  };
-
-  const getMonthlyData = (year) => {
-    const months = [];
-    for (let i = 0; i < 12; i++) {
-      const monthDate = new Date(year, i, 1);
-      const monthExpenses = expenses.filter(exp => {
-        const expDate = new Date(exp.date);
-        return expDate.getMonth() === i && expDate.getFullYear() === year;
-      });
-      const totalExpenses = monthExpenses.reduce((sum, exp) => sum + exp.amount, 0);
-      const monthRevenue = inventoryStats.totalSelling / 12;
-      const monthPurchase = inventoryStats.totalPurchase / 12;
-      const monthProfit = monthRevenue - monthPurchase - totalExpenses;
-      months.push({
-        month: monthDate.toLocaleString('default', { month: 'short' }),
-        expenses: totalExpenses,
-        revenue: monthRevenue,
-        profit: monthProfit,
-        purchase: monthPurchase
-      });
-    }
-    return months;
-  };
-
-  const getCategoryBreakdown = () => {
-    const categories = {};
-    expenses.forEach(exp => {
-      const category = exp.category || 'Other';
-      categories[category] = (categories[category] || 0) + exp.amount;
-    });
-    return Object.entries(categories).map(([name, value]) => ({ name, value }));
-  };
-
-  const getTypeBreakdown = () => {
-    const types = {};
-    expenses.forEach(exp => {
-      types[exp.type] = (types[exp.type] || 0) + exp.amount;
-    });
-    return Object.entries(types).map(([name, value]) => ({ name, value }));
-  };
-
-  const getUpcomingReminders = () => {
-    const reminders = [
-      { id: 1, type: 'salary', date: '2026-05-25', description: 'Employee Salary - Week 4', amount: 50000 },
-      { id: 2, type: 'bill', date: '2026-05-20', description: 'Electricity Bill', amount: 8000 },
-      { id: 3, type: 'bill', date: '2026-05-22', description: 'Internet Bill', amount: 3000 },
-      { id: 4, type: 'rent', date: '2026-05-28', description: 'Shop Rent', amount: 25000 }
-    ];
-    const today = new Date();
-    const next30Days = new Date(today.setDate(today.getDate() + 30));
-    return reminders.filter(r => new Date(r.date) <= next30Days);
-  };
-
-  const periodStats = {
-    daily: getPeriodStats('daily'),
-    weekly: getPeriodStats('weekly'),
-    monthly: getPeriodStats('monthly'),
-    yearly: getPeriodStats('yearly')
-  };
-
-  const monthlyData = getMonthlyData(selectedYear);
-  const categoryData = getCategoryBreakdown();
-  const typeData = getTypeBreakdown();
-  const upcomingReminders = getUpcomingReminders();
-
+const ExpenseDistribution = ({ categoryData, typeData, darkMode }) => {
   return (
-    <div className={`space-y-6 ${darkMode ? 'text-white' : 'text-gray-900'}`}>
-      <StatsCards periodStats={periodStats} darkMode={darkMode} />
-      <UpcomingPayments upcomingReminders={upcomingReminders} darkMode={darkMode} />
-      <ExpensesRecord expenses={expenses} onAddExpense={onAddExpense} onUpdateExpense={onUpdateExpense} darkMode={darkMode} />
-      <FinancialCharts 
-        monthlyData={monthlyData}
-        selectedYear={selectedYear}
-        setSelectedYear={setSelectedYear}
-        compareYear={compareYear}
-        setCompareYear={setCompareYear}
-        chartType={chartType}
-        setChartType={setChartType}
-        darkMode={darkMode}
-      />
-      <ExpenseDistribution categoryData={categoryData} typeData={typeData} darkMode={darkMode} />
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div className={`rounded-xl border ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200 shadow-sm'}`}>
+        <div className="px-4 py-3 border-b flex items-center gap-2">
+          <FiPieChart className="text-amber-400" />
+          <h3 className={`text-sm font-semibold ${darkMode ? 'text-white' : 'text-gray-800'}`}>
+            Expense by Category
+          </h3>
+        </div>
+        <div className="p-4 h-64">
+          {categoryData.length === 0 ? (
+            <div className="flex items-center justify-center h-full">
+              <p className={`text-sm ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                No data available
+              </p>
+            </div>
+          ) : (
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie
+                  data={categoryData}
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={50}
+                  outerRadius={80}
+                  paddingAngle={2}
+                  dataKey="value"
+                >
+                  {categoryData.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} stroke="none" />
+                  ))}
+                </Pie>
+                <Tooltip 
+                  formatter={(value) => `Rs. ${value.toLocaleString()}`}
+                  contentStyle={{ 
+                    backgroundColor: darkMode ? '#111827' : '#ffffff',
+                    border: darkMode ? '1px solid #1f2937' : '1px solid #e5e7eb',
+                    borderRadius: '8px',
+                    padding: '8px 12px'
+                  }}
+                />
+              </PieChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+        <div className="px-4 py-2 border-t flex flex-wrap gap-2">
+          {categoryData.map((item, index) => (
+            <div key={index} className="flex items-center gap-1.5 text-xs">
+              <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: COLORS[index % COLORS.length] }}></span>
+              <span className={darkMode ? 'text-gray-300' : 'text-gray-700'}>{item.name}</span>
+              <span className={darkMode ? 'text-gray-500' : 'text-gray-500'}>Rs. {item.value.toLocaleString()}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className={`rounded-xl border ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200 shadow-sm'}`}>
+        <div className="px-4 py-3 border-b flex items-center gap-2">
+          <FiPieChart className="text-amber-400" />
+          <h3 className={`text-sm font-semibold ${darkMode ? 'text-white' : 'text-gray-800'}`}>
+            Expense by Type
+          </h3>
+        </div>
+        <div className="p-4 h-64">
+          {typeData.length === 0 ? (
+            <div className="flex items-center justify-center h-full">
+              <p className={`text-sm ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                No data available
+              </p>
+            </div>
+          ) : (
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie
+                  data={typeData}
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={50}
+                  outerRadius={80}
+                  paddingAngle={2}
+                  dataKey="value"
+                >
+                  {typeData.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={COLORS[(index + 3) % COLORS.length]} stroke="none" />
+                  ))}
+                </Pie>
+                <Tooltip 
+                  formatter={(value) => `Rs. ${value.toLocaleString()}`}
+                  contentStyle={{ 
+                    backgroundColor: darkMode ? '#111827' : '#ffffff',
+                    border: darkMode ? '1px solid #1f2937' : '1px solid #e5e7eb',
+                    borderRadius: '8px',
+                    padding: '8px 12px'
+                  }}
+                />
+              </PieChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+        <div className="px-4 py-2 border-t flex flex-wrap gap-2">
+          {typeData.map((item, index) => (
+            <div key={index} className="flex items-center gap-1.5 text-xs">
+              <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: COLORS[(index + 3) % COLORS.length] }}></span>
+              <span className={darkMode ? 'text-gray-300' : 'text-gray-700'}>{item.name}</span>
+              <span className={darkMode ? 'text-gray-500' : 'text-gray-500'}>Rs. {item.value.toLocaleString()}</span>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 };
 
-export default Finance;
+export default ExpenseDistribution;

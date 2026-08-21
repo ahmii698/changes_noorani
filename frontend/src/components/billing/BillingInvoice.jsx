@@ -1,4 +1,5 @@
 // src/components/billing/BillingInvoice.jsx
+
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import toast from 'react-hot-toast';
 import * as XLSX from 'xlsx';
@@ -162,30 +163,16 @@ const BillingInvoice = ({ customerDetails, darkMode, onPaymentSuccess, restoredD
   const [selectedBank, setSelectedBank] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [viewMode, setViewMode] = useState('grid');
-  const [activeTab, setActiveTab] = useState('services');
-  const [services, setServices] = useState([]);
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [showIconDropdown, setShowIconDropdown] = useState(false);
   
   const [showDiscount, setShowDiscount] = useState(false);
   const [discountType, setDiscountType] = useState('fixed');
   const [discountValue, setDiscountValue] = useState('');
   const [discountNote, setDiscountNote] = useState('');
   
-  const [customerBirthday, setCustomerBirthday] = useState('');
-  const [birthdayError, setBirthdayError] = useState('');
   const [previousVisits, setPreviousVisits] = useState([]);
-  
-  const [isServiceModalOpen, setIsServiceModalOpen] = useState(false);
-  const [editingService, setEditingService] = useState(null);
-  const [serviceFormData, setServiceFormData] = useState({
-    name: '',
-    price: '',
-    category: '',
-    icon: 'tool'
-  });
   
   const [isProductModalOpen, setIsProductModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState(null);
@@ -195,11 +182,6 @@ const BillingInvoice = ({ customerDetails, darkMode, onPaymentSuccess, restoredD
     selling_price: '',
     quantity: ''
   });
-  
-  // Oil Change Modal states
-  const [isOilChangeModalOpen, setIsOilChangeModalOpen] = useState(false);
-  const [oilChangeMileage, setOilChangeMileage] = useState('');
-  const [oilChangeService, setOilChangeService] = useState(null);
   
   // Draft Bill states
   const [isSavingDraft, setIsSavingDraft] = useState(false);
@@ -218,7 +200,7 @@ const BillingInvoice = ({ customerDetails, darkMode, onPaymentSuccess, restoredD
     if (restoredData && restoredData.cart_items && restoredData.cart_items.length > 0) {
       const restoredItems = restoredData.cart_items.map(item => ({
         ...item,
-        type: item.type || 'service',
+        type: item.type || 'product',
         price: item.price || 0,
         quantity: item.quantity || 1
       }));
@@ -273,93 +255,6 @@ const BillingInvoice = ({ customerDetails, darkMode, onPaymentSuccess, restoredD
     return paymentMethod;
   };
 
-  const validateBirthday = (value) => {
-    if (!value) {
-      setBirthdayError('');
-      return true;
-    }
-    
-    if (!/^\d{2}\/\d{2}\/\d{4}$/.test(value)) {
-      setBirthdayError('Please use mm/dd/yyyy format');
-      return false;
-    }
-    
-    const parts = value.split('/');
-    const month = parseInt(parts[0]);
-    const day = parseInt(parts[1]);
-    const year = parseInt(parts[2]);
-    
-    if (month < 1 || month > 12) {
-      setBirthdayError('Month must be between 1-12');
-      return false;
-    }
-    
-    if (day < 1 || day > 31) {
-      setBirthdayError('Day must be between 1-31');
-      return false;
-    }
-    
-    const date = new Date(year, month - 1, day);
-    if (isNaN(date.getTime())) {
-      setBirthdayError('Invalid date');
-      return false;
-    }
-    
-    const checkDate = new Date(year, month - 1, day);
-    if (checkDate.getMonth() !== month - 1 || checkDate.getDate() !== day) {
-      setBirthdayError('Invalid date (check month/day combination)');
-      return false;
-    }
-    
-    if (year < 1900 || year > 2100) {
-      setBirthdayError('Please enter a valid year (1900-2100)');
-      return false;
-    }
-    
-    setBirthdayError('');
-    return true;
-  };
-
-  const handleBirthdayChange = (e) => {
-    let value = e.target.value;
-    value = value.replace(/[^0-9/]/g, '');
-    
-    if (value.length === 2 && !value.includes('/')) {
-      value = value + '/';
-    } else if (value.length === 5 && value.split('/').length === 2 && !value.endsWith('/')) {
-      const parts = value.split('/');
-      if (parts.length === 2 && parts[1].length === 2) {
-        value = value + '/';
-      }
-    }
-    
-    setCustomerBirthday(value);
-    
-    if (value.length === 10) {
-      validateBirthday(value);
-    } else {
-      setBirthdayError('');
-    }
-  };
-
-  const getFormattedBirthday = (birthdayStr) => {
-    if (!birthdayStr) return 'Not Provided';
-    const date = parseDateString(birthdayStr);
-    if (date) {
-      return date.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
-    }
-    return birthdayStr;
-  };
-
-  useEffect(() => {
-    if (customerDetails?.birthday) {
-      const formatted = formatDate(customerDetails.birthday);
-      setCustomerBirthday(formatted);
-    } else {
-      setCustomerBirthday('');
-    }
-  }, [customerDetails]);
-
   useEffect(() => {
     const fetchPreviousVisits = async () => {
       if (!isAdmin || !customerDetails?.phone) {
@@ -373,7 +268,7 @@ const BillingInvoice = ({ customerDetails, darkMode, onPaymentSuccess, restoredD
           const visits = response.data.slice(0, 10).map(inv => ({
             id: inv.id,
             date: inv.invoice_date ? new Date(inv.invoice_date).toLocaleDateString() : 'N/A',
-            services: inv.items?.map(item => item.service_name).join(', ') || 'N/A',
+            products: inv.items?.map(item => item.service_name).join(', ') || 'N/A',
             total: inv.total_amount || 0,
             status: inv.status || 'Paid'
           }));
@@ -389,20 +284,6 @@ const BillingInvoice = ({ customerDetails, darkMode, onPaymentSuccess, restoredD
 
     fetchPreviousVisits();
   }, [customerDetails, isAdmin]);
-
-  const fetchServices = async () => {
-    try {
-      const response = await api.get('/services');
-      if (response.data && response.data.data && Array.isArray(response.data.data)) {
-        setServices(response.data.data);
-      } else if (response.data && Array.isArray(response.data)) {
-        setServices(response.data);
-      }
-    } catch (err) {
-      console.error('Error fetching services:', err);
-      toast.error('Failed to load services');
-    }
-  };
 
   // ✅ UPDATED: fetchProducts with Battery filter
   const fetchProducts = async () => {
@@ -440,7 +321,7 @@ const BillingInvoice = ({ customerDetails, darkMode, onPaymentSuccess, restoredD
   useEffect(() => {
     const loadData = async () => {
       setLoading(true);
-      await Promise.all([fetchServices(), fetchProducts()]);
+      await fetchProducts();
       setLoading(false);
     };
     loadData();
@@ -461,8 +342,7 @@ const BillingInvoice = ({ customerDetails, darkMode, onPaymentSuccess, restoredD
           name: item.name,
           price: roundToTwo(item.price),
           quantity: item.quantity,
-          type: item.type || 'service',
-          mileage: item.mileage || null,
+          type: item.type || 'product',
           category: item.category || null
         })),
         cart_summary: {
@@ -474,9 +354,6 @@ const BillingInvoice = ({ customerDetails, darkMode, onPaymentSuccess, restoredD
         customer_phone: customerDetails.phone || '',
         customer_name: customerDetails.name || '',
         customer_email: customerDetails.email || '',
-        customer_car_number: customerDetails.carNumber || '',
-        customer_car_model: customerDetails.carModel || '',
-        customer_birthday: customerBirthday || ''
       };
 
       const response = await saveCart(cartData);
@@ -487,7 +364,6 @@ const BillingInvoice = ({ customerDetails, darkMode, onPaymentSuccess, restoredD
         setDiscountValue('');
         setDiscountNote('');
         setShowDiscount(false);
-        setCustomerBirthday('');
         setSelectedBank('');
         window.dispatchEvent(new Event('discarded-update'));
         if (onPaymentSuccess) onPaymentSuccess();
@@ -498,87 +374,6 @@ const BillingInvoice = ({ customerDetails, darkMode, onPaymentSuccess, restoredD
     } finally {
       setIsSavingDraft(false);
     }
-  };
-
-  // ==================== SERVICE FUNCTIONS ====================
-  const handleAddService = async () => {
-    if (!serviceFormData.name || !serviceFormData.price || !serviceFormData.category) {
-      toast.error('Please fill all fields');
-      return;
-    }
-    try {
-      const response = await api.post('/services', {
-        name: serviceFormData.name,
-        price: parseFloat(serviceFormData.price),
-        category: serviceFormData.category,
-        icon: serviceFormData.icon
-      });
-      if (response.data) {
-        toast.success('Service added successfully!');
-        await fetchServices();
-        setIsServiceModalOpen(false);
-        setServiceFormData({ name: '', price: '', category: '', icon: 'tool' });
-        setEditingService(null);
-      }
-    } catch (err) {
-      console.error('Error adding service:', err);
-      toast.error(err.response?.data?.message || 'Failed to add service');
-    }
-  };
-
-  const handleUpdateService = async () => {
-    if (!serviceFormData.name || !serviceFormData.price || !serviceFormData.category) {
-      toast.error('Please fill all fields');
-      return;
-    }
-    try {
-      const response = await api.put(`/services/${editingService.id}`, {
-        name: serviceFormData.name,
-        price: parseFloat(serviceFormData.price),
-        category: serviceFormData.category,
-        icon: serviceFormData.icon
-      });
-      if (response.data) {
-        toast.success('Service updated successfully!');
-        await fetchServices();
-        setIsServiceModalOpen(false);
-        setServiceFormData({ name: '', price: '', category: '', icon: 'tool' });
-        setEditingService(null);
-      }
-    } catch (err) {
-      console.error('Error updating service:', err);
-      toast.error(err.response?.data?.message || 'Failed to update service');
-    }
-  };
-
-  const handleDeleteService = async (serviceId, serviceName) => {
-    if (window.confirm(`Are you sure you want to delete "${serviceName}"?`)) {
-      try {
-        await api.delete(`/services/${serviceId}`);
-        toast.success('Service deleted successfully!');
-        await fetchServices();
-      } catch (err) {
-        console.error('Error deleting service:', err);
-        toast.error(err.response?.data?.message || 'Failed to delete service');
-      }
-    }
-  };
-
-  const openAddServiceModal = () => {
-    setEditingService(null);
-    setServiceFormData({ name: '', price: '', category: '', icon: 'tool' });
-    setIsServiceModalOpen(true);
-  };
-
-  const openEditServiceModal = (service) => {
-    setEditingService(service);
-    setServiceFormData({
-      name: service.name,
-      price: service.price,
-      category: service.category,
-      icon: service.icon || 'tool'
-    });
-    setIsServiceModalOpen(true);
   };
 
   // ==================== PRODUCT FUNCTIONS ====================
@@ -681,14 +476,6 @@ const BillingInvoice = ({ customerDetails, darkMode, onPaymentSuccess, restoredD
     setIsProductModalOpen(true);
   };
 
-  const selectIcon = (iconValue) => {
-    setServiceFormData({ ...serviceFormData, icon: iconValue });
-    setShowIconDropdown(false);
-  };
-
-  const filteredServices = searchTerm ? 
-    services.filter(s => s.name.toLowerCase().includes(searchTerm.toLowerCase())) : services;
-
   const filteredProducts = searchTerm ? 
     products.filter(p => p.name.toLowerCase().includes(searchTerm.toLowerCase())) : products;
 
@@ -697,22 +484,8 @@ const BillingInvoice = ({ customerDetails, darkMode, onPaymentSuccess, restoredD
     return product ? product.quantity : 0;
   };
 
-  // Add to bill - WITH OIL CHANGE MODAL
+  // Add to bill
   const addToBill = (item, type) => {
-    const isOilChange = item.name?.toLowerCase().includes('oil') || 
-                        item.name?.toLowerCase().includes('engine oil') ||
-                        item.name?.toLowerCase().includes('oil change');
-
-    if (isOilChange && type === 'service') {
-      setOilChangeService(item);
-      setIsOilChangeModalOpen(true);
-      return;
-    }
-
-    addItemToBill(item, type);
-  };
-
-  const addItemToBill = (item, type, mileage = null) => {
     const currentStock = type === 'product' ? getProductStock(item.id) : null;
     if (currentStock !== null && currentStock <= 0) {
       toast.error(`${item.name} is out of stock!`);
@@ -727,22 +500,9 @@ const BillingInvoice = ({ customerDetails, darkMode, onPaymentSuccess, restoredD
       ...item, 
       quantity: 1, 
       type: type,
-      price: type === 'service' ? item.price : item.selling_price,
-      mileage: mileage
+      price: type === 'product' ? item.selling_price : item.price,
     }]);
     toast.success(`${item.name} added`);
-  };
-
-  const handleOilChangeSubmit = () => {
-    const mileage = parseInt(oilChangeMileage);
-    if (!oilChangeMileage || isNaN(mileage) || mileage < 0) {
-      toast.error('Please enter a valid mileage');
-      return;
-    }
-    addItemToBill(oilChangeService, 'service', mileage);
-    setIsOilChangeModalOpen(false);
-    setOilChangeMileage('');
-    setOilChangeService(null);
   };
 
   const updateQuantity = (id, newQuantity, type) => {
@@ -767,14 +527,14 @@ const BillingInvoice = ({ customerDetails, darkMode, onPaymentSuccess, restoredD
     toast.success('Removed from bill');
   };
 
-  const addServiceReminder = async (invoiceNo, serviceItems) => {
+  const addServiceReminder = async (invoiceNo, productItems) => {
     try {
       const reminderServices = [
         'oil', 'tuning', 'engine', 'performance', 
         'ac service', 'compressor', 'filter', 'gas refill',
         'ac repair', 'cooling', 'service'
       ];
-      const needsReminder = serviceItems.some(item => 
+      const needsReminder = productItems.some(item => 
         reminderServices.some(service => item.name?.toLowerCase().includes(service))
       );
       if (needsReminder) {
@@ -796,7 +556,7 @@ const BillingInvoice = ({ customerDetails, darkMode, onPaymentSuccess, restoredD
     }
   };
 
-  // ==================== PRINT BILL - UPDATED (NO SEPARATION LINE) ====================
+  // ==================== PRINT BILL ====================
   const printBill = () => {
     if (cart.length === 0) {
       toast.error('No items to print');
@@ -820,11 +580,8 @@ const BillingInvoice = ({ customerDetails, darkMode, onPaymentSuccess, restoredD
     const cartItemsHtml = cart.map((item, idx) => `
       <tr>
         <td style="padding: 6px 8px; border: 1px solid #e5e7eb; text-align: center;">${idx + 1}</td>
-        <td style="padding: 6px 8px; border: 1px solid #e5e7eb;">
-          ${item.name}
-          ${item.mileage ? `<br/><span style="font-size:9px;color:#666;">Mileage: ${item.mileage} km</span>` : ''}
-        </td>
-        <td style="padding: 6px 8px; border: 1px solid #e5e7eb; text-align: center;">${item.type === 'service' ? 'Service' : 'Part'}</td>
+        <td style="padding: 6px 8px; border: 1px solid #e5e7eb;">${item.name}</td>
+        <td style="padding: 6px 8px; border: 1px solid #e5e7eb; text-align: center;">Part</td>
         <td style="padding: 6px 8px; border: 1px solid #e5e7eb; text-align: center;">${item.quantity}</td>
         <td style="padding: 6px 8px; border: 1px solid #e5e7eb; text-align: right;">Rs. ${roundToTwo(item.price).toLocaleString()}</td>
         <td style="padding: 6px 8px; border: 1px solid #e5e7eb; text-align: right;">Rs. ${roundToTwo(item.price * item.quantity).toLocaleString()}</td>
@@ -1066,9 +823,6 @@ const BillingInvoice = ({ customerDetails, darkMode, onPaymentSuccess, restoredD
               <div class="info-row"><span class="info-label">Name:</span><span class="info-value">${customerDetails.name || 'N/A'}</span></div>
               <div class="info-row"><span class="info-label">Phone:</span><span class="info-value">${customerDetails.phone || 'N/A'}</span></div>
               <div class="info-row"><span class="info-label">Email:</span><span class="info-value">${customerDetails.email || 'N/A'}</span></div>
-              <div class="info-row"><span class="info-label">Car Number:</span><span class="info-value">${customerDetails.carNumber || 'N/A'}</span></div>
-              <div class="info-row"><span class="info-label">Car Model:</span><span class="info-value">${customerDetails.carModel || 'N/A'}</span></div>
-              <div class="info-row"><span class="info-label">Birthday:</span><span class="info-value">${customerBirthday ? getFormattedBirthday(customerBirthday) : 'Not Provided'}</span></div>
               <div class="invoice-row">
                 <span><strong>Invoice #:</strong> ${invoiceNo}</span>
                 <span><strong>Date:</strong> ${formattedDate}</span>
@@ -1126,7 +880,6 @@ const BillingInvoice = ({ customerDetails, darkMode, onPaymentSuccess, restoredD
                   ${isFullyPaid ? 'FULLY PAID' : (displayPaidAmount > 0 ? 'PARTIAL' : 'PENDING')}
                 </span>
               </div>
-              <!-- ✅ TOTAL inside Payment Details -->
               <div class="payment-row total-row">
                 <span class="total-label">TOTAL</span>
                 <span class="total-amount">Rs. ${roundToTwo(billTotal).toLocaleString()}</span>
@@ -1166,13 +919,7 @@ const BillingInvoice = ({ customerDetails, darkMode, onPaymentSuccess, restoredD
     toast.success('Print preview opened');
   };
 
-  // ==================== PDF EXPORT - REMOVED ====================
-  // exportToPDF function completely removed
-
-  // ==================== EXCEL EXPORT - REMOVED ====================
-  // exportToExcel function completely removed
-
-  // handlePayment — Payment amount is OPTIONAL, 0 allowed
+  // handlePayment
   const handlePayment = async () => {
     if (isProcessingRef.current || paymentExecutedRef.current) return;
     if (cart.length === 0) {
@@ -1222,16 +969,12 @@ const BillingInvoice = ({ customerDetails, darkMode, onPaymentSuccess, restoredD
       const customerName = customerDetails.name?.trim() || 'Guest';
       const customerPhone = customerDetails.phone?.trim() || 'N/A';
       const customerEmail = customerDetails.email?.trim() || null;
-      const customerCarNumber = customerDetails.carNumber?.trim() || 'N/A';
-      const customerCarModel = customerDetails.carModel?.trim() || null;
       
       const payload = {
         invoice_no: invoiceNo,
         customer_name: customerName,
         customer_phone: customerPhone,
         customer_email: customerEmail,
-        customer_car_number: customerCarNumber,
-        customer_car_model: customerCarModel,
         subtotal: roundedSubtotal,
         discount: roundedDiscount,
         discount_note: discountNote?.trim() || null,
@@ -1243,10 +986,10 @@ const BillingInvoice = ({ customerDetails, darkMode, onPaymentSuccess, restoredD
         invoice_date: customerDetails?.date || currentDate,
         items: cartSnapshot.map(item => ({
           service_name: item.name,
-          service_category: item.type === 'service' ? (item.category || 'Service') : 'Product',
+          service_category: 'Product',
           price: roundToTwo(item.price),
           quantity: item.quantity,
-          mileage: item.mileage || null
+          mileage: null
         }))
       };
       
@@ -1266,7 +1009,6 @@ const BillingInvoice = ({ customerDetails, darkMode, onPaymentSuccess, restoredD
       setDiscountValue('');
       setDiscountNote('');
       setShowDiscount(false);
-      setCustomerBirthday('');
       setSelectedBank('');
       await fetchProducts();
 
@@ -1303,7 +1045,7 @@ const BillingInvoice = ({ customerDetails, darkMode, onPaymentSuccess, restoredD
     return (
       <div className={`min-h-[400px] flex items-center justify-center ${darkMode ? 'bg-gray-900' : 'bg-gray-100'}`}>
         <div className="text-center">
-          <FiLoader className="text-5xl text-red-500 animate-spin mx-auto mb-4" />
+          <FiLoader className="text-5xl text-amber-400 animate-spin mx-auto mb-4" />
           <p className={`${darkMode ? 'text-white' : 'text-gray-700'}`}>Loading billing data...</p>
         </div>
       </div>
@@ -1311,325 +1053,271 @@ const BillingInvoice = ({ customerDetails, darkMode, onPaymentSuccess, restoredD
   }
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className={`${darkMode ? 'bg-gray-800' : 'bg-white'} rounded-2xl shadow-xl p-5 border ${darkMode ? 'border-gray-700' : 'border-gray-200'}`}>
-        <div className="flex items-center gap-4">
+    <div className="space-y-4">
+      {/* Header - Amber Theme */}
+      <div className={`${darkMode ? 'bg-gray-900' : 'bg-white'} rounded-xl border ${darkMode ? 'border-gray-800' : 'border-gray-200 shadow-sm'} p-4`}>
+        <div className="flex items-center gap-3">
           <img 
             src={logo} 
             alt="Noorani Car AC Logo" 
-            className="w-16 h-16 rounded-full object-cover border-2 border-red-500 shadow-lg flex-shrink-0"
+            className="w-14 h-14 rounded-full object-cover border-2 border-amber-400 shadow-lg flex-shrink-0"
           />
           <div className="flex-1 text-center">
-            <h1 className={`text-2xl font-bold ${darkMode ? 'text-white' : 'text-gray-900'}`}>NOORANI CAR A/C & AUTOS</h1>
-            <p className={`text-sm ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Professional Auto Care Service</p>
+            <h1 className={`text-xl font-bold ${darkMode ? 'text-white' : 'text-gray-900'}`}>NOORANI CAR A/C & AUTOS</h1>
+            <p className={`text-xs font-medium ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Professional Auto Care Service</p>
           </div>
         </div>
       </div>
 
-      {/* Customer Info - All fields optional */}
-      <div className={`${darkMode ? 'bg-gray-800' : 'bg-white'} rounded-2xl shadow-xl p-5 border ${darkMode ? 'border-gray-700' : 'border-gray-200'}`}>
-        <h3 className={`text-lg font-semibold mb-3 ${darkMode ? 'text-white' : 'text-gray-900'}`}>Step 1: Customer Details</h3>
-        <p className={`text-sm mb-4 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Enter customer information - Phone number auto-searches history</p>
+      {/* Customer Info - Bold + Dark Mode White */}
+      <div className={`${darkMode ? 'bg-gray-900' : 'bg-white'} rounded-xl border ${darkMode ? 'border-gray-800' : 'border-gray-200 shadow-sm'} p-4`}>
+        <h3 className={`text-sm font-bold ${darkMode ? 'text-white' : 'text-gray-900'}`}>Customer Details</h3>
+        <p className={`text-xs font-medium ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Customer information from Step 1</p>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           <div>
-            <label className={`block text-sm font-medium mb-1 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>Phone Number <span className="text-xs text-gray-400 block">Type to search history</span></label>
-            <input type="text" value={customerDetails.phone || ''} readOnly className={`w-full px-4 py-2 rounded-xl border-2 focus:ring-2 focus:ring-red-500 outline-none transition ${darkMode ? 'bg-gray-700 border-gray-600 text-white' : 'bg-gray-100 border-gray-300 text-gray-900'}`} />
+            <label className={`block text-xs font-bold ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>Phone Number</label>
+            <input type="text" value={customerDetails.phone || ''} readOnly className={`w-full px-3 py-1.5 rounded-lg border text-sm font-medium focus:ring-2 focus:ring-amber-400 outline-none transition ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-gray-100 border-gray-300 text-gray-900'}`} />
           </div>
           <div>
-            <label className={`block text-sm font-medium mb-1 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>Customer Name</label>
-            <input type="text" value={customerDetails.name || ''} readOnly className={`w-full px-4 py-2 rounded-xl border-2 focus:ring-2 focus:ring-red-500 outline-none transition ${darkMode ? 'bg-gray-700 border-gray-600 text-white' : 'bg-gray-100 border-gray-300 text-gray-900'}`} />
+            <label className={`block text-xs font-bold ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>Customer Name</label>
+            <input type="text" value={customerDetails.name || ''} readOnly className={`w-full px-3 py-1.5 rounded-lg border text-sm font-medium focus:ring-2 focus:ring-amber-400 outline-none transition ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-gray-100 border-gray-300 text-gray-900'}`} />
           </div>
           <div>
-            <label className={`block text-sm font-medium mb-1 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>Email Address <span className="text-xs text-gray-400">(Optional)</span></label>
-            <input type="email" value={customerDetails.email || ''} readOnly className={`w-full px-4 py-2 rounded-xl border-2 focus:ring-2 focus:ring-red-500 outline-none transition ${darkMode ? 'bg-gray-700 border-gray-600 text-white' : 'bg-gray-100 border-gray-300 text-gray-900'}`} />
-          </div>
-          <div>
-            <label className={`block text-sm font-medium mb-1 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>Car Number Plate <span className="text-xs text-gray-400">(Optional)</span></label>
-            <input type="text" value={customerDetails.carNumber || ''} readOnly className={`w-full px-4 py-2 rounded-xl border-2 focus:ring-2 focus:ring-red-500 outline-none transition ${darkMode ? 'bg-gray-700 border-gray-600 text-white' : 'bg-gray-100 border-gray-300 text-gray-900'}`} />
-          </div>
-          <div>
-            <label className={`block text-sm font-medium mb-1 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>Car Model <span className="text-xs text-gray-400">(Optional)</span></label>
-            <input type="text" value={customerDetails.carModel || ''} readOnly className={`w-full px-4 py-2 rounded-xl border-2 focus:ring-2 focus:ring-red-500 outline-none transition ${darkMode ? 'bg-gray-700 border-gray-600 text-white' : 'bg-gray-100 border-gray-300 text-gray-900'}`} />
-          </div>
-          <div>
-            <label className={`block text-sm font-medium mb-1 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>Birthday <span className="text-xs text-gray-400">(Optional - mm/dd/yyyy)</span></label>
-            <div className="relative">
-              <input type="text" value={customerBirthday} onChange={handleBirthdayChange} placeholder="e.g. 01/15/1990" className={`w-full px-4 py-2 rounded-xl border-2 focus:ring-2 focus:ring-red-500 outline-none transition ${darkMode ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300'} ${customerBirthday && !birthdayError ? 'border-green-500' : ''} ${birthdayError ? 'border-red-500' : ''}`} maxLength={10} inputMode="numeric" />
-              {customerBirthday && !birthdayError && <div className="absolute right-3 top-1/2 -translate-y-1/2"><span className="text-xs bg-green-500 text-white px-2 py-0.5 rounded-full">✅ Valid</span></div>}
-              {birthdayError && <div className="absolute right-3 top-1/2 -translate-y-1/2"><span className="text-xs bg-red-500 text-white px-2 py-0.5 rounded-full">⚠️</span></div>}
-            </div>
-            {birthdayError && <p className="text-xs text-red-500 mt-1">{birthdayError}</p>}
-            {customerBirthday && !birthdayError && <p className={`text-xs mt-1 ${darkMode ? 'text-green-400' : 'text-green-600'}`}>✅ Birthday: {getFormattedBirthday(customerBirthday)}</p>}
-            <p className={`text-xs mt-1 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Format: mm/dd/yyyy (e.g., 01/15/1990)</p>
+            <label className={`block text-xs font-bold ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>Email Address</label>
+            <input type="email" value={customerDetails.email || ''} readOnly className={`w-full px-3 py-1.5 rounded-lg border text-sm font-medium focus:ring-2 focus:ring-amber-400 outline-none transition ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-gray-100 border-gray-300 text-gray-900'}`} />
           </div>
         </div>
 
         {isAdmin && previousVisits.length > 0 && (
-          <div className="mt-6">
-            <h4 className={`font-semibold mb-3 flex items-center gap-2 ${darkMode ? 'text-white' : 'text-gray-900'}`}><FiClock className="text-red-500" /> Previous Visits ({previousVisits.length})</h4>
+          <div className="mt-4">
+            <h4 className={`font-bold mb-2 flex items-center gap-2 text-sm ${darkMode ? 'text-white' : 'text-gray-900'}`}>
+              <FiClock className="text-amber-400" /> Previous Visits ({previousVisits.length})
+            </h4>
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className={darkMode ? 'bg-gray-700' : 'bg-gray-100'}>
-                  <tr><th className="px-4 py-2 text-left">Date</th><th className="px-4 py-2 text-left">Services</th><th className="px-4 py-2 text-right">Total</th><th className="px-4 py-2 text-center">Status</th></tr>
+              <table className="w-full text-xs">
+                <thead className={darkMode ? 'bg-gray-800' : 'bg-gray-100'}>
+                  <tr>
+                    <th className={`px-3 py-1.5 text-left font-semibold ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>Date</th>
+                    <th className={`px-3 py-1.5 text-left font-semibold ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>Items</th>
+                    <th className={`px-3 py-1.5 text-right font-semibold ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>Total</th>
+                    <th className={`px-3 py-1.5 text-center font-semibold ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>Status</th>
+                  </tr>
                 </thead>
-                <tbody className={`divide-y ${darkMode ? 'divide-gray-700' : 'divide-gray-200'}`}>
+                <tbody className={`divide-y ${darkMode ? 'divide-gray-800' : 'divide-gray-200'}`}>
                   {previousVisits.map((visit, index) => (
-                    <tr key={index} className={darkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-50'}>
-                      <td className="px-4 py-2">{visit.date}</td>
-                      <td className="px-4 py-2">{visit.services}</td>
-                      <td className="px-4 py-2 text-right font-semibold">Rs. {visit.total.toLocaleString()}</td>
-                      <td className="px-4 py-2 text-center"><span className="px-2 py-1 rounded-full text-xs bg-green-100 text-green-700">{visit.status}</span></td>
+                    <tr key={index} className={darkMode ? 'hover:bg-gray-800/50' : 'hover:bg-gray-50'}>
+                      <td className={`px-3 py-1.5 font-medium ${darkMode ? 'text-white' : 'text-gray-700'}`}>{visit.date}</td>
+                      <td className={`px-3 py-1.5 font-medium ${darkMode ? 'text-white' : 'text-gray-700'}`}>{visit.products}</td>
+                      <td className={`px-3 py-1.5 text-right font-bold ${darkMode ? 'text-white' : 'text-gray-700'}`}>Rs. {visit.total.toLocaleString()}</td>
+                      <td className="px-3 py-1.5 text-center">
+                        <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${darkMode ? 'bg-emerald-900/30 text-emerald-400' : 'bg-emerald-100 text-emerald-700'}`}>
+                          {visit.status}
+                        </span>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
-            <p className={`text-xs mt-2 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Showing last {previousVisits.length} visits</p>
           </div>
         )}
       </div>
 
-      {/* Tab Buttons */}
-      <div className="flex gap-2 border-b border-gray-200 dark:border-gray-700">
-        <button onClick={() => setActiveTab('services')} className={`px-6 py-3 font-semibold transition flex items-center gap-2 ${activeTab === 'services' ? 'text-red-500 border-b-2 border-red-500' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}><FiTool className="text-lg" /> Services</button>
-        <button onClick={() => setActiveTab('products')} className={`px-6 py-3 font-semibold transition flex items-center gap-2 ${activeTab === 'products' ? 'text-red-500 border-b-2 border-red-500' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}><FiPackage className="text-lg" /> Parts & Accessories</button>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Items Section */}
-        <div className={`${darkMode ? 'bg-gray-800' : 'bg-white'} rounded-2xl shadow-xl overflow-hidden border ${darkMode ? 'border-gray-700' : 'border-gray-200'}`}>
-          <div className="px-6 py-4 bg-gradient-to-r from-red-500 to-red-600">
+      {/* Products Section */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Products Section - Amber Theme */}
+        <div className={`${darkMode ? 'bg-gray-900' : 'bg-white'} rounded-xl overflow-hidden border ${darkMode ? 'border-gray-800' : 'border-gray-200 shadow-sm'}`}>
+          <div className="px-4 py-3 bg-amber-400">
             <div className="flex justify-between items-center">
               <div className="flex items-center gap-2">
-                {activeTab === 'services' ? <FiTool className="text-white text-xl" /> : <FiPackage className="text-white text-xl" />}
-                <h3 className="text-lg font-semibold text-white">{activeTab === 'services' ? 'Available Services' : 'Parts & Accessories'}</h3>
+                <FiPackage className="text-gray-900 text-lg" />
+                <h3 className="text-sm font-bold text-gray-900">Parts & Accessories</h3>
               </div>
-              <div className="flex gap-2">
-                <button onClick={activeTab === 'services' ? openAddServiceModal : openAddProductModal} className="p-2 rounded-lg bg-white/20 hover:bg-white/30 transition flex items-center gap-1 text-white text-sm"><FiPlus className="text-sm" /> Add</button>
-                <button onClick={() => setViewMode('grid')} className={`p-2 rounded-lg transition ${viewMode === 'grid' ? 'bg-white/20' : 'hover:bg-white/10'}`}><FiGrid className="text-white" /></button>
-                <button onClick={() => setViewMode('list')} className={`p-2 rounded-lg transition ${viewMode === 'list' ? 'bg-white/20' : 'hover:bg-white/10'}`}><FiListIcon className="text-white" /></button>
+              <div className="flex gap-1.5">
+                <button onClick={openAddProductModal} className="p-1.5 rounded-lg bg-gray-900/20 hover:bg-gray-900/30 transition flex items-center gap-1 text-gray-900 text-xs font-bold">
+                  <FiPlus className="text-sm" /> Add
+                </button>
+                <button onClick={() => setViewMode('grid')} className={`p-1.5 rounded-lg transition ${viewMode === 'grid' ? 'bg-gray-900/30' : 'hover:bg-gray-900/20'}`}>
+                  <FiGrid className="text-gray-900" />
+                </button>
+                <button onClick={() => setViewMode('list')} className={`p-1.5 rounded-lg transition ${viewMode === 'list' ? 'bg-gray-900/30' : 'hover:bg-gray-900/20'}`}>
+                  <FiListIcon className="text-gray-900" />
+                </button>
               </div>
             </div>
-            <div className="relative mt-3">
-              <FiSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-white/60" />
-              <input type="text" placeholder={`Search ${activeTab === 'services' ? 'services' : 'parts'}...`} value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full pl-10 pr-4 py-2 rounded-lg bg-white/20 text-white placeholder-white/60 border border-white/30 focus:outline-none focus:ring-2 focus:ring-white/50" />
+            <div className="relative mt-2">
+              <FiSearch className="absolute left-2.5 top-1/2 transform -translate-y-1/2 text-gray-700/60" />
+              <input type="text" placeholder="Search parts..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full pl-8 pr-3 py-1.5 rounded-lg text-xs font-medium bg-gray-900/20 text-gray-900 placeholder-gray-700/60 border border-gray-900/30 focus:outline-none focus:ring-2 focus:ring-gray-900/50" />
             </div>
           </div>
           
-          <div className={`p-4 max-h-[500px] overflow-y-auto ${darkMode ? 'bg-gray-900' : 'bg-gray-50'}`}>
-            {activeTab === 'services' ? (
-              viewMode === 'grid' ? (
-                <div className="grid grid-cols-2 gap-3">
-                  {filteredServices.map(service => (
-                    <div key={service.id} className={`relative group p-4 rounded-xl transition-all duration-200 cursor-pointer ${darkMode ? 'bg-gray-700 hover:bg-gray-600 border border-gray-600 hover:border-red-500' : 'bg-white hover:bg-red-50 border border-gray-200 hover:border-red-300'}`}>
-                      <div onClick={() => addToBill(service, 'service')}>
-                        <div className="text-red-500 mb-2">{getIconComponent(service.icon || 'tool')}</div>
-                        <p className={`font-semibold text-sm ${darkMode ? 'text-white' : 'text-gray-900'}`}>{service.name}</p>
-                        <p className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'} mt-1`}>{service.category}</p>
-                        <p className="text-red-500 font-bold text-lg mt-2">Rs. {service.price.toLocaleString()}</p>
+          <div className={`p-3 max-h-[500px] overflow-y-auto ${darkMode ? 'bg-gray-950' : 'bg-gray-50'}`}>
+            {products.length === 0 ? (
+              <div className="text-center py-8 text-gray-500">
+                <FiPackage className="text-3xl mx-auto mb-2 text-gray-300" />
+                <p className="text-xs font-medium">No products found.</p>
+              </div>
+            ) : viewMode === 'grid' ? (
+              <div className="grid grid-cols-2 gap-2">
+                {filteredProducts.map(product => {
+                  const stock = product.quantity;
+                  const isOutOfStock = stock <= 0;
+                  return (
+                    <div key={product.id} className={`relative group p-3 rounded-lg transition-all duration-200 cursor-pointer ${isOutOfStock ? 'opacity-50 cursor-not-allowed bg-gray-100 dark:bg-gray-800' : darkMode ? 'bg-gray-800 hover:bg-gray-700 border border-gray-700 hover:border-amber-500' : 'bg-white hover:bg-amber-50 border border-gray-200 hover:border-amber-300'}`}>
+                      <div onClick={() => !isOutOfStock && addToBill(product, 'product')}>
+                        <FiPackage className="text-2xl mb-1.5 text-gray-500" />
+                        <p className={`font-bold text-xs ${darkMode ? 'text-white' : 'text-gray-900'}`}>{product.name}</p>
+                        <p className={`text-xs font-medium ${darkMode ? 'text-gray-400' : 'text-gray-500'} mt-0.5`}>Stock: {stock}</p>
+                        <p className="text-amber-400 font-bold text-base mt-1.5">Rs. {product.selling_price.toLocaleString()}</p>
+                        {stock < 5 && stock > 0 && <p className="text-xs font-semibold text-yellow-500 mt-0.5">Only {stock} left!</p>}
+                        {isOutOfStock && <p className="text-xs font-bold text-red-500 mt-0.5">Out of stock!</p>}
                       </div>
                       {isAdmin && (
-                        <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition">
-                          <button onClick={(e) => { e.stopPropagation(); openEditServiceModal(service); }} className="p-1 rounded bg-blue-500 text-white hover:bg-blue-600 text-xs"><FiEdit2 size={12} /></button>
-                          <button onClick={(e) => { e.stopPropagation(); handleDeleteService(service.id, service.name); }} className="p-1 rounded bg-red-500 text-white hover:bg-red-600 text-xs"><FiTrash2 size={12} /></button>
+                        <div className="absolute top-1.5 right-1.5 flex gap-0.5 opacity-0 group-hover:opacity-100 transition">
+                          <button onClick={(e) => { e.stopPropagation(); openEditProductModal(product); }} className="p-1 rounded bg-blue-500 text-white hover:bg-blue-600 text-xs font-bold">
+                            <FiEdit2 size={10} />
+                          </button>
+                          <button onClick={(e) => { e.stopPropagation(); handleDeleteProduct(product.id, product.name); }} className="p-1 rounded bg-red-500 text-white hover:bg-red-600 text-xs font-bold">
+                            <FiTrash2 size={10} />
+                          </button>
                         </div>
                       )}
                     </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {filteredServices.map(service => (
-                    <div key={service.id} className={`relative group flex items-center justify-between p-3 rounded-xl transition-all duration-200 cursor-pointer ${darkMode ? 'bg-gray-700 hover:bg-gray-600' : 'bg-white hover:bg-red-50'}`}>
-                      <div onClick={() => addToBill(service, 'service')} className="flex-1 flex items-center gap-3">
-                        <div className="text-red-500">{getIconComponent(service.icon || 'tool')}</div>
+                  );
+                })}
+                {filteredProducts.length === 0 && (
+                  <div className="col-span-2 text-center py-6 text-gray-500">
+                    <p className="text-xs font-medium">No matching products found.</p>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="space-y-1.5">
+                {filteredProducts.map(product => {
+                  const stock = product.quantity;
+                  const isOutOfStock = stock <= 0;
+                  return (
+                    <div key={product.id} className={`relative group flex items-center justify-between p-2.5 rounded-lg transition-all duration-200 cursor-pointer ${isOutOfStock ? 'opacity-50 cursor-not-allowed bg-gray-100 dark:bg-gray-800' : darkMode ? 'bg-gray-800 hover:bg-gray-700' : 'bg-white hover:bg-amber-50'}`}>
+                      <div onClick={() => !isOutOfStock && addToBill(product, 'product')} className="flex-1 flex items-center gap-2.5">
+                        <FiPackage className="text-lg text-gray-500" />
                         <div>
-                          <p className={`font-medium ${darkMode ? 'text-white' : 'text-gray-900'}`}>{service.name}</p>
-                          <p className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>{service.category}</p>
+                          <p className={`font-bold text-xs ${darkMode ? 'text-white' : 'text-gray-900'}`}>{product.name}</p>
+                          <p className={`text-xs font-medium ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Stock: {stock}</p>
                         </div>
                       </div>
                       <div className="text-right">
-                        <p className="text-red-500 font-bold">Rs. {service.price.toLocaleString()}</p>
+                        <p className="text-amber-400 font-bold text-xs">Rs. {product.selling_price.toLocaleString()}</p>
+                        {stock < 5 && stock > 0 && <p className="text-xs font-semibold text-yellow-500">Only {stock} left!</p>}
                       </div>
                       {isAdmin && (
-                        <div className="absolute right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition">
-                          <button onClick={(e) => { e.stopPropagation(); openEditServiceModal(service); }} className="p-1 rounded bg-blue-500 text-white hover:bg-blue-600 text-xs"><FiEdit2 size={12} /></button>
-                          <button onClick={(e) => { e.stopPropagation(); handleDeleteService(service.id, service.name); }} className="p-1 rounded bg-red-500 text-white hover:bg-red-600 text-xs"><FiTrash2 size={12} /></button>
+                        <div className="absolute right-1.5 flex gap-0.5 opacity-0 group-hover:opacity-100 transition">
+                          <button onClick={(e) => { e.stopPropagation(); openEditProductModal(product); }} className="p-1 rounded bg-blue-500 text-white hover:bg-blue-600 text-xs font-bold">
+                            <FiEdit2 size={10} />
+                          </button>
+                          <button onClick={(e) => { e.stopPropagation(); handleDeleteProduct(product.id, product.name); }} className="p-1 rounded bg-red-500 text-white hover:bg-red-600 text-xs font-bold">
+                            <FiTrash2 size={10} />
+                          </button>
                         </div>
                       )}
                     </div>
-                  ))}
-                </div>
-              )
-            ) : (
-              products.length === 0 ? (
-                <div className="text-center py-8 text-gray-500">
-                  <FiPackage className="text-4xl mx-auto mb-3 text-gray-300" />
-                  <p>No visible products found.</p>
-                  <p className="text-sm mt-1">Add a new product or show hidden ones.</p>
-                </div>
-              ) : viewMode === 'grid' ? (
-                <div className="grid grid-cols-2 gap-3">
-                  {filteredProducts.map(product => {
-                    const stock = product.quantity;
-                    const isOutOfStock = stock <= 0;
-                    return (
-                      <div key={product.id} className={`relative group p-4 rounded-xl transition-all duration-200 cursor-pointer ${isOutOfStock ? 'opacity-50 cursor-not-allowed bg-gray-100 dark:bg-gray-700' : darkMode ? 'bg-gray-700 hover:bg-gray-600 border border-gray-600 hover:border-red-500' : 'bg-white hover:bg-red-50 border border-gray-200 hover:border-red-300'}`}>
-                        <div onClick={() => !isOutOfStock && addToBill(product, 'product')}>
-                          <FiPackage className="text-3xl mb-2 text-gray-500" />
-                          <p className={`font-semibold text-sm ${darkMode ? 'text-white' : 'text-gray-900'}`}>{product.name}</p>
-                          <p className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'} mt-1`}>Stock: {stock} units</p>
-                          <p className="text-red-500 font-bold text-lg mt-2">Rs. {product.selling_price.toLocaleString()}</p>
-                          {stock < 5 && stock > 0 && <p className="text-xs text-yellow-500 mt-1">Only {stock} left!</p>}
-                          {isOutOfStock && <p className="text-xs text-red-500 mt-1">Out of stock!</p>}
-                        </div>
-                        {isAdmin && (
-                          <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition">
-                            <button onClick={(e) => { e.stopPropagation(); openEditProductModal(product); }} className="p-1 rounded bg-blue-500 text-white hover:bg-blue-600 text-xs"><FiEdit2 size={12} /></button>
-                            <button onClick={(e) => { e.stopPropagation(); handleDeleteProduct(product.id, product.name); }} className="p-1 rounded bg-red-500 text-white hover:bg-red-600 text-xs"><FiTrash2 size={12} /></button>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                  {filteredProducts.length === 0 && (
-                    <div className="col-span-2 text-center py-8 text-gray-500">
-                      No matching products found.
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {filteredProducts.map(product => {
-                    const stock = product.quantity;
-                    const isOutOfStock = stock <= 0;
-                    return (
-                      <div key={product.id} className={`relative group flex items-center justify-between p-3 rounded-xl transition-all duration-200 cursor-pointer ${isOutOfStock ? 'opacity-50 cursor-not-allowed bg-gray-100 dark:bg-gray-700' : darkMode ? 'bg-gray-700 hover:bg-gray-600' : 'bg-white hover:bg-red-50'}`}>
-                        <div onClick={() => !isOutOfStock && addToBill(product, 'product')} className="flex-1 flex items-center gap-3">
-                          <FiPackage className="text-xl text-gray-500" />
-                          <div>
-                            <p className={`font-medium ${darkMode ? 'text-white' : 'text-gray-900'}`}>{product.name}</p>
-                            <p className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Stock: {stock} units</p>
-                          </div>
-                        </div>
-                        <div className="text-right">
-                          <p className="text-red-500 font-bold">Rs. {product.selling_price.toLocaleString()}</p>
-                          {stock < 5 && stock > 0 && <p className="text-xs text-yellow-500">Only {stock} left!</p>}
-                        </div>
-                        {isAdmin && (
-                          <div className="absolute right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition">
-                            <button onClick={(e) => { e.stopPropagation(); openEditProductModal(product); }} className="p-1 rounded bg-blue-500 text-white hover:bg-blue-600 text-xs"><FiEdit2 size={12} /></button>
-                            <button onClick={(e) => { e.stopPropagation(); handleDeleteProduct(product.id, product.name); }} className="p-1 rounded bg-red-500 text-white hover:bg-red-600 text-xs"><FiTrash2 size={12} /></button>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                  {filteredProducts.length === 0 && (
-                    <div className="text-center py-8 text-gray-500">
-                      No matching products found.
-                    </div>
-                  )}
-                </div>
-              )
+                  );
+                })}
+                {filteredProducts.length === 0 && (
+                  <div className="text-center py-6 text-gray-500">
+                    <p className="text-xs font-medium">No matching products found.</p>
+                  </div>
+                )}
+              </div>
             )}
           </div>
         </div>
 
-        {/* Bill Section */}
-        <div className={`${darkMode ? 'bg-gray-800' : 'bg-white'} rounded-2xl shadow-xl overflow-hidden border ${darkMode ? 'border-gray-700' : 'border-gray-200'}`}>
-          <div className="px-6 py-4 bg-gradient-to-r from-red-500 to-red-600">
+        {/* Bill Section - Amber Theme with Bold Text */}
+        <div className={`${darkMode ? 'bg-gray-900' : 'bg-white'} rounded-xl overflow-hidden border ${darkMode ? 'border-gray-800' : 'border-gray-200 shadow-sm'}`}>
+          <div className="px-4 py-3 bg-amber-400">
             <div className="flex items-center gap-2">
-              <FiShoppingCart className="text-white text-xl" />
-              <h3 className="text-lg font-semibold text-white">Current Bill</h3>
-              <span className="ml-auto bg-white/20 px-3 py-1 rounded-full text-sm text-white">{cart.length} items</span>
+              <FiShoppingCart className="text-gray-900 text-lg" />
+              <h3 className="text-sm font-bold text-gray-900">Current Bill</h3>
+              <span className="ml-auto bg-gray-900/20 px-2.5 py-0.5 rounded-full text-xs font-bold text-gray-900">{cart.length} items</span>
             </div>
           </div>
           
-          <div className="p-4">
+          <div className="p-3">
             {cart.length === 0 ? (
-              <div className="text-center py-16">
-                <div className="w-24 h-24 mx-auto bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center mb-4">
-                  <FiShoppingCart className="text-4xl text-red-500" />
+              <div className="text-center py-12">
+                <div className="w-16 h-16 mx-auto bg-amber-100 dark:bg-amber-900/30 rounded-full flex items-center justify-center mb-3">
+                  <FiShoppingCart className="text-3xl text-amber-400" />
                 </div>
-                <p className={`text-lg ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Cart is empty</p>
-                <p className={`text-sm mt-1 ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>Click on services or parts to add</p>
+                <p className={`text-sm font-bold ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Cart is empty</p>
+                <p className={`text-xs font-medium ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>Click on parts to add</p>
               </div>
             ) : (
               <>
-                <div className="space-y-3 max-h-[350px] overflow-y-auto mb-4 pr-2">
+                <div className="space-y-2 max-h-[350px] overflow-y-auto mb-3 pr-1">
                   {cart.map((item, idx) => (
-                    <div key={`${item.id}-${item.type}`} className={`flex items-center justify-between p-3 rounded-xl ${darkMode ? 'bg-gray-700' : 'bg-gray-50'} border ${darkMode ? 'border-gray-600' : 'border-gray-200'}`}>
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-red-500/20 flex items-center justify-center">
-                          <span className="text-red-500 font-bold text-sm">{idx + 1}</span>
+                    <div key={`${item.id}-${item.type}`} className={`flex items-center justify-between p-2.5 rounded-lg ${darkMode ? 'bg-gray-800' : 'bg-gray-50'} border ${darkMode ? 'border-gray-700' : 'border-gray-200'}`}>
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-6 h-6 rounded-full bg-amber-500/20 flex items-center justify-center">
+                          <span className="text-amber-400 font-bold text-xs">{idx + 1}</span>
                         </div>
                         <div>
-                          <p className={`font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>{item.name}</p>
-                          <p className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                            {item.type === 'service' ? 'Service' : 'Part'} • Rs. {roundToTwo(item.price).toLocaleString()} each
-                            {item.mileage && <span className="ml-2 text-blue-500">Mileage: {item.mileage} km</span>}
-                          </p>
+                          <p className={`font-bold text-xs ${darkMode ? 'text-white' : 'text-gray-900'}`}>{item.name}</p>
+                          <p className={`text-xs font-medium ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Part • Rs. {roundToTwo(item.price).toLocaleString()} each</p>
                         </div>
                       </div>
-                      <div className="flex items-center gap-3">
-                        <div className="flex items-center gap-2 bg-gray-200 dark:bg-gray-600 rounded-lg px-2 py-1">
-                          <button onClick={() => updateQuantity(item.id, item.quantity - 1, item.type)} className="w-6 h-6 rounded-md hover:bg-gray-300 dark:hover:bg-gray-500 flex items-center justify-center" disabled={isProcessing}>-</button>
-                          <span className={`w-8 text-center font-medium ${darkMode ? 'text-white' : 'text-gray-900'}`}>{item.quantity}</span>
-                          <button onClick={() => updateQuantity(item.id, item.quantity + 1, item.type)} className="w-6 h-6 rounded-md hover:bg-gray-300 dark:hover:bg-gray-500 flex items-center justify-center" disabled={isProcessing}>+</button>
+                      <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1 bg-gray-200 dark:bg-gray-700 rounded-lg px-1.5 py-0.5">
+                          <button onClick={() => updateQuantity(item.id, item.quantity - 1, item.type)} className="w-5 h-5 rounded-md hover:bg-gray-300 dark:hover:bg-gray-600 flex items-center justify-center text-xs font-bold" disabled={isProcessing}>-</button>
+                          <span className={`w-6 text-center font-bold text-xs ${darkMode ? 'text-white' : 'text-gray-900'}`}>{item.quantity}</span>
+                          <button onClick={() => updateQuantity(item.id, item.quantity + 1, item.type)} className="w-5 h-5 rounded-md hover:bg-gray-300 dark:hover:bg-gray-600 flex items-center justify-center text-xs font-bold" disabled={isProcessing}>+</button>
                         </div>
-                        <p className={`font-bold text-red-500 min-w-[80px] text-right`}>Rs. {roundToTwo(item.price * item.quantity).toLocaleString()}</p>
-                        <button onClick={() => removeFromBill(item.id, item.type)} className="w-8 h-8 rounded-lg bg-red-500/10 hover:bg-red-500 text-red-500 hover:text-white transition flex items-center justify-center" disabled={isProcessing}>
-                          <FiTrash2 className="text-sm" />
+                        <p className={`font-bold text-amber-400 min-w-[60px] text-right text-xs`}>Rs. {roundToTwo(item.price * item.quantity).toLocaleString()}</p>
+                        <button onClick={() => removeFromBill(item.id, item.type)} className="w-6 h-6 rounded-lg bg-red-500/10 hover:bg-red-500 text-red-500 hover:text-white transition flex items-center justify-center font-bold" disabled={isProcessing}>
+                          <FiTrash2 className="text-xs" />
                         </button>
                       </div>
                     </div>
                   ))}
                 </div>
 
-                <div className="mt-4 pt-4 border-t-2 dark:border-gray-600 space-y-3">
-                  <div className="flex justify-between items-center py-2">
-                    <span className={`text-lg font-semibold ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>Total Items:</span>
-                    <span className={`text-xl font-bold ${darkMode ? 'text-white' : 'text-gray-900'}`}>{cart.reduce((sum, i) => sum + i.quantity, 0)}</span>
+                <div className="mt-3 pt-3 border-t-2 dark:border-gray-700 space-y-2">
+                  <div className="flex justify-between items-center py-1">
+                    <span className={`text-sm font-bold ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>Total Items:</span>
+                    <span className={`text-base font-bold ${darkMode ? 'text-white' : 'text-gray-900'}`}>{cart.reduce((sum, i) => sum + i.quantity, 0)}</span>
                   </div>
                   
-                  <div className="flex justify-between items-center py-2">
-                    <span className={`text-lg font-semibold ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>Subtotal:</span>
-                    <span className={`text-xl font-bold ${darkMode ? 'text-white' : 'text-gray-700'}`}>Rs. {roundToTwo(subtotal).toLocaleString()}</span>
+                  <div className="flex justify-between items-center py-1">
+                    <span className={`text-sm font-bold ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>Subtotal:</span>
+                    <span className={`text-base font-bold ${darkMode ? 'text-white' : 'text-gray-700'}`}>Rs. {roundToTwo(subtotal).toLocaleString()}</span>
                   </div>
 
-                  <div className="py-2">
-                    <button onClick={() => setShowDiscount(!showDiscount)} className="flex items-center gap-2 text-sm text-red-500 hover:text-red-600 transition font-medium">
-                      <FiGift className="text-lg" />
+                  <div className="py-1">
+                    <button onClick={() => setShowDiscount(!showDiscount)} className="flex items-center gap-1.5 text-xs font-bold text-amber-400 hover:text-amber-300 transition">
+                      <FiGift className="text-base" />
                       {showDiscount ? 'Hide Discount' : 'Add Discount'}
                     </button>
                     
                     {showDiscount && (
-                      <div className={`mt-3 p-4 rounded-xl border ${darkMode ? 'border-red-500/30 bg-gray-700' : 'border-red-200 bg-red-50'}`}>
-                        <div className="grid grid-cols-2 gap-3">
+                      <div className={`mt-2 p-3 rounded-lg border ${darkMode ? 'border-amber-500/30 bg-gray-800' : 'border-amber-200 bg-amber-50'}`}>
+                        <div className="grid grid-cols-2 gap-2">
                           <div>
-                            <label className={`block text-sm mb-1 ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>Discount Type</label>
-                            <select value={discountType} onChange={(e) => setDiscountType(e.target.value)} className={`w-full px-3 py-2 rounded-lg border focus:ring-2 focus:ring-red-400 outline-none ${darkMode ? 'bg-gray-600 border-gray-500 text-white' : 'bg-white border-gray-300'}`}>
-                              <option value="percentage">Percentage (%)</option>
-                              <option value="fixed">Fixed Amount (Rs.)</option>
+                            <label className={`block text-xs font-bold mb-0.5 ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>Type</label>
+                            <select value={discountType} onChange={(e) => setDiscountType(e.target.value)} className={`w-full px-2 py-1.5 rounded-lg text-xs font-medium border focus:ring-2 focus:ring-amber-400 outline-none ${darkMode ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300'}`}>
+                              <option value="percentage">%</option>
+                              <option value="fixed">Rs.</option>
                             </select>
                           </div>
                           <div>
-                            <label className={`block text-sm mb-1 ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>{discountType === 'percentage' ? 'Discount %' : 'Discount Amount (Rs.)'}</label>
-                            <input type="number" value={discountValue} onChange={(e) => setDiscountValue(e.target.value)} placeholder={discountType === 'percentage' ? 'e.g. 10' : 'e.g. 500'} className={`w-full px-3 py-2 rounded-lg border focus:ring-2 focus:ring-red-400 outline-none ${darkMode ? 'bg-gray-600 border-gray-500 text-white' : 'bg-white border-gray-300'}`} min="0" step={discountType === 'percentage' ? '1' : '0.01'} />
+                            <label className={`block text-xs font-bold mb-0.5 ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>Value</label>
+                            <input type="number" value={discountValue} onChange={(e) => setDiscountValue(e.target.value)} placeholder="e.g. 10" className={`w-full px-2 py-1.5 rounded-lg text-xs font-medium border focus:ring-2 focus:ring-amber-400 outline-none ${darkMode ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300'}`} min="0" />
                           </div>
                         </div>
-                        <div className="mt-3">
-                          <label className={`block text-sm mb-1 ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>Note <span className="text-xs text-gray-400">(Internal use only - not shown on bill)</span></label>
-                          <input type="text" value={discountNote} onChange={(e) => setDiscountNote(e.target.value)} placeholder="Internal note (not shown on bill)" className={`w-full px-3 py-2 rounded-lg border focus:ring-2 focus:ring-red-400 outline-none ${darkMode ? 'bg-gray-600 border-gray-500 text-white' : 'bg-white border-gray-300'}`} />
-                        </div>
                         {discountAmount > 0 && (
-                          <div className="mt-3 pt-3 border-t dark:border-gray-600">
+                          <div className="mt-2 pt-2 border-t dark:border-gray-700">
                             <div className="flex justify-between items-center">
-                              <span className="text-red-500 font-semibold">Discount Applied:</span>
-                              <span className="text-red-500 font-bold text-lg">- Rs. {roundToTwo(discountAmount).toLocaleString()}</span>
+                              <span className="text-amber-400 font-bold text-xs">Discount:</span>
+                              <span className="text-amber-400 font-bold text-sm">- Rs. {roundToTwo(discountAmount).toLocaleString()}</span>
                             </div>
                           </div>
                         )}
@@ -1637,19 +1325,19 @@ const BillingInvoice = ({ customerDetails, darkMode, onPaymentSuccess, restoredD
                     )}
                   </div>
                   
-                  <div className="flex justify-between items-center py-2 border-t dark:border-gray-600">
-                    <span className={`text-2xl font-bold ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>Total Amount:</span>
-                    <span className="text-3xl font-bold text-red-500">Rs. {roundToTwo(billTotal).toLocaleString()}</span>
+                  <div className="flex justify-between items-center py-1 border-t dark:border-gray-700">
+                    <span className={`text-lg font-bold ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>Total:</span>
+                    <span className="text-xl font-bold text-amber-400">Rs. {roundToTwo(billTotal).toLocaleString()}</span>
                   </div>
 
-                  {/* Payment Details with Bank Dropdown */}
-                  <div className={`p-4 rounded-xl ${darkMode ? 'bg-gray-700' : 'bg-gray-100'} mt-4`}>
-                    <h4 className={`font-semibold mb-4 flex items-center gap-2 ${darkMode ? 'text-white' : 'text-gray-900'}`}>
-                      <FiCreditCard className="text-red-500" /> Payment Details
+                  {/* Payment Details */}
+                  <div className={`p-3 rounded-lg ${darkMode ? 'bg-gray-800' : 'bg-gray-100'} mt-2`}>
+                    <h4 className={`font-bold mb-3 flex items-center gap-2 text-sm ${darkMode ? 'text-white' : 'text-gray-900'}`}>
+                      <FiCreditCard className="text-amber-400" /> Payment Details
                     </h4>
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-2 gap-3">
                       <div>
-                        <label className={`block text-sm mb-2 ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>Amount (Rs.)</label>
+                        <label className={`block text-xs font-bold mb-1 ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>Amount (Rs.)</label>
                         <input 
                           type="text" 
                           value={paymentAmount} 
@@ -1657,14 +1345,14 @@ const BillingInvoice = ({ customerDetails, darkMode, onPaymentSuccess, restoredD
                             const val = e.target.value.replace(/[^0-9.]/g, '');
                             setPaymentAmount(val);
                           }} 
-                          placeholder="Enter amount (optional)" 
-                          className={`w-full px-4 py-3 rounded-xl border-2 focus:ring-2 focus:ring-red-500 outline-none transition ${darkMode ? 'bg-gray-600 border-gray-500 text-white' : 'bg-white border-gray-300'}`} 
+                          placeholder="Enter amount" 
+                          className={`w-full px-3 py-2 rounded-lg border text-sm font-medium focus:ring-2 focus:ring-amber-400 outline-none transition ${darkMode ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300'}`} 
                           disabled={isProcessing} 
                         />
-                        <p className="text-xs text-gray-400 mt-1">Bill Total: Rs. {billTotal.toLocaleString()} • Leave empty for pending</p>
+                        <p className="text-xs font-medium text-gray-400 mt-0.5">Total: Rs. {billTotal.toLocaleString()}</p>
                       </div>
                       <div>
-                        <label className={`block text-sm mb-2 ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>Payment Method</label>
+                        <label className={`block text-xs font-bold mb-1 ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>Method</label>
                         <select 
                           value={paymentMethod} 
                           onChange={(e) => {
@@ -1673,11 +1361,11 @@ const BillingInvoice = ({ customerDetails, darkMode, onPaymentSuccess, restoredD
                               setSelectedBank('');
                             }
                           }} 
-                          className={`w-full px-4 py-3 rounded-xl border-2 focus:ring-2 focus:ring-red-500 outline-none transition ${darkMode ? 'bg-gray-600 border-gray-500 text-white' : 'bg-white border-gray-300'}`} 
+                          className={`w-full px-3 py-2 rounded-lg border text-sm font-medium focus:ring-2 focus:ring-amber-400 outline-none transition ${darkMode ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300'}`} 
                           disabled={isProcessing}
                         >
                           <option value="cash">Cash</option>
-                          <option value="card">Credit/Debit Card</option>
+                          <option value="card">Card</option>
                           <option value="bank">Bank Transfer</option>
                           <option value="online">Mobile Wallet</option>
                         </select>
@@ -1685,12 +1373,12 @@ const BillingInvoice = ({ customerDetails, darkMode, onPaymentSuccess, restoredD
                     </div>
 
                     {paymentMethod === 'bank' && (
-                      <div className="mt-3">
-                        <label className={`block text-sm mb-2 ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>Select Bank</label>
+                      <div className="mt-2">
+                        <label className={`block text-xs font-bold mb-1 ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>Select Bank</label>
                         <select
                           value={selectedBank}
                           onChange={(e) => setSelectedBank(e.target.value)}
-                          className={`w-full px-4 py-3 rounded-xl border-2 focus:ring-2 focus:ring-red-500 outline-none transition ${darkMode ? 'bg-gray-600 border-gray-500 text-white' : 'bg-white border-gray-300'}`}
+                          className={`w-full px-3 py-2 rounded-lg border text-sm font-medium focus:ring-2 focus:ring-amber-400 outline-none transition ${darkMode ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300'}`}
                           disabled={isProcessing}
                         >
                           <option value="">-- Select Bank --</option>
@@ -1700,84 +1388,73 @@ const BillingInvoice = ({ customerDetails, darkMode, onPaymentSuccess, restoredD
                             </option>
                           ))}
                         </select>
-                        {!selectedBank && (
-                          <p className={`text-xs mt-1 ${darkMode ? 'text-red-400' : 'text-red-500'}`}>
-                            ⚠️ Please select a bank
-                          </p>
-                        )}
-                        {selectedBank && (
-                          <p className={`text-xs mt-1 ${darkMode ? 'text-green-400' : 'text-green-600'}`}>
-                            ✅ Selected: {BANK_NAMES.find(b => b.value === selectedBank)?.label}
-                          </p>
-                        )}
                       </div>
                     )}
                     
                     {paidAmount > 0 && (
-                      <div className="mt-4 pt-4 border-t dark:border-gray-600">
-                        <div className="flex justify-between py-2">
-                          <span>Paid Amount:</span>
-                          <span className={`font-semibold text-lg ${paidAmount > billTotal ? 'text-red-500' : 'text-green-600'}`}>
+                      <div className="mt-3 pt-3 border-t dark:border-gray-700">
+                        <div className="flex justify-between py-1 text-sm">
+                          <span className="font-bold">Paid:</span>
+                          <span className={`font-bold ${paidAmount > billTotal ? 'text-red-500' : 'text-emerald-600'}`}>
                             Rs. {paidAmount.toLocaleString()}
-                            {paidAmount > billTotal && <span className="text-xs ml-2 text-red-500">(Exceeds total!)</span>}
                           </span>
                         </div>
-                        <div className="flex justify-between py-2">
-                          <span>Remaining:</span>
-                          <span className={`font-semibold text-lg ${remainingAmount > 0 ? 'text-red-500' : 'text-green-600'}`}>
+                        <div className="flex justify-between py-1 text-sm">
+                          <span className="font-bold">Remaining:</span>
+                          <span className={`font-bold ${remainingAmount > 0 ? 'text-red-500' : 'text-emerald-600'}`}>
                             Rs. {remainingAmount.toLocaleString()}
                           </span>
                         </div>
-                        <div className="flex justify-between py-2">
-                          <span>Status:</span>
-                          <span className={`font-semibold flex items-center gap-2 ${isFullyPaid ? 'text-green-600' : 'text-orange-500'}`}>
+                        <div className="flex justify-between py-1 text-sm">
+                          <span className="font-bold">Status:</span>
+                          <span className={`font-bold flex items-center gap-1 ${isFullyPaid ? 'text-emerald-600' : 'text-orange-500'}`}>
                             {isFullyPaid ? <FiCheckCircle /> : <FiAlertCircle />}
-                            {isFullyPaid ? 'FULLY PAID' : 'PENDING'}
+                            {isFullyPaid ? 'PAID' : 'PENDING'}
                           </span>
                         </div>
                       </div>
                     )}
                   </div>
 
-                  {/* ✅ UPDATED: PAY NOW + SAVE AS DRAFT - UPPAR */}
+                  {/* PAY NOW + SAVE AS DRAFT - Amber Theme */}
                   <div className="grid grid-cols-2 gap-2 pt-2">
                     <button 
                       onClick={handlePayment} 
                       disabled={isProcessing || cart.length === 0 || (paymentMethod === 'bank' && !selectedBank)} 
-                      className={`px-3 py-3 rounded-xl font-semibold transition shadow-lg flex items-center justify-center gap-2 text-sm ${
+                      className={`px-3 py-2.5 rounded-lg font-bold transition shadow-md flex items-center justify-center gap-2 text-sm ${
                         isProcessing || cart.length === 0 || (paymentMethod === 'bank' && !selectedBank)
                           ? 'bg-gray-400 cursor-not-allowed' 
-                          : 'bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white'
+                          : 'bg-amber-400 hover:bg-amber-300 text-gray-900'
                       }`}
                     >
-                      {isProcessing ? <FiLoader className="animate-spin" size={18} /> : <FiDollarSign size={18} />} 
+                      {isProcessing ? <FiLoader className="animate-spin" size={16} /> : <FiDollarSign size={16} />} 
                       <span className="truncate">{isProcessing ? 'PROCESSING...' : '💳 PAY NOW'}</span>
                     </button>
                     
                     <button 
                       onClick={handleSaveDraft} 
                       disabled={isSavingDraft || cart.length === 0} 
-                      className={`px-3 py-3 rounded-xl font-semibold transition shadow-lg flex items-center justify-center gap-2 text-sm ${
+                      className={`px-3 py-2.5 rounded-lg font-bold transition shadow-md flex items-center justify-center gap-2 text-sm ${
                         isSavingDraft || cart.length === 0 
                           ? 'bg-gray-400 cursor-not-allowed' 
                           : 'bg-yellow-500 hover:bg-yellow-600 text-white'
                       }`}
                     >
-                      {isSavingDraft ? <FiLoader className="animate-spin" size={18} /> : <FiArchive size={18} />} 
+                      {isSavingDraft ? <FiLoader className="animate-spin" size={16} /> : <FiArchive size={16} />} 
                       {isSavingDraft ? 'SAVING...' : '💾 SAVE AS DRAFT'}
                     </button>
                   </div>
 
-                  {/* ✅ PRINT BUTTON - NEEECHE */}
+                  {/* PRINT BUTTON */}
                   <div className="grid grid-cols-1 gap-2 pt-1">
                     <button 
                       onClick={printBill} 
                       disabled={cart.length === 0}
-                      className={`px-3 py-2.5 rounded-xl font-semibold transition shadow-lg flex items-center justify-center gap-2 text-sm ${
+                      className={`px-3 py-2 rounded-lg font-bold transition shadow-md flex items-center justify-center gap-2 text-sm ${
                         cart.length === 0 ? 'bg-gray-400 cursor-not-allowed' : 'bg-gray-800 hover:bg-gray-700 text-white'
                       }`}
                     >
-                      <FiPrinter size={18} /> 🖨️ PRINT BILL
+                      <FiPrinter size={16} /> 🖨️ PRINT BILL
                     </button>
                   </div>
                 </div>
@@ -1787,129 +1464,37 @@ const BillingInvoice = ({ customerDetails, darkMode, onPaymentSuccess, restoredD
         </div>
       </div>
 
-      {/* Service Modal */}
-      {isServiceModalOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className={`${darkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'} rounded-2xl shadow-xl max-w-md w-full border ${darkMode ? 'border-gray-700' : 'border-gray-200'}`}>
-            <div className={`px-6 py-4 border-b ${darkMode ? 'border-gray-700' : 'border-gray-200'} flex justify-between items-center`}>
-              <h3 className="text-xl font-semibold">{editingService ? 'Edit Service' : 'Add New Service'}</h3>
-              <button onClick={() => { setIsServiceModalOpen(false); setEditingService(null); }} className="text-gray-500 hover:text-gray-700 text-2xl"><FiX /></button>
-            </div>
-            <div className="p-6 space-y-4">
-              <div><label className={`block text-sm font-medium mb-2 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>Service Name *</label><input type="text" value={serviceFormData.name} onChange={(e) => setServiceFormData({ ...serviceFormData, name: e.target.value })} className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-red-400 ${darkMode ? 'bg-gray-700 border-gray-600 text-white' : 'border-gray-300'}`} placeholder="Enter service name" /></div>
-              <div><label className={`block text-sm font-medium mb-2 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>Price * (Rs.)</label><input type="number" value={serviceFormData.price} onChange={(e) => setServiceFormData({ ...serviceFormData, price: e.target.value })} className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-red-400 ${darkMode ? 'bg-gray-700 border-gray-600 text-white' : 'border-gray-300'}`} placeholder="Enter price" min="0" step="0.01" /></div>
-              <div><label className={`block text-sm font-medium mb-2 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>Category *</label><input type="text" value={serviceFormData.category} onChange={(e) => setServiceFormData({ ...serviceFormData, category: e.target.value })} className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-red-400 ${darkMode ? 'bg-gray-700 border-gray-600 text-white' : 'border-gray-300'}`} placeholder="Enter category" /></div>
-              <div>
-                <label className={`block text-sm font-medium mb-2 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>Icon</label>
-                <div className="relative">
-                  <button type="button" onClick={() => setShowIconDropdown(!showIconDropdown)} className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-red-400 flex items-center justify-between ${darkMode ? 'bg-gray-700 border-gray-600 text-white' : 'border-gray-300'}`}>
-                    <div className="flex items-center gap-2">{getIconComponent(serviceFormData.icon)}<span className="text-sm">Select Icon</span></div>
-                    <FiChevronDown className={`transition-transform ${showIconDropdown ? 'rotate-180' : ''}`} />
-                  </button>
-                  {showIconDropdown && (
-                    <div className={`absolute z-10 mt-1 w-full max-h-60 overflow-y-auto rounded-lg border shadow-lg ${darkMode ? 'bg-gray-700 border-gray-600' : 'bg-white border-gray-200'}`}>
-                      <div className="grid grid-cols-4 gap-1 p-2">
-                        {iconOptions.map((icon, index) => (
-                          <button key={index} type="button" onClick={() => selectIcon(icon.value)} className={`p-2 rounded-lg text-center transition-colors flex items-center justify-center ${serviceFormData.icon === icon.value ? 'bg-red-500 text-white' : darkMode ? 'hover:bg-gray-600' : 'hover:bg-gray-100'}`} title={icon.name}>
-                            {icon.icon}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-              <div className="flex gap-3 pt-4">
-                <button type="button" onClick={() => { setIsServiceModalOpen(false); setEditingService(null); }} className={`flex-1 px-4 py-2 rounded-lg transition ${darkMode ? 'bg-gray-700 hover:bg-gray-600 text-white' : 'bg-gray-200 hover:bg-gray-300 text-gray-700'}`}>Cancel</button>
-                <button type="button" onClick={editingService ? handleUpdateService : handleAddService} className="flex-1 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition flex items-center justify-center gap-2 shadow-md"><FiCheckCircle className="text-sm" /> {editingService ? 'Update Service' : 'Add Service'}</button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Product Modal */}
+      {/* Product Modal - Amber Theme */}
       {isProductModalOpen && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className={`${darkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'} rounded-2xl shadow-xl max-w-md w-full border ${darkMode ? 'border-gray-700' : 'border-gray-200'}`}>
-            <div className={`px-6 py-4 border-b ${darkMode ? 'border-gray-700' : 'border-gray-200'} flex justify-between items-center`}>
-              <h3 className="text-xl font-semibold">{editingProduct ? 'Edit Product' : 'Add New Product'}</h3>
-              <button onClick={() => { setIsProductModalOpen(false); setEditingProduct(null); }} className="text-gray-500 hover:text-gray-700 text-2xl"><FiX /></button>
-            </div>
-            <div className="p-6 space-y-4">
-              <div><label className={`block text-sm font-medium mb-2 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>Product Name *</label><input type="text" value={productFormData.name} onChange={(e) => setProductFormData({ ...productFormData, name: e.target.value })} className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-red-400 ${darkMode ? 'bg-gray-700 border-gray-600 text-white' : 'border-gray-300'}`} placeholder="Enter product name" /></div>
-              <div><label className={`block text-sm font-medium mb-2 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>Purchase Price * (Rs.)</label><input type="number" value={productFormData.purchase_price} onChange={(e) => setProductFormData({ ...productFormData, purchase_price: e.target.value })} className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-red-400 ${darkMode ? 'bg-gray-700 border-gray-600 text-white' : 'border-gray-300'}`} placeholder="Enter purchase price" min="0" step="0.01" /></div>
-              <div><label className={`block text-sm font-medium mb-2 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>Selling Price * (Rs.)</label><input type="number" value={productFormData.selling_price} onChange={(e) => setProductFormData({ ...productFormData, selling_price: e.target.value })} className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-red-400 ${darkMode ? 'bg-gray-700 border-gray-600 text-white' : 'border-gray-300'}`} placeholder="Enter selling price" min="0" step="0.01" /></div>
-              <div><label className={`block text-sm font-medium mb-2 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>Quantity *</label><input type="number" value={productFormData.quantity} onChange={(e) => setProductFormData({ ...productFormData, quantity: e.target.value })} className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-red-400 ${darkMode ? 'bg-gray-700 border-gray-600 text-white' : 'border-gray-300'}`} placeholder="Enter quantity" min="0" /></div>
-              <div className="flex gap-3 pt-4">
-                <button type="button" onClick={() => { setIsProductModalOpen(false); setEditingProduct(null); }} className={`flex-1 px-4 py-2 rounded-lg transition ${darkMode ? 'bg-gray-700 hover:bg-gray-600 text-white' : 'bg-gray-200 hover:bg-gray-300 text-gray-700'}`}>Cancel</button>
-                <button type="button" onClick={editingProduct ? handleUpdateProduct : handleAddProduct} className="flex-1 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition flex items-center justify-center gap-2 shadow-md"><FiCheckCircle className="text-sm" /> {editingProduct ? 'Update Product' : 'Add Product'}</button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Oil Change Modal */}
-      {isOilChangeModalOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className={`${darkMode ? 'bg-gray-900' : 'bg-white'} rounded-2xl shadow-xl max-w-md w-full p-6 border ${darkMode ? 'border-gray-700' : 'border-gray-200'}`}>
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-xl font-semibold flex items-center gap-2">
-                <FiAlertCircle className="text-yellow-500" /> Oil Change
-              </h3>
-              <button
-                onClick={() => {
-                  setIsOilChangeModalOpen(false);
-                  setOilChangeMileage('');
-                  setOilChangeService(null);
-                }}
-                className="text-gray-500 hover:text-gray-700 text-2xl"
-              >
-                <FiX />
+          <div className={`${darkMode ? 'bg-gray-900 text-white' : 'bg-white text-gray-900'} rounded-xl shadow-xl max-w-md w-full border ${darkMode ? 'border-gray-800' : 'border-gray-200'}`}>
+            <div className={`px-5 py-3 border-b ${darkMode ? 'border-gray-800' : 'border-gray-200'} flex justify-between items-center`}>
+              <h3 className="text-base font-bold">{editingProduct ? 'Edit Product' : 'Add New Product'}</h3>
+              <button onClick={() => { setIsProductModalOpen(false); setEditingProduct(null); }} className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300">
+                <FiX className="text-xl" />
               </button>
             </div>
-            
-            <div className="space-y-4">
-              <p className={`text-sm ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>
-                Please enter the current mileage for <strong>{oilChangeService?.name}</strong>
-              </p>
-              
+            <div className="p-5 space-y-3">
               <div>
-                <label className={`block text-sm font-medium mb-2 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>
-                  Current Mileage (km) *
-                </label>
-                <input
-                  type="number"
-                  value={oilChangeMileage}
-                  onChange={(e) => setOilChangeMileage(e.target.value)}
-                  className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-red-400 ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'border-gray-300'}`}
-                  placeholder="Enter current mileage"
-                  min="0"
-                  autoFocus
-                />
-                <p className={`text-xs mt-1 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                  This will help track when next oil change is due
-                </p>
+                <label className={`block text-sm font-bold mb-1 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>Product Name *</label>
+                <input type="text" value={productFormData.name} onChange={(e) => setProductFormData({ ...productFormData, name: e.target.value })} className={`w-full px-3 py-2 rounded-lg border text-sm font-medium focus:ring-2 focus:ring-amber-400 outline-none ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'border-gray-300'}`} placeholder="Enter product name" />
               </div>
-              
-              <div className="flex gap-3 pt-4">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsOilChangeModalOpen(false);
-                    setOilChangeMileage('');
-                    setOilChangeService(null);
-                  }}
-                  className={`flex-1 px-4 py-2 rounded-lg transition ${darkMode ? 'bg-gray-800 hover:bg-gray-700 text-white' : 'bg-gray-200 hover:bg-gray-300 text-gray-700'}`}
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleOilChangeSubmit}
-                  className="flex-1 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition flex items-center justify-center gap-2 shadow-md"
-                >
-                  <FiCheckCircle /> Add to Cart
+              <div>
+                <label className={`block text-sm font-bold mb-1 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>Purchase Price * (Rs.)</label>
+                <input type="number" value={productFormData.purchase_price} onChange={(e) => setProductFormData({ ...productFormData, purchase_price: e.target.value })} className={`w-full px-3 py-2 rounded-lg border text-sm font-medium focus:ring-2 focus:ring-amber-400 outline-none ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'border-gray-300'}`} placeholder="Enter purchase price" min="0" step="0.01" />
+              </div>
+              <div>
+                <label className={`block text-sm font-bold mb-1 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>Selling Price * (Rs.)</label>
+                <input type="number" value={productFormData.selling_price} onChange={(e) => setProductFormData({ ...productFormData, selling_price: e.target.value })} className={`w-full px-3 py-2 rounded-lg border text-sm font-medium focus:ring-2 focus:ring-amber-400 outline-none ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'border-gray-300'}`} placeholder="Enter selling price" min="0" step="0.01" />
+              </div>
+              <div>
+                <label className={`block text-sm font-bold mb-1 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>Quantity *</label>
+                <input type="number" value={productFormData.quantity} onChange={(e) => setProductFormData({ ...productFormData, quantity: e.target.value })} className={`w-full px-3 py-2 rounded-lg border text-sm font-medium focus:ring-2 focus:ring-amber-400 outline-none ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'border-gray-300'}`} placeholder="Enter quantity" min="0" />
+              </div>
+              <div className="flex gap-3 pt-3">
+                <button type="button" onClick={() => { setIsProductModalOpen(false); setEditingProduct(null); }} className={`flex-1 px-4 py-2 rounded-lg transition text-sm font-bold ${darkMode ? 'bg-gray-800 hover:bg-gray-700 text-white' : 'bg-gray-200 hover:bg-gray-300 text-gray-700'}`}>Cancel</button>
+                <button type="button" onClick={editingProduct ? handleUpdateProduct : handleAddProduct} className="flex-1 px-4 py-2 bg-amber-400 text-gray-900 rounded-lg hover:bg-amber-300 transition flex items-center justify-center gap-2 shadow-md text-sm font-bold">
+                  <FiCheckCircle className="text-sm" /> {editingProduct ? 'Update' : 'Add'}
                 </button>
               </div>
             </div>

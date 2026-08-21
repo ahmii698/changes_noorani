@@ -435,7 +435,7 @@ const EmployeeSalary = ({ darkMode }) => {
     return (
       <div className={`flex items-center justify-center h-64 ${darkMode ? 'bg-gray-900' : 'bg-gray-100'}`}>
         <div className="text-center">
-          <FiLoader className="text-4xl text-red-500 animate-spin mx-auto mb-4" />
+          <FiLoader className="text-4xl text-amber-500 animate-spin mx-auto mb-4" />
           <p className={`${darkMode ? 'text-white' : 'text-gray-700'}`}>Loading employees...</p>
         </div>
       </div>
@@ -445,7 +445,7 @@ const EmployeeSalary = ({ darkMode }) => {
   return (
     <div className={`employee-salary-container ${darkMode ? 'dark' : ''}`}>
       <div className={`employee-salary-card ${darkMode ? 'dark' : ''}`}>
-        {/* Header */}
+        {/* Header - Amber Theme */}
         <div className="employee-salary-header">
           <div className="employee-salary-header-left">
             <FiList className="employee-salary-header-icon" />
@@ -456,17 +456,17 @@ const EmployeeSalary = ({ darkMode }) => {
                 Total Balance: Rs. {formatCurrency(statistics.totalBalance)} | 
                 Total Paid: Rs. {formatCurrency(statistics.totalPaid)}
                 {statistics.pending > 0 && (
-                  <span className="ml-2 px-2 py-0.5 bg-red-500/30 text-white rounded-full text-xs">
+                  <span className="ml-2 px-2 py-0.5 bg-red-500/30 text-white rounded-full text-xs font-bold">
                     {statistics.pending} Pending
                   </span>
                 )}
                 {statistics.partial > 0 && (
-                  <span className="ml-2 px-2 py-0.5 bg-yellow-500/30 text-white rounded-full text-xs">
+                  <span className="ml-2 px-2 py-0.5 bg-yellow-500/30 text-white rounded-full text-xs font-bold">
                     {statistics.partial} Partial
                   </span>
                 )}
                 {statistics.paid > 0 && (
-                  <span className="ml-2 px-2 py-0.5 bg-green-500/30 text-white rounded-full text-xs">
+                  <span className="ml-2 px-2 py-0.5 bg-green-500/30 text-white rounded-full text-xs font-bold">
                     {statistics.paid} Paid
                   </span>
                 )}
@@ -510,7 +510,7 @@ const EmployeeSalary = ({ darkMode }) => {
                 <th>Actions</th>
               </tr>
             </thead>
-            <tbody>
+         <tbody className={darkMode ? 'dark' : ''}>
               {currentEmployees.length === 0 ? (
                 <tr>
                   <td colSpan="8" className="employee-salary-empty">
@@ -528,8 +528,8 @@ const EmployeeSalary = ({ darkMode }) => {
                     <tr key={employee.id} className={darkMode ? 'dark' : ''}>
                       <td className="employee-salary-name">
                         <div className="flex items-center gap-2">
-                          <FiUser className="text-red-500" />
-                          {employee.name}
+                          <FiUser className="text-amber-500" />
+                          <span className="font-bold">{employee.name}</span>
                         </div>
                       </td>
                       <td className="employee-salary-text-right employee-salary-amount-total">
@@ -544,17 +544,15 @@ const EmployeeSalary = ({ darkMode }) => {
                         </span>
                       </td>
                       <td>
-                        {employee.salary_date ? (
-                          <span className="font-medium">
-                            {getSalaryDateDisplay(employee.salary_date)}
-                          </span>
-                        ) : '-'}
+                        <span className="font-bold">
+                          {getSalaryDateDisplay(employee.salary_date)}
+                        </span>
                         {isDue && employee.balance_amount > 0 && (
-                          <span className="ml-1 text-xs text-red-500 animate-pulse">🔴 Due</span>
+                          <span className="ml-1 text-xs text-red-500 animate-pulse font-bold">🔴 Due</span>
                         )}
                       </td>
                       <td>
-                        <span className="font-medium">
+                        <span className="font-bold">
                           {formatJoinDate(employee.join_date)}
                         </span>
                       </td>
@@ -610,10 +608,6 @@ const EmployeeSalary = ({ darkMode }) => {
                               Pay Now
                             </button>
                           )}
-                          
-                          {/* ❌ Reset button removed — no longer needed.
-                              Every month now tracks its own Paid/Partial/Pending
-                              status automatically based on join_date. */}
                         </div>
                       </td>
                     </tr>
@@ -692,7 +686,7 @@ const EmployeeSalary = ({ darkMode }) => {
               </button>
             </div>
             <div className="employee-salary-modal-body">
-              {/* Summary */}
+              {/* Summary - Amber Theme */}
               <div className="employee-salary-summary">
                 <div className="employee-salary-summary-item">
                   <p className="employee-salary-summary-label">Monthly Salary</p>
@@ -752,27 +746,27 @@ const EmployeeSalary = ({ darkMode }) => {
                             const { date, time } = formatPakistanTime(payment.payment_date);
                             return (
                               <tr key={payment.id}>
-                                <td>{idx + 1}</td>
+                                <td className="font-bold">{idx + 1}</td>
                                 <td>
                                   <div className="flex flex-col">
-                                    <span className="font-medium">{date}</span>
+                                    <span className="font-bold">{date}</span>
                                     <span className="text-xs text-gray-500">{time}</span>
                                   </div>
                                 </td>
                                 <td>
-                                  <span className="font-medium">
+                                  <span className="font-bold">
                                     {payment.for_month_name || payment.for_month || '-'}
                                   </span>
                                 </td>
                                 <td className="employee-salary-text-right employee-salary-amount-paid">
                                   Rs.{formatCurrency(payment.amount)}
                                 </td>
-                                <td>{payment.note || '-'}</td>
-                                <td>{payment.created_by || 'System'}</td>
+                                <td className="font-medium">{payment.note || '-'}</td>
+                                <td className="font-medium">{payment.created_by || 'System'}</td>
                                 <td>
                                   <button 
                                     onClick={() => handleDeletePayment(payment.id)}
-                                    className="text-red-500 hover:text-red-700"
+                                    className="text-red-500 hover:text-red-700 font-bold"
                                     title="Delete Payment"
                                   >
                                     <FiTrash2 size={16} />
@@ -784,10 +778,10 @@ const EmployeeSalary = ({ darkMode }) => {
                       </tbody>
                       <tfoot className={darkMode ? 'dark' : ''}>
                         <tr>
-                          <td colSpan="3" className="employee-salary-text-right employee-salary-total-label font-bold">
+                          <td colSpan="3" className="employee-salary-text-right employee-salary-total-label font-extrabold">
                             Total Paid:
                           </td>
-                          <td className="employee-salary-text-right employee-salary-total-amount font-bold">
+                          <td className="employee-salary-text-right employee-salary-total-amount font-extrabold">
                             Rs.{formatCurrency(selectedEmployee.paid_amount)}
                           </td>
                           <td></td>
@@ -800,7 +794,7 @@ const EmployeeSalary = ({ darkMode }) => {
                 )}
               </div>
 
-              {/* ✅ Monthly History — now shows EVERY month since join_date, paid or not */}
+              {/* ✅ Monthly History */}
               <div className="mt-4">
                 <h3 className="employee-salary-history-title">
                   <FiCalendar className="employee-salary-history-icon text-blue-500" /> Monthly History
@@ -835,11 +829,11 @@ const EmployeeSalary = ({ darkMode }) => {
                       <tbody>
                         {monthlyBreakdown.map((record, idx) => (
                           <tr key={record.month}>
-                            <td>{idx + 1}</td>
+                            <td className="font-bold">{idx + 1}</td>
                             <td>
-                              <span className="font-medium">{record.month_name}</span>
+                              <span className="font-bold">{record.month_name}</span>
                               {record.is_current_month && (
-                                <span className="ml-2 text-xs bg-green-500 text-white px-2 py-0.5 rounded-full">Current</span>
+                                <span className="ml-2 text-xs bg-green-500 text-white px-2 py-0.5 rounded-full font-bold">Current</span>
                               )}
                             </td>
                             <td className="employee-salary-text-right employee-salary-amount-total">
@@ -863,16 +857,16 @@ const EmployeeSalary = ({ darkMode }) => {
                       </tbody>
                       <tfoot className={darkMode ? 'dark' : ''}>
                         <tr>
-                          <td colSpan="2" className="employee-salary-text-right employee-salary-total-label font-bold">
+                          <td colSpan="2" className="employee-salary-text-right employee-salary-total-label font-extrabold">
                             Totals:
                           </td>
-                          <td className="employee-salary-text-right employee-salary-total-amount font-bold">
+                          <td className="employee-salary-text-right employee-salary-total-amount font-extrabold">
                             Rs.{formatCurrency(monthlyBreakdown.reduce((s, m) => s + m.monthly_salary, 0))}
                           </td>
-                          <td className="employee-salary-text-right employee-salary-total-amount font-bold">
+                          <td className="employee-salary-text-right employee-salary-total-amount font-extrabold">
                             Rs.{formatCurrency(monthlyBreakdown.reduce((s, m) => s + m.paid_amount, 0))}
                           </td>
-                          <td className="employee-salary-text-right employee-salary-total-amount font-bold">
+                          <td className="employee-salary-text-right employee-salary-total-amount font-extrabold">
                             Rs.{formatCurrency(monthlyBreakdown.reduce((s, m) => s + m.balance_amount, 0))}
                           </td>
                           <td></td>
@@ -892,7 +886,7 @@ const EmployeeSalary = ({ darkMode }) => {
         </div>
       )}
 
-      {/* Add Employee Modal */}
+      {/* Add Employee Modal - Amber Theme */}
       {isAddModalOpen && (
         <div className="employee-salary-modal-overlay">
           <div className={`employee-salary-modal ${darkMode ? 'dark' : ''}`}>
@@ -941,7 +935,7 @@ const EmployeeSalary = ({ darkMode }) => {
                   max="31"
                   required
                 />
-                <p className={`text-xs mt-1 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                <p className={`text-xs mt-1 font-medium ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
                   Salary will be due on this day every month (adjusted for short months)
                 </p>
               </div>
@@ -953,8 +947,8 @@ const EmployeeSalary = ({ darkMode }) => {
                   onChange={(e) => setFormData({ ...formData, join_date: e.target.value })}
                   className={`employee-salary-form-input ${darkMode ? 'dark' : ''}`}
                 />
-                <p className={`text-xs mt-1 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                  Every month from this date to now will count toward the balance (e.g. joining 3 months ago means 3 months owed).
+                <p className={`text-xs mt-1 font-medium ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                  Every month from this date to now will count toward the balance
                 </p>
               </div>
               <div className="employee-salary-form-actions">
@@ -968,7 +962,7 @@ const EmployeeSalary = ({ darkMode }) => {
         </div>
       )}
 
-      {/* Edit Employee Modal */}
+      {/* Edit Employee Modal - Amber Theme */}
       {isEditModalOpen && selectedEmployee && (
         <div className="employee-salary-modal-overlay">
           <div className={`employee-salary-modal ${darkMode ? 'dark' : ''}`}>
@@ -1002,7 +996,7 @@ const EmployeeSalary = ({ darkMode }) => {
                   step="0.01"
                   required
                 />
-                <p className={`text-xs mt-1 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                <p className={`text-xs mt-1 font-medium ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
                   Current paid: Rs. {formatCurrency(selectedEmployee.paid_amount)} | 
                   Balance: Rs. {formatCurrency(selectedEmployee.balance_amount)}
                 </p>
@@ -1039,7 +1033,7 @@ const EmployeeSalary = ({ darkMode }) => {
         </div>
       )}
 
-      {/* ✅ Pay Now Modal — now has a "which month" dropdown */}
+      {/* ✅ Pay Now Modal - Amber Theme */}
       {isPayModalOpen && selectedEmployee && (
         <div className="employee-salary-modal-overlay">
           <div className={`employee-salary-modal ${darkMode ? 'dark' : ''}`}>
@@ -1061,7 +1055,7 @@ const EmployeeSalary = ({ darkMode }) => {
                 <p className="employee-salary-payment-balance" style={{color: '#dc2626', fontWeight: 'bold'}}>Rs.{formatCurrency(selectedEmployee.balance_amount)}</p>
               </div>
 
-              {/* ✅ NEW: Month selector */}
+              {/* ✅ Month selector */}
               <div className="employee-salary-form-group">
                 <label className={`employee-salary-form-label ${darkMode ? 'dark' : ''}`}>Which Month Are You Paying? *</label>
                 {loadingUnpaidMonths ? (
@@ -1069,7 +1063,7 @@ const EmployeeSalary = ({ darkMode }) => {
                     <FiLoader className="animate-spin" /> Loading months...
                   </div>
                 ) : unpaidMonths.length === 0 ? (
-                  <p className="text-sm text-green-600">🎉 All months are fully paid!</p>
+                  <p className="text-sm text-green-600 font-bold">🎉 All months are fully paid!</p>
                 ) : (
                   <select
                     value={paymentData.for_month}
@@ -1101,7 +1095,7 @@ const EmployeeSalary = ({ darkMode }) => {
                   disabled={unpaidMonths.length === 0}
                 />
                 {selectedMonthInfo && (
-                  <p className={`text-xs mt-1 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                  <p className={`text-xs mt-1 font-medium ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
                     Maximum for {selectedMonthInfo.month_name}: Rs. {formatCurrency(selectedMonthInfo.balance_amount)}
                   </p>
                 )}

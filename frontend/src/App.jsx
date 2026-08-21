@@ -311,6 +311,19 @@ function App() {
           }
         />
 
+        {/* ✅ NEW: Leave Application Route */}
+        <Route
+          path="/leave"
+          element={
+            <ProtectedRoute>
+              <Dashboard
+                darkMode={darkMode}
+                toggleDarkMode={toggleDarkMode}
+              />
+            </ProtectedRoute>
+          }
+        />
+
         {/* Fallback */}
         <Route
           path="*"

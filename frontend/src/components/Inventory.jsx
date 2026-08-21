@@ -1,4 +1,5 @@
 // src/components/Inventory.jsx
+
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import toast from 'react-hot-toast';
 import * as XLSX from 'xlsx';
@@ -9,11 +10,12 @@ import {
   FiEdit2, FiPackage, FiDollarSign, FiTrendingUp,
   FiShoppingCart, FiBarChart2, FiCheckCircle, FiAlertCircle,
   FiLoader, FiUser, FiTrash2, FiEye, FiEyeOff, FiGrid, FiList,
-  FiCalendar, FiArrowUp, FiArrowDown
+  FiCalendar, FiArrowUp, FiArrowDown, FiMoreVertical,
+  FiChevronLeft, FiChevronRight
 } from 'react-icons/fi';
 import api from '../services/api';
 
-// ✅ Helper: Get date range for filter (with custom date support)
+// ✅ Helper: Get date range for filter
 const getDateRange = (filter, customDate = null) => {
   const now = new Date();
   const start = new Date();
@@ -72,7 +74,7 @@ const debounce = (func, delay) => {
   };
 };
 
-// ✅ Product Row Component - WITH LOW STOCK UI (NO EMAIL)
+// ✅ Product Row Component - Bold + Dark Mode
 const ProductRow = React.memo(({ product, darkMode, editingCell, onStartEdit, onSaveEdit, onKeyPress, onEditProduct, onDeleteProduct, onToggleHide, formatPrice, isAdmin }) => {
   const isEditingName = editingCell.productId === product.id && editingCell.field === 'name';
   const isEditingPurchase = editingCell.productId === product.id && editingCell.field === 'purchasePrice';
@@ -81,12 +83,11 @@ const ProductRow = React.memo(({ product, darkMode, editingCell, onStartEdit, on
   const isEditingThreshold = editingCell.productId === product.id && editingCell.field === 'lowStockThreshold';
   const isHidden = product.is_hidden === 1 || product.is_hidden === true;
   
-  // ✅ Use product's own threshold, default to 5
   const threshold = product.low_stock_threshold ?? 5;
 
   return (
     <tr className={`${darkMode ? 'hover:bg-gray-800' : 'hover:bg-gray-50'} ${isHidden ? 'opacity-50 bg-gray-100 dark:bg-gray-800' : ''}`}>
-      <td className="px-6 py-4">
+      <td className="px-4 py-3">
         {isEditingName ? (
           <input
             type="text"
@@ -94,23 +95,23 @@ const ProductRow = React.memo(({ product, darkMode, editingCell, onStartEdit, on
             onChange={(e) => onStartEdit({ ...editingCell, value: e.target.value })}
             onBlur={() => onSaveEdit(product.id, 'name')}
             onKeyDown={(e) => onKeyPress(e, product.id, 'name')}
-            className={`w-full px-2 py-1 border rounded focus:ring-2 focus:ring-red-400 ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'border-gray-300'}`}
+            className={`w-full px-2 py-1 border rounded focus:ring-2 focus:ring-amber-400 font-medium ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'border-gray-300'}`}
             autoFocus
           />
         ) : (
           <div 
             onDoubleClick={() => isAdmin && onStartEdit({ productId: product.id, field: 'name', value: product.name })} 
-            className={`${isAdmin ? 'cursor-pointer hover:bg-red-50 dark:hover:bg-red-900/20' : 'cursor-default'} font-medium ${darkMode ? 'text-white' : 'text-gray-900'} px-2 py-1 rounded transition`} 
-            title={isAdmin ? "Double-click to edit product name" : ""}
+            className={`${isAdmin ? 'cursor-pointer hover:bg-amber-50 dark:hover:bg-amber-900/20' : 'cursor-default'} font-bold ${darkMode ? 'text-white' : 'text-gray-900'} px-2 py-1 rounded transition`} 
+            title={isAdmin ? "Double-click to edit" : ""}
           >
             {product.name}
-            {isHidden && <span className="ml-2 text-xs bg-yellow-500 text-white px-2 py-0.5 rounded-full">Hidden</span>}
+            {isHidden && <span className="ml-2 text-xs font-bold bg-yellow-500 text-white px-2 py-0.5 rounded-full">Hidden</span>}
           </div>
         )}
       </td>
       
       {isAdmin && (
-        <td className="px-6 py-4">
+        <td className="px-4 py-3">
           {isEditingPurchase ? (
             <input
               type="number"
@@ -118,7 +119,7 @@ const ProductRow = React.memo(({ product, darkMode, editingCell, onStartEdit, on
               onChange={(e) => onStartEdit({ ...editingCell, value: e.target.value })}
               onBlur={() => onSaveEdit(product.id, 'purchasePrice')}
               onKeyDown={(e) => onKeyPress(e, product.id, 'purchasePrice')}
-              className={`w-32 px-2 py-1 border rounded focus:ring-2 focus:ring-red-400 ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'border-gray-300'}`}
+              className={`w-28 px-2 py-1 border rounded focus:ring-2 focus:ring-amber-400 font-medium ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'border-gray-300'}`}
               autoFocus
               step="0.01"
               min="0"
@@ -126,8 +127,8 @@ const ProductRow = React.memo(({ product, darkMode, editingCell, onStartEdit, on
           ) : (
             <div 
               onDoubleClick={() => isAdmin && onStartEdit({ productId: product.id, field: 'purchasePrice', value: product.purchase_price })} 
-              className={`${isAdmin ? 'cursor-pointer hover:bg-red-50 dark:hover:bg-red-900/20' : 'cursor-default'} ${darkMode ? 'text-gray-300' : 'text-gray-600'} px-2 py-1 rounded transition`} 
-              title={isAdmin ? "Double-click to edit purchase price" : ""}
+              className={`${isAdmin ? 'cursor-pointer hover:bg-amber-50 dark:hover:bg-amber-900/20' : 'cursor-default'} font-bold ${darkMode ? 'text-white' : 'text-gray-600'} px-2 py-1 rounded transition`} 
+              title={isAdmin ? "Double-click to edit" : ""}
             >
               {formatPrice(product.purchase_price)}
             </div>
@@ -136,7 +137,7 @@ const ProductRow = React.memo(({ product, darkMode, editingCell, onStartEdit, on
       )}
       
       {isAdmin && (
-        <td className="px-6 py-4">
+        <td className="px-4 py-3">
           {isEditingSelling ? (
             <input
               type="number"
@@ -144,7 +145,7 @@ const ProductRow = React.memo(({ product, darkMode, editingCell, onStartEdit, on
               onChange={(e) => onStartEdit({ ...editingCell, value: e.target.value })}
               onBlur={() => onSaveEdit(product.id, 'sellingPrice')}
               onKeyDown={(e) => onKeyPress(e, product.id, 'sellingPrice')}
-              className={`w-32 px-2 py-1 border rounded focus:ring-2 focus:ring-red-400 ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'border-gray-300'}`}
+              className={`w-28 px-2 py-1 border rounded focus:ring-2 focus:ring-amber-400 font-medium ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'border-gray-300'}`}
               autoFocus
               step="0.01"
               min="0"
@@ -152,8 +153,8 @@ const ProductRow = React.memo(({ product, darkMode, editingCell, onStartEdit, on
           ) : (
             <div 
               onDoubleClick={() => isAdmin && onStartEdit({ productId: product.id, field: 'sellingPrice', value: product.selling_price })} 
-              className={`${isAdmin ? 'cursor-pointer hover:bg-red-50 dark:hover:bg-red-900/20' : 'cursor-default'} ${darkMode ? 'text-gray-300' : 'text-gray-600'} px-2 py-1 rounded transition`} 
-              title={isAdmin ? "Double-click to edit selling price" : ""}
+              className={`${isAdmin ? 'cursor-pointer hover:bg-amber-50 dark:hover:bg-amber-900/20' : 'cursor-default'} font-bold ${darkMode ? 'text-white' : 'text-gray-600'} px-2 py-1 rounded transition`} 
+              title={isAdmin ? "Double-click to edit" : ""}
             >
               {formatPrice(product.selling_price)}
             </div>
@@ -161,8 +162,7 @@ const ProductRow = React.memo(({ product, darkMode, editingCell, onStartEdit, on
         </td>
       )}
 
-      {/* ✅ STOCK - UI Alert only (NO EMAIL) */}
-      <td className="px-6 py-4">
+      <td className="px-4 py-3">
         {isEditingQuantity ? (
           <input
             type="number"
@@ -170,19 +170,19 @@ const ProductRow = React.memo(({ product, darkMode, editingCell, onStartEdit, on
             onChange={(e) => onStartEdit({ ...editingCell, value: e.target.value })}
             onBlur={() => onSaveEdit(product.id, 'quantity')}
             onKeyDown={(e) => onKeyPress(e, product.id, 'quantity')}
-            className={`w-24 px-2 py-1 border rounded focus:ring-2 focus:ring-red-400 ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'border-gray-300'}`}
+            className={`w-20 px-2 py-1 border rounded focus:ring-2 focus:ring-amber-400 font-medium ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'border-gray-300'}`}
             autoFocus
             min="0"
           />
         ) : (
           <div 
             onDoubleClick={() => onStartEdit({ productId: product.id, field: 'quantity', value: product.quantity })} 
-            className={`cursor-pointer font-semibold flex items-center gap-1 ${
-              product.quantity < threshold && product.quantity > 0 ? 'text-yellow-500' : 
+            className={`cursor-pointer font-bold flex items-center gap-1 ${
+              product.quantity < threshold && product.quantity > 0 ? 'text-amber-500' : 
               product.quantity === 0 ? 'text-red-500' : 
               darkMode ? 'text-white' : 'text-gray-900'
-            } hover:bg-red-50 dark:hover:bg-red-900/20 px-2 py-1 rounded transition`} 
-            title={`Double-click to edit stock (Low stock at: ${threshold})`}
+            } hover:bg-amber-50 dark:hover:bg-amber-900/20 px-2 py-1 rounded transition`} 
+            title={`Double-click to edit (Low stock at: ${threshold})`}
           >
             {product.quantity}
             {product.quantity < threshold && product.quantity > 0 && <FiAlertCircle className="text-xs" title={`Low stock! Below ${threshold}`} />}
@@ -191,9 +191,8 @@ const ProductRow = React.memo(({ product, darkMode, editingCell, onStartEdit, on
         )}
       </td>
 
-      {/* ✅ Low Stock At - Editable column (Admin only) */}
       {isAdmin && (
-        <td className="px-6 py-4">
+        <td className="px-4 py-3">
           {isEditingThreshold ? (
             <input
               type="number"
@@ -201,15 +200,15 @@ const ProductRow = React.memo(({ product, darkMode, editingCell, onStartEdit, on
               onChange={(e) => onStartEdit({ ...editingCell, value: e.target.value })}
               onBlur={() => onSaveEdit(product.id, 'lowStockThreshold')}
               onKeyDown={(e) => onKeyPress(e, product.id, 'lowStockThreshold')}
-              className={`w-20 px-2 py-1 border rounded focus:ring-2 focus:ring-red-400 ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'border-gray-300'}`}
+              className={`w-16 px-2 py-1 border rounded focus:ring-2 focus:ring-amber-400 font-medium ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'border-gray-300'}`}
               autoFocus
               min="0"
             />
           ) : (
             <div
               onDoubleClick={() => onStartEdit({ productId: product.id, field: 'lowStockThreshold', value: product.low_stock_threshold ?? 5 })}
-              className={`cursor-pointer ${darkMode ? 'text-gray-300' : 'text-gray-600'} hover:bg-red-50 dark:hover:bg-red-900/20 px-2 py-1 rounded transition w-fit`}
-              title="Double-click to edit low stock alert level"
+              className={`cursor-pointer font-bold ${darkMode ? 'text-white' : 'text-gray-600'} hover:bg-amber-50 dark:hover:bg-amber-900/20 px-2 py-1 rounded transition w-fit`}
+              title="Double-click to edit alert level"
             >
               {product.low_stock_threshold ?? 5}
             </div>
@@ -217,48 +216,42 @@ const ProductRow = React.memo(({ product, darkMode, editingCell, onStartEdit, on
         </td>
       )}
 
-      {/* Invoice No - Placeholder */}
-      <td className="px-6 py-4 text-sm text-gray-400">
-        -
-      </td>
-
-      {/* Vendor - Placeholder */}
-      <td className="px-6 py-4 text-sm text-gray-400">
-        -
-      </td>
+      <td className="px-4 py-3 text-sm font-medium text-gray-400">-</td>
+      <td className="px-4 py-3 text-sm font-medium text-gray-400">-</td>
       
-      <td className="px-6 py-4">
+      <td className="px-4 py-3">
         <div className="flex items-center gap-1 flex-wrap">
           {isAdmin && (
             <>
               <button 
                 onClick={() => onEditProduct(product)} 
-                className="px-3 py-1 bg-blue-500 text-white rounded-lg text-sm hover:bg-blue-600 transition flex items-center gap-1 shadow-md"
+                className="px-2.5 py-1 bg-amber-400 text-gray-900 rounded-lg text-xs hover:bg-amber-300 transition flex items-center gap-1 shadow-md font-bold"
               >
                 <FiEdit2 className="text-xs" /> Edit
               </button>
+              {/* ✅ FIXED: Hide button - BLACK TEXT like Edit button */}
               <button 
                 onClick={() => onToggleHide(product)} 
-                className={`px-3 py-1 rounded-lg text-sm transition flex items-center gap-1 shadow-md ${
+                className={`px-2.5 py-1 rounded-lg text-xs transition flex items-center gap-1 shadow-md font-bold text-gray-900 ${
                   product.is_hidden === 1 || product.is_hidden === true
-                    ? 'bg-green-500 hover:bg-green-600 text-white' 
-                    : 'bg-yellow-500 hover:bg-yellow-600 text-white'
+                    ? 'bg-emerald-400 hover:bg-emerald-300' 
+                    : 'bg-yellow-400 hover:bg-yellow-300'
                 }`}
-                title={product.is_hidden === 1 || product.is_hidden === true ? "Unhide Product" : "Hide Product"}
+                title={product.is_hidden === 1 || product.is_hidden === true ? "Unhide" : "Hide"}
               >
                 {product.is_hidden === 1 || product.is_hidden === true ? <FiEye className="text-xs" /> : <FiEyeOff className="text-xs" />}
                 {product.is_hidden === 1 || product.is_hidden === true ? 'Unhide' : 'Hide'}
               </button>
               <button 
                 onClick={() => onDeleteProduct(product.id, product.name)} 
-                className="px-3 py-1 bg-red-500 text-white rounded-lg text-sm hover:bg-red-600 transition flex items-center gap-1 shadow-md"
+                className="px-2.5 py-1 bg-red-500 text-white rounded-lg text-xs hover:bg-red-600 transition flex items-center gap-1 shadow-md font-bold"
               >
                 <FiTrash2 className="text-xs" /> Delete
               </button>
             </>
           )}
           {!isAdmin && (
-            <span className="text-xs text-gray-400">View Only</span>
+            <span className="text-xs font-bold text-gray-400">View Only</span>
           )}
         </div>
       </td>
@@ -274,6 +267,10 @@ const Inventory = ({ darkMode }) => {
   const [products, setProducts] = useState([]);
   const [userRole, setUserRole] = useState(null);
   const [isAdmin, setIsAdmin] = useState(false);
+  
+  // ✅ Pagination states
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage] = useState(10);
   
   const [timeFilter, setTimeFilter] = useState('all');
   const [customDate, setCustomDate] = useState('');
@@ -344,6 +341,17 @@ const Inventory = ({ darkMode }) => {
     
     return filtered;
   }, [products, searchTerm, viewMode, timeFilter, customDate, sortOption]);
+
+  // ✅ Pagination - get current page items
+  const totalPages = Math.ceil(filteredProducts.length / itemsPerPage) || 1;
+  const indexOfLastItem = currentPage * itemsPerPage;
+  const indexOfFirstItem = indexOfLastItem - itemsPerPage;
+  const currentProducts = filteredProducts.slice(indexOfFirstItem, indexOfLastItem);
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, viewMode, timeFilter, customDate, sortOption]);
 
   const summaryTotals = useMemo(() => {
     let data = filteredProducts;
@@ -485,6 +493,11 @@ const Inventory = ({ darkMode }) => {
     if (date) {
       setTimeFilter('custom');
     }
+  };
+
+  const handlePageChange = (page) => {
+    setCurrentPage(page);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleAddProduct = useCallback(async (productData) => {
@@ -813,10 +826,10 @@ const Inventory = ({ darkMode }) => {
       await fetchProducts();
       
       const successMessage = {
-        name: 'Product name updated successfully!',
-        quantity: 'Stock updated successfully!',
-        purchasePrice: 'Purchase price updated successfully!',
-        sellingPrice: 'Selling price updated successfully!',
+        name: 'Product name updated!',
+        quantity: 'Stock updated!',
+        purchasePrice: 'Purchase price updated!',
+        sellingPrice: 'Selling price updated!',
         lowStockThreshold: 'Low stock alert level updated!'
       }[field];
       
@@ -859,9 +872,9 @@ const Inventory = ({ darkMode }) => {
 
   if (loading) {
     return (
-      <div className={`min-h-screen flex items-center justify-center ${darkMode ? 'bg-gray-900' : 'bg-gray-100'}`}>
+      <div className={`min-h-screen flex items-center justify-center ${darkMode ? 'bg-gray-950' : 'bg-gray-100'}`}>
         <div className="text-center">
-          <FiLoader className="text-5xl text-red-500 animate-spin mx-auto mb-4" />
+          <FiLoader className="text-5xl text-amber-400 animate-spin mx-auto mb-4" />
           <p className={`${darkMode ? 'text-white' : 'text-gray-700'}`}>Loading inventory...</p>
         </div>
       </div>
@@ -869,375 +882,248 @@ const Inventory = ({ darkMode }) => {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* FILTER BUTTONS */}
-      <div className={`flex flex-wrap items-center gap-3 p-4 rounded-xl ${darkMode ? 'bg-gray-800' : 'bg-white'} shadow-lg border ${darkMode ? 'border-gray-700' : 'border-gray-200'}`}>
-        <div className="flex items-center gap-2 mr-4">
-          <FiCalendar className={`text-lg ${darkMode ? 'text-gray-400' : 'text-gray-600'}`} />
-          <span className={`text-sm font-medium ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>Filter:</span>
-        </div>
-        <button
-          onClick={() => { setTimeFilter('all'); setShowCustomDate(false); }}
-          className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
-            timeFilter === 'all' 
-              ? 'bg-red-500 text-white shadow-md' 
-              : darkMode 
-                ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' 
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-          }`}
-        >
-          All Time
-        </button>
-        <button
-          onClick={() => { setTimeFilter('today'); setShowCustomDate(false); }}
-          className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
-            timeFilter === 'today' 
-              ? 'bg-red-500 text-white shadow-md' 
-              : darkMode 
-                ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' 
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-          }`}
-        >
-          Today
-        </button>
-        <button
-          onClick={() => { setTimeFilter('week'); setShowCustomDate(false); }}
-          className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
-            timeFilter === 'week' 
-              ? 'bg-red-500 text-white shadow-md' 
-              : darkMode 
-                ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' 
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-          }`}
-        >
-          This Week
-        </button>
-        <button
-          onClick={() => { setTimeFilter('month'); setShowCustomDate(false); }}
-          className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
-            timeFilter === 'month' 
-              ? 'bg-red-500 text-white shadow-md' 
-              : darkMode 
-                ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' 
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-          }`}
-        >
-          This Month
-        </button>
-        <button
-          onClick={() => { setTimeFilter('year'); setShowCustomDate(false); }}
-          className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
-            timeFilter === 'year' 
-              ? 'bg-red-500 text-white shadow-md' 
-              : darkMode 
-                ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' 
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-          }`}
-        >
-          This Year
-        </button>
-        
+      <div className={`flex flex-wrap items-center gap-1.5 p-3 rounded-xl border ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200 shadow-sm'}`}>
+        <span className={`text-xs font-bold mr-1 ${darkMode ? 'text-gray-400' : 'text-gray-700'}`}>Filter:</span>
+        {[
+          { key: 'all', label: 'All Time' },
+          { key: 'today', label: 'Today' },
+          { key: 'week', label: 'This Week' },
+          { key: 'month', label: 'This Month' },
+          { key: 'year', label: 'This Year' },
+        ].map(f => (
+          <button
+            key={f.key}
+            onClick={() => { setTimeFilter(f.key); setShowCustomDate(false); }}
+            className={`px-2.5 py-1 rounded-lg text-xs font-bold transition ${
+              timeFilter === f.key 
+                ? 'bg-amber-400 text-gray-900 shadow-md' 
+                : darkMode 
+                  ? 'bg-gray-800 text-gray-300 hover:bg-gray-700' 
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+          >
+            {f.label}
+          </button>
+        ))}
         <button
           onClick={() => setShowCustomDate(!showCustomDate)}
-          className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
+          className={`px-2.5 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1 ${
             timeFilter === 'custom' 
-              ? 'bg-red-500 text-white shadow-md' 
+              ? 'bg-amber-400 text-gray-900 shadow-md' 
               : darkMode 
-                ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' 
+                ? 'bg-gray-800 text-gray-300 hover:bg-gray-700' 
                 : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
           }`}
         >
-          📅 Custom Date
+          <FiCalendar className="text-sm" /> Custom
         </button>
-        
         {showCustomDate && (
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1">
             <input
               type="date"
               value={customDate}
               onChange={handleCustomDateChange}
-              className={`px-3 py-2 rounded-lg text-sm border ${darkMode ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-800'}`}
+              className={`px-2 py-1 rounded-lg text-xs font-medium border ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300 text-gray-800'}`}
             />
             {customDate && (
               <button
                 onClick={() => { setCustomDate(''); setTimeFilter('all'); setShowCustomDate(false); }}
-                className="text-red-500 text-sm hover:text-red-600"
+                className="text-red-400 text-xs font-bold hover:text-red-300"
               >
                 ✕
               </button>
             )}
           </div>
         )}
-        
-        <span className={`ml-auto text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+        <span className={`ml-auto text-xs font-medium ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>
           Showing: <strong className={darkMode ? 'text-white' : 'text-gray-800'}>{getFilterLabel()}</strong>
         </span>
       </div>
 
       {/* SORTING BUTTONS */}
-      <div className={`flex flex-wrap items-center gap-3 p-4 rounded-xl ${darkMode ? 'bg-gray-800' : 'bg-white'} shadow-lg border ${darkMode ? 'border-gray-700' : 'border-gray-200'}`}>
-        <div className="flex items-center gap-2 mr-4">
-          <FiArrowUp className={`text-lg ${darkMode ? 'text-gray-400' : 'text-gray-600'}`} />
-          <span className={`text-sm font-medium ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>Sort by:</span>
-        </div>
-        <button
-          onClick={() => setSortOption('default')}
-          className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
-            sortOption === 'default' 
-              ? 'bg-red-500 text-white shadow-md' 
-              : darkMode 
-                ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' 
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-          }`}
-        >
-          Default
-        </button>
-        <button
-          onClick={() => setSortOption('name-asc')}
-          className={`px-4 py-2 rounded-lg text-sm font-medium transition flex items-center gap-1 ${
-            sortOption === 'name-asc' 
-              ? 'bg-red-500 text-white shadow-md' 
-              : darkMode 
-                ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' 
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-          }`}
-        >
-          <FiArrowUp className="text-xs" /> A → Z
-        </button>
-        <button
-          onClick={() => setSortOption('name-desc')}
-          className={`px-4 py-2 rounded-lg text-sm font-medium transition flex items-center gap-1 ${
-            sortOption === 'name-desc' 
-              ? 'bg-red-500 text-white shadow-md' 
-              : darkMode 
-                ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' 
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-          }`}
-        >
-          <FiArrowDown className="text-xs" /> Z → A
-        </button>
-        <button
-          onClick={() => setSortOption('price-asc')}
-          className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
-            sortOption === 'price-asc' 
-              ? 'bg-red-500 text-white shadow-md' 
-              : darkMode 
-                ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' 
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-          }`}
-        >
-          Price: Low → High
-        </button>
-        <button
-          onClick={() => setSortOption('price-desc')}
-          className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
-            sortOption === 'price-desc' 
-              ? 'bg-red-500 text-white shadow-md' 
-              : darkMode 
-                ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' 
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-          }`}
-        >
-          Price: High → Low
-        </button>
-        <span className={`ml-auto text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+      <div className={`flex flex-wrap items-center gap-1.5 p-3 rounded-xl border ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200 shadow-sm'}`}>
+        <span className={`text-xs font-bold mr-1 ${darkMode ? 'text-gray-400' : 'text-gray-700'}`}>Sort:</span>
+        {[
+          { key: 'default', label: 'Default' },
+          { key: 'name-asc', label: 'A → Z' },
+          { key: 'name-desc', label: 'Z → A' },
+          { key: 'price-asc', label: 'Price: Low → High' },
+          { key: 'price-desc', label: 'Price: High → Low' },
+        ].map(f => (
+          <button
+            key={f.key}
+            onClick={() => setSortOption(f.key)}
+            className={`px-2.5 py-1 rounded-lg text-xs font-bold transition flex items-center gap-0.5 ${
+              sortOption === f.key 
+                ? 'bg-amber-400 text-gray-900 shadow-md' 
+                : darkMode 
+                  ? 'bg-gray-800 text-gray-300 hover:bg-gray-700' 
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+          >
+            {f.key === 'name-asc' && <FiArrowUp className="text-xs" />}
+            {f.key === 'name-desc' && <FiArrowDown className="text-xs" />}
+            {f.label}
+          </button>
+        ))}
+        <span className={`ml-auto text-xs font-medium ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>
           Sorting: <strong className={darkMode ? 'text-white' : 'text-gray-800'}>{getSortLabel()}</strong>
         </span>
       </div>
 
-      {/* STATISTICS CARDS */}
+      {/* STATISTICS CARDS - Bold + Dark Mode */}
       {isAdmin && (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="bg-gradient-to-r from-blue-500 to-blue-600 rounded-2xl p-6 text-white shadow-lg">
-            <div className="flex justify-between items-start">
-              <div>
-                <p className="text-sm opacity-90">{getStatsLabelText()} Purchase Total</p>
-                <p className="text-3xl font-bold mt-2">Rs. {filteredStats.totalPurchase.toLocaleString()}</p>
-                <p className="text-xs opacity-75 mt-2">{getStatsLabelText().toLowerCase()} purchases</p>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className={`rounded-xl p-4 border ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200 shadow-sm'}`}>
+            <div className="flex items-center gap-2 mb-1">
+              <div className="p-1.5 rounded-full bg-blue-500/15">
+                <FiShoppingCart className="text-sm text-blue-400" />
               </div>
-              <FiShoppingCart className="text-3xl opacity-50" />
+              <span className={`text-xs font-bold ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>{getStatsLabelText()} Purchase</span>
             </div>
+            <p className={`text-lg font-bold ${darkMode ? 'text-white' : 'text-gray-900'}`}>Rs. {filteredStats.totalPurchase.toLocaleString()}</p>
+            <p className={`text-xs font-bold ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>{getStatsLabelText().toLowerCase()} purchases</p>
           </div>
           
-          <div className="bg-gradient-to-r from-red-500 to-red-600 rounded-2xl p-6 text-white shadow-lg">
-            <div className="flex justify-between items-start">
-              <div>
-                <p className="text-sm opacity-90">{getStatsLabelText()} Selling Value</p>
-                <p className="text-3xl font-bold mt-2">Rs. {filteredStats.totalSelling.toLocaleString()}</p>
-                <p className="text-xs opacity-75 mt-2">{getStatsLabelText().toLowerCase()} sales</p>
+          <div className={`rounded-xl p-4 border ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200 shadow-sm'}`}>
+            <div className="flex items-center gap-2 mb-1">
+              <div className="p-1.5 rounded-full bg-amber-500/15">
+                <FiDollarSign className="text-sm text-amber-400" />
               </div>
-              <FiDollarSign className="text-3xl opacity-50" />
+              <span className={`text-xs font-bold ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>{getStatsLabelText()} Selling</span>
             </div>
+            <p className={`text-lg font-bold ${darkMode ? 'text-white' : 'text-gray-900'}`}>Rs. {filteredStats.totalSelling.toLocaleString()}</p>
+            <p className={`text-xs font-bold ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>{getStatsLabelText().toLowerCase()} sales</p>
           </div>
           
-          <div className="bg-gradient-to-r from-green-500 to-green-600 rounded-2xl p-6 text-white shadow-lg">
-            <div className="flex justify-between items-start">
-              <div>
-                <p className="text-sm opacity-90">{getStatsLabelText()} Profit</p>
-                <p className="text-3xl font-bold mt-2">Rs. {filteredStats.totalProfit.toLocaleString()}</p>
-                <p className="text-xs opacity-75 mt-2">{getStatsLabelText().toLowerCase()} profit</p>
+          <div className={`rounded-xl p-4 border ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200 shadow-sm'}`}>
+            <div className="flex items-center gap-2 mb-1">
+              <div className="p-1.5 rounded-full bg-emerald-500/15">
+                <FiTrendingUp className="text-sm text-emerald-400" />
               </div>
-              <FiTrendingUp className="text-3xl opacity-50" />
+              <span className={`text-xs font-bold ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>{getStatsLabelText()} Profit</span>
             </div>
+            <p className={`text-lg font-bold ${darkMode ? 'text-white' : 'text-gray-900'}`}>Rs. {filteredStats.totalProfit.toLocaleString()}</p>
+            <p className={`text-xs font-bold ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>{getStatsLabelText().toLowerCase()} profit</p>
           </div>
         </div>
       )}
 
       {/* MAIN TABLE */}
-      <div className={`${darkMode ? 'bg-gray-900' : 'bg-white'} rounded-2xl shadow-lg overflow-hidden border ${darkMode ? 'border-gray-700' : 'border-gray-200'}`}>
-        <div className={`px-6 py-4 border-b ${darkMode ? 'border-gray-700 bg-gray-900' : 'border-gray-200 bg-white'}`}>
-          <div className="flex flex-wrap justify-between items-center gap-4">
-            <h3 className={`text-lg font-semibold flex items-center gap-2 ${darkMode ? 'text-white' : 'text-gray-800'}`}>
-              <FiPackage className="text-xl text-red-500" />
-              Products Inventory
-              <span className={`text-sm font-normal ml-2 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                ({getProductCount()} {getViewModeText()})
-              </span>
-            </h3>
-            <div className="flex gap-3 flex-wrap">
-              <div className="relative">
-                <input
-                  type="text"
-                  placeholder="Search products..."
-                  onChange={handleSearchChange}
-                  className={`px-4 py-2 pl-10 rounded-lg border text-sm focus:outline-none focus:ring-2 focus:ring-red-400 ${
-                    darkMode ? 'bg-gray-800 border-gray-700 text-white placeholder-gray-500' : 'bg-white border-gray-300 text-gray-900'
-                  }`}
-                  style={{ width: '250px' }}
-                />
-                <FiSearch className="absolute left-3 top-3 text-gray-400" />
-                {searchTerm && (
-                  <button onClick={() => setSearchTerm('')} className="absolute right-3 top-2.5 text-gray-400 hover:text-gray-600">
-                    <FiX />
-                  </button>
-                )}
-              </div>
-              
-              <button 
-                onClick={() => setViewMode('active')} 
-                className={`px-3 py-2 rounded-lg text-sm transition flex items-center gap-2 shadow-md ${
-                  viewMode === 'active' 
-                    ? 'bg-blue-600 hover:bg-blue-700 text-white' 
-                    : 'bg-gray-600 hover:bg-gray-700 text-white'
-                }`}
-              >
-                <FiEye className="text-sm" />
-                Active
-              </button>
-              
-              <button 
-                onClick={() => setViewMode('hidden')} 
-                className={`px-3 py-2 rounded-lg text-sm transition flex items-center gap-2 shadow-md ${
-                  viewMode === 'hidden' 
-                    ? 'bg-yellow-600 hover:bg-yellow-700 text-white' 
-                    : 'bg-gray-600 hover:bg-gray-700 text-white'
-                }`}
-              >
-                <FiEyeOff className="text-sm" />
-                Hidden
-              </button>
-              
-              <button 
-                onClick={() => setViewMode('all')} 
-                className={`px-3 py-2 rounded-lg text-sm transition flex items-center gap-2 shadow-md ${
-                  viewMode === 'all' 
-                    ? 'bg-green-600 hover:bg-green-700 text-white' 
-                    : 'bg-gray-600 hover:bg-gray-700 text-white'
-                }`}
-              >
-                All
-              </button>
-              
-              {isAdmin && (
-                <button onClick={() => setIsModalOpen(true)} className="px-3 py-2 bg-gray-800 text-white rounded-lg text-sm hover:bg-gray-700 transition flex items-center gap-2 shadow-md">
-                  <FiPlus className="text-sm" /> Add Product
+      <div className={`rounded-xl overflow-hidden border ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200 shadow-sm'}`}>
+        <div className={`px-4 py-3 border-b ${darkMode ? 'border-gray-800' : 'border-gray-200'} flex flex-wrap justify-between items-center gap-3`}>
+          <h3 className={`text-sm font-bold flex items-center gap-2 ${darkMode ? 'text-white' : 'text-gray-800'}`}>
+            <FiPackage className="text-amber-400" />
+            Products Inventory
+            <span className={`text-xs font-bold ml-1 ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>
+              ({getProductCount()} {getViewModeText()})
+            </span>
+          </h3>
+          <div className="flex gap-2 flex-wrap">
+            <div className="relative">
+              <input
+                type="text"
+                placeholder="Search products..."
+                onChange={handleSearchChange}
+                className={`px-3 py-1.5 pl-8 rounded-lg text-xs font-medium border focus:outline-none focus:ring-2 focus:ring-amber-400 ${darkMode ? 'bg-gray-800 border-gray-700 text-white placeholder-gray-500' : 'bg-white border-gray-300 text-gray-900'}`}
+                style={{ width: '200px' }}
+              />
+              <FiSearch className="absolute left-2.5 top-2 text-gray-400 text-sm" />
+              {searchTerm && (
+                <button onClick={() => setSearchTerm('')} className="absolute right-2 top-1.5 text-gray-400 hover:text-gray-600">
+                  <FiX className="text-sm" />
                 </button>
               )}
-              
-              <button onClick={() => exportToExcel(filteredProducts, 'Inventory_Report')} className="px-3 py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700 transition flex items-center gap-2 shadow-md">
-                <FiFileText className="text-sm" /> Excel
-              </button>
-              <button onClick={() => exportToPDF(filteredProducts, 'Inventory_Report')} className="px-3 py-2 bg-red-500 text-white rounded-lg text-sm hover:bg-red-600 transition flex items-center gap-2 shadow-md">
-                <FiDownload className="text-sm" /> PDF
-              </button>
             </div>
+            
+            <button 
+              onClick={() => setViewMode('active')} 
+              className={`px-2.5 py-1.5 rounded-lg text-xs transition flex items-center gap-1 shadow-md font-bold text-white ${
+                viewMode === 'active' 
+                  ? 'bg-blue-600 hover:bg-blue-700' 
+                  : 'bg-gray-600 hover:bg-gray-700'
+              }`}
+            >
+              <FiEye className="text-xs" /> Active
+            </button>
+            
+            <button 
+              onClick={() => setViewMode('hidden')} 
+              className={`px-2.5 py-1.5 rounded-lg text-xs transition flex items-center gap-1 shadow-md font-bold text-white ${
+                viewMode === 'hidden' 
+                  ? 'bg-yellow-600 hover:bg-yellow-700' 
+                  : 'bg-gray-600 hover:bg-gray-700'
+              }`}
+            >
+              <FiEyeOff className="text-xs" /> Hidden
+            </button>
+            
+            <button 
+              onClick={() => setViewMode('all')} 
+              className={`px-2.5 py-1.5 rounded-lg text-xs transition flex items-center gap-1 shadow-md font-bold text-white ${
+                viewMode === 'all' 
+                  ? 'bg-emerald-600 hover:bg-emerald-700' 
+                  : 'bg-gray-600 hover:bg-gray-700'
+              }`}
+            >
+              All
+            </button>
+            
+            {isAdmin && (
+              <button onClick={() => setIsModalOpen(true)} className="px-2.5 py-1.5 bg-amber-400 text-gray-900 rounded-lg text-xs hover:bg-amber-300 transition flex items-center gap-1 shadow-md font-bold">
+                <FiPlus className="text-xs" /> Add
+              </button>
+            )}
+            
+            <button onClick={() => exportToExcel(filteredProducts, 'Inventory_Report')} className="px-2.5 py-1.5 bg-emerald-500 text-white rounded-lg text-xs hover:bg-emerald-600 transition flex items-center gap-1 shadow-md font-bold">
+              <FiFileText className="text-xs" /> Excel
+            </button>
+            <button onClick={() => exportToPDF(filteredProducts, 'Inventory_Report')} className="px-2.5 py-1.5 bg-red-500 text-white rounded-lg text-xs hover:bg-red-600 transition flex items-center gap-1 shadow-md font-bold">
+              <FiDownload className="text-xs" /> PDF
+            </button>
           </div>
-          
-          {searchTerm && (
-            <div className={`mt-3 text-sm ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-              Found {filteredProducts.length} product(s) for "{searchTerm}"
-            </div>
-          )}
         </div>
         
         <div className="overflow-x-auto">
-          <table className="w-full">
+          <table className="w-full text-sm">
             <thead className={darkMode ? 'bg-gray-800' : 'bg-gray-50'}>
               <tr>
-                <th className={`px-6 py-3 text-left text-xs font-medium ${darkMode ? 'text-gray-400' : 'text-gray-500'} uppercase tracking-wider`}>
-                  Product
-                  {sortOption === 'name-asc' && <FiArrowUp className="inline ml-1 text-red-500" />}
-                  {sortOption === 'name-desc' && <FiArrowDown className="inline ml-1 text-red-500" />}
-                </th>
+                <th className={`px-4 py-2 text-left text-xs font-bold uppercase ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Product</th>
                 {isAdmin && (
-                  <th className={`px-6 py-3 text-left text-xs font-medium ${darkMode ? 'text-gray-400' : 'text-gray-500'} uppercase tracking-wider`}>Purchase Price</th>
+                  <th className={`px-4 py-2 text-left text-xs font-bold uppercase ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Purchase</th>
                 )}
                 {isAdmin && (
-                  <th className={`px-6 py-3 text-left text-xs font-medium ${darkMode ? 'text-gray-400' : 'text-gray-500'} uppercase tracking-wider`}>
-                    Selling Price
-                    {sortOption === 'price-asc' && <FiArrowUp className="inline ml-1 text-red-500" />}
-                    {sortOption === 'price-desc' && <FiArrowDown className="inline ml-1 text-red-500" />}
-                  </th>
+                  <th className={`px-4 py-2 text-left text-xs font-bold uppercase ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Selling</th>
                 )}
-                <th className={`px-6 py-3 text-left text-xs font-medium ${darkMode ? 'text-gray-400' : 'text-gray-500'} uppercase tracking-wider`}>Stock</th>
+                <th className={`px-4 py-2 text-left text-xs font-bold uppercase ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Stock</th>
                 {isAdmin && (
-                  <th className={`px-6 py-3 text-left text-xs font-medium ${darkMode ? 'text-gray-400' : 'text-gray-500'} uppercase tracking-wider`}>
-                    Low Stock At
-                  </th>
+                  <th className={`px-4 py-2 text-left text-xs font-bold uppercase ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Alert At</th>
                 )}
-                <th className={`px-6 py-3 text-left text-xs font-medium ${darkMode ? 'text-gray-400' : 'text-gray-500'} uppercase tracking-wider`}>
-                  Invoice No
-                </th>
-                <th className={`px-6 py-3 text-left text-xs font-medium ${darkMode ? 'text-gray-400' : 'text-gray-500'} uppercase tracking-wider`}>
-                  Vendor
-                </th>
-                <th className={`px-6 py-3 text-left text-xs font-medium ${darkMode ? 'text-gray-400' : 'text-gray-500'} uppercase tracking-wider`}>Actions</th>
+                <th className={`px-4 py-2 text-left text-xs font-bold uppercase ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Invoice</th>
+                <th className={`px-4 py-2 text-left text-xs font-bold uppercase ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Vendor</th>
+                <th className={`px-4 py-2 text-left text-xs font-bold uppercase ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Actions</th>
               </tr>
             </thead>
             <tbody className={`divide-y ${darkMode ? 'divide-gray-800' : 'divide-gray-200'}`}>
-              {filteredProducts.length === 0 ? (
+              {currentProducts.length === 0 ? (
                 <tr>
-                  <td colSpan={isAdmin ? 8 : 5} className="px-6 py-12 text-center">
+                  <td colSpan={isAdmin ? 8 : 5} className="px-4 py-8 text-center">
                     <div className="flex flex-col items-center gap-2">
-                      <FiPackage className="text-5xl text-gray-400" />
-                      <p className={`${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                        {searchTerm ? `No products found matching "${searchTerm}"` : 
+                      <FiPackage className="text-4xl text-gray-400" />
+                      <p className={`text-sm font-bold ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                        {searchTerm ? `No products found for "${searchTerm}"` : 
                          viewMode === 'active' ? 'No active products found.' :
                          viewMode === 'hidden' ? 'No hidden products found.' :
                          'No products added yet.'}
                       </p>
-                      {viewMode === 'active' && (
-                        <button 
-                          onClick={() => setViewMode('all')} 
-                          className="text-sm text-blue-500 hover:text-blue-600 underline"
-                        >
-                          Check all products?
-                        </button>
-                      )}
-                      {viewMode === 'hidden' && (
-                        <button 
-                          onClick={() => setViewMode('active')} 
-                          className="text-sm text-blue-500 hover:text-blue-600 underline"
-                        >
-                          Check active products?
-                        </button>
-                      )}
                     </div>
                   </td>
                 </tr>
               ) : (
                 <>
-                  {filteredProducts.map(product => (
+                  {currentProducts.map(product => (
                     <ProductRow
                       key={product.id}
                       product={product}
@@ -1255,59 +1141,59 @@ const Inventory = ({ darkMode }) => {
                   ))}
                   
                   {/* SUMMARY ROW */}
-                  <tr className={`${darkMode ? 'bg-gray-800' : 'bg-gray-100'} border-t-2 ${darkMode ? 'border-gray-600' : 'border-gray-400'}`}>
-                    <td className="px-6 py-3">
-                      <div className="font-bold text-base flex items-center gap-2">
-                        <FiBarChart2 className="text-red-500" />
+                  <tr className={`${darkMode ? 'bg-gray-800' : 'bg-gray-100'} border-t-2 ${darkMode ? 'border-gray-700' : 'border-gray-300'}`}>
+                    <td className="px-4 py-2.5">
+                      <div className="font-bold text-sm flex items-center gap-2">
+                        <FiBarChart2 className="text-amber-400" />
                         <span className={darkMode ? 'text-white' : 'text-gray-900'}>📊 TOTAL</span>
                       </div>
                     </td>
                     
                     {isAdmin && (
-                      <td className="px-6 py-3">
-                        <div className="font-semibold text-blue-600 text-sm">
+                      <td className="px-4 py-2.5">
+                        <div className="font-bold text-blue-400 text-sm">
                           Rs. {summaryTotals.totalPurchaseValue.toLocaleString()}
                         </div>
                       </td>
                     )}
                     
                     {isAdmin && (
-                      <td className="px-6 py-3">
-                        <div className="font-semibold text-red-500 text-sm">
+                      <td className="px-4 py-2.5">
+                        <div className="font-bold text-amber-400 text-sm">
                           Rs. {summaryTotals.totalSellingValue.toLocaleString()}
                         </div>
                       </td>
                     )}
                     
-                    <td className="px-6 py-3">
+                    <td className="px-4 py-2.5">
                       <div className="font-bold text-base flex items-center gap-1">
                         <span className={darkMode ? 'text-white' : 'text-gray-900'}>{summaryTotals.totalStock}</span>
-                        <span className="text-xs text-gray-400">units</span>
+                        <span className="text-xs font-bold text-gray-400">units</span>
                       </div>
                     </td>
                     
                     {isAdmin && (
-                      <td className="px-6 py-3">
-                        <span className="text-xs text-gray-400">-</span>
+                      <td className="px-4 py-2.5">
+                        <span className="text-xs font-bold text-gray-400">-</span>
                       </td>
                     )}
                     
-                    <td className="px-6 py-3">
-                      <span className="text-xs text-gray-400">-</span>
+                    <td className="px-4 py-2.5">
+                      <span className="text-xs font-bold text-gray-400">-</span>
                     </td>
                     
-                    <td className="px-6 py-3">
-                      <span className="text-xs text-gray-400">-</span>
+                    <td className="px-4 py-2.5">
+                      <span className="text-xs font-bold text-gray-400">-</span>
                     </td>
                     
-                    <td className="px-6 py-3">
+                    <td className="px-4 py-2.5">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-xs text-gray-500">Stock: {summaryTotals.totalStock}</span>
+                        <span className={`text-xs font-bold ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Stock: {summaryTotals.totalStock}</span>
                         {isAdmin && (
                           <>
-                            <span className="text-xs text-blue-500">Buy: Rs. {summaryTotals.totalPurchaseValue.toLocaleString()}</span>
-                            <span className="text-xs text-red-500">Sell: Rs. {summaryTotals.totalSellingValue.toLocaleString()}</span>
-                            <span className={`text-xs font-bold ${summaryTotals.totalProfit >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                            <span className="text-xs font-bold text-blue-400">Buy: Rs. {summaryTotals.totalPurchaseValue.toLocaleString()}</span>
+                            <span className="text-xs font-bold text-amber-400">Sell: Rs. {summaryTotals.totalSellingValue.toLocaleString()}</span>
+                            <span className={`text-xs font-bold ${summaryTotals.totalProfit >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
                               Profit: Rs. {summaryTotals.totalProfit.toLocaleString()}
                             </span>
                           </>
@@ -1321,35 +1207,105 @@ const Inventory = ({ darkMode }) => {
           </table>
         </div>
         
-        {/* SUMMARY CARD - NO EMAIL, ONLY UI */}
-        <div className={`px-6 py-3 border-t ${darkMode ? 'border-gray-700 bg-gray-800/50' : 'border-gray-200 bg-gray-50'}`}>
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-4 flex-wrap">
-              <div className="flex items-center gap-2">
-                <span className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Products:</span>
-                <span className={`text-sm font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>{filteredProducts.length}</span>
+        {/* ✅ PAGINATION */}
+        {filteredProducts.length > itemsPerPage && (
+          <div className={`px-4 py-3 border-t ${darkMode ? 'border-gray-800' : 'border-gray-200'} flex flex-wrap justify-between items-center gap-3`}>
+            <div className={`text-xs font-medium ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+              Showing {indexOfFirstItem + 1} to {Math.min(indexOfLastItem, filteredProducts.length)} of {filteredProducts.length} entries
+            </div>
+            <div className="flex gap-1 flex-wrap">
+              <button
+                onClick={() => handlePageChange(currentPage - 1)}
+                disabled={currentPage === 1}
+                className={`px-2.5 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1 ${
+                  currentPage === 1 
+                    ? 'opacity-50 cursor-not-allowed' 
+                    : darkMode 
+                      ? 'bg-gray-800 text-gray-300 hover:bg-gray-700' 
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                <FiChevronLeft className="text-sm" /> Prev
+              </button>
+              
+              {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
+                let pageNum;
+                if (totalPages <= 5) {
+                  pageNum = i + 1;
+                } else if (currentPage <= 3) {
+                  pageNum = i + 1;
+                  if (i === 4) return <span key="dots" className={`text-xs font-bold ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>...</span>;
+                } else if (currentPage >= totalPages - 2) {
+                  if (i === 0) return <span key="dots" className={`text-xs font-bold ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>...</span>;
+                  pageNum = totalPages - 4 + i;
+                } else {
+                  if (i === 0) return <span key="dots1" className={`text-xs font-bold ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>...</span>;
+                  if (i === 4) return <span key="dots2" className={`text-xs font-bold ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>...</span>;
+                  pageNum = currentPage - 1 + i;
+                }
+                return (
+                  <button
+                    key={pageNum}
+                    onClick={() => handlePageChange(pageNum)}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition ${
+                      currentPage === pageNum
+                        ? 'bg-amber-400 text-gray-900 shadow-md'
+                        : darkMode
+                          ? 'bg-gray-800 text-gray-300 hover:bg-gray-700'
+                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
+                  >
+                    {pageNum}
+                  </button>
+                );
+              })}
+              
+              <button
+                onClick={() => handlePageChange(currentPage + 1)}
+                disabled={currentPage === totalPages}
+                className={`px-2.5 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1 ${
+                  currentPage === totalPages 
+                    ? 'opacity-50 cursor-not-allowed' 
+                    : darkMode 
+                      ? 'bg-gray-800 text-gray-300 hover:bg-gray-700' 
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                Next <FiChevronRight className="text-sm" />
+              </button>
+            </div>
+          </div>
+        )}
+        
+        {/* SUMMARY FOOTER */}
+        <div className={`px-4 py-2 border-t ${darkMode ? 'border-gray-800 bg-gray-800/50' : 'border-gray-200 bg-gray-50'}`}>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-3 flex-wrap">
+              <div className="flex items-center gap-1.5">
+                <span className={`text-xs font-bold ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>Products:</span>
+                <span className={`text-sm font-bold ${darkMode ? 'text-white' : 'text-gray-900'}`}>{filteredProducts.length}</span>
               </div>
-              <div className="w-px h-6 bg-gray-300 dark:bg-gray-600"></div>
-              <div className="flex items-center gap-2">
-                <span className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Total Stock:</span>
-                <span className={`text-sm font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>{summaryTotals.totalStock}</span>
+              <div className="w-px h-5 bg-gray-300 dark:bg-gray-700"></div>
+              <div className="flex items-center gap-1.5">
+                <span className={`text-xs font-bold ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>Stock:</span>
+                <span className={`text-sm font-bold ${darkMode ? 'text-white' : 'text-gray-900'}`}>{summaryTotals.totalStock}</span>
               </div>
               {isAdmin && (
                 <>
-                  <div className="w-px h-6 bg-gray-300 dark:bg-gray-600"></div>
-                  <div className="flex items-center gap-2">
-                    <span className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Purchase:</span>
-                    <span className={`text-sm font-semibold text-blue-500`}>Rs. {summaryTotals.totalPurchaseValue.toLocaleString()}</span>
+                  <div className="w-px h-5 bg-gray-300 dark:bg-gray-700"></div>
+                  <div className="flex items-center gap-1.5">
+                    <span className={`text-xs font-bold ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>Purchase:</span>
+                    <span className={`text-sm font-bold text-blue-400`}>Rs. {summaryTotals.totalPurchaseValue.toLocaleString()}</span>
                   </div>
-                  <div className="w-px h-6 bg-gray-300 dark:bg-gray-600"></div>
-                  <div className="flex items-center gap-2">
-                    <span className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Selling:</span>
-                    <span className={`text-sm font-semibold text-red-500`}>Rs. {summaryTotals.totalSellingValue.toLocaleString()}</span>
+                  <div className="w-px h-5 bg-gray-300 dark:bg-gray-700"></div>
+                  <div className="flex items-center gap-1.5">
+                    <span className={`text-xs font-bold ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>Selling:</span>
+                    <span className={`text-sm font-bold text-amber-400`}>Rs. {summaryTotals.totalSellingValue.toLocaleString()}</span>
                   </div>
-                  <div className="w-px h-6 bg-gray-300 dark:bg-gray-600"></div>
-                  <div className="flex items-center gap-2">
-                    <span className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Profit:</span>
-                    <span className={`text-sm font-bold ${summaryTotals.totalProfit >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                  <div className="w-px h-5 bg-gray-300 dark:bg-gray-700"></div>
+                  <div className="flex items-center gap-1.5">
+                    <span className={`text-xs font-bold ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>Profit:</span>
+                    <span className={`text-sm font-bold ${summaryTotals.totalProfit >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
                       Rs. {summaryTotals.totalProfit.toLocaleString()}
                     </span>
                   </div>
@@ -1357,7 +1313,7 @@ const Inventory = ({ darkMode }) => {
               )}
             </div>
             {isAdmin && (
-              <div className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'} italic`}>
+              <div className={`text-xs font-bold ${darkMode ? 'text-gray-500' : 'text-gray-500'} italic`}>
                 * Based on current stock × price
               </div>
             )}
@@ -1365,12 +1321,12 @@ const Inventory = ({ darkMode }) => {
         </div>
       </div>
 
-      {/* Add/Edit Product Modal */}
+      {/* Add/Edit Product Modal - Bold */}
       {isModalOpen && isAdmin && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className={`${darkMode ? 'bg-gray-900 text-white' : 'bg-white text-gray-900'} rounded-2xl shadow-xl max-w-md w-full max-h-[90vh] overflow-y-auto border ${darkMode ? 'border-gray-700' : 'border-gray-200'}`}>
             <div className={`px-6 py-4 border-b ${darkMode ? 'border-gray-700' : 'border-gray-200'} flex justify-between items-center`}>
-              <h3 className="text-xl font-semibold">
+              <h3 className="text-xl font-bold">
                 {editingProduct ? 'Edit Product' : 'Add New Product'}
               </h3>
               <button onClick={() => { setIsModalOpen(false); setEditingProduct(null); setFormData({ name: '', purchasePrice: '', sellingPrice: '', quantity: '', lowStockThreshold: 5 }); }} className="text-gray-500 hover:text-gray-700 text-2xl">
@@ -1380,26 +1336,26 @@ const Inventory = ({ darkMode }) => {
             
             <form onSubmit={editingProduct ? handleUpdateSubmit : handleSubmit} className="p-6 space-y-4">
               <div>
-                <label className={`block text-sm font-medium mb-2 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>Product Name *</label>
+                <label className={`block text-sm font-bold mb-2 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>Product Name *</label>
                 <input 
                   type="text" 
                   name="name" 
                   value={formData.name} 
                   onChange={handleInputChange} 
-                  className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-red-400 ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'border-gray-300'}`} 
+                  className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-400 font-medium ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'border-gray-300'}`} 
                   placeholder="Enter product name" 
                   required
                 />
               </div>
               
               <div>
-                <label className={`block text-sm font-medium mb-2 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>Purchase Price * (Rs.)</label>
+                <label className={`block text-sm font-bold mb-2 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>Purchase Price * (Rs.)</label>
                 <input 
                   type="number" 
                   name="purchasePrice" 
                   value={formData.purchasePrice} 
                   onChange={handleInputChange} 
-                  className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-red-400 ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'border-gray-300'}`} 
+                  className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-400 font-medium ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'border-gray-300'}`} 
                   placeholder="Enter purchase price" 
                   min="0" 
                   step="0.01" 
@@ -1408,13 +1364,13 @@ const Inventory = ({ darkMode }) => {
               </div>
               
               <div>
-                <label className={`block text-sm font-medium mb-2 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>Selling Price * (Rs.)</label>
+                <label className={`block text-sm font-bold mb-2 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>Selling Price * (Rs.)</label>
                 <input 
                   type="number" 
                   name="sellingPrice" 
                   value={formData.sellingPrice} 
                   onChange={handleInputChange} 
-                  className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-red-400 ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'border-gray-300'}`} 
+                  className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-400 font-medium ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'border-gray-300'}`} 
                   placeholder="Enter selling price" 
                   min="0" 
                   step="0.01" 
@@ -1423,22 +1379,21 @@ const Inventory = ({ darkMode }) => {
               </div>
               
               <div>
-                <label className={`block text-sm font-medium mb-2 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>Stock Quantity *</label>
+                <label className={`block text-sm font-bold mb-2 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>Stock Quantity *</label>
                 <input 
                   type="number" 
                   name="quantity" 
                   value={formData.quantity} 
                   onChange={handleInputChange} 
-                  className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-red-400 ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'border-gray-300'}`} 
+                  className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-400 font-medium ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'border-gray-300'}`} 
                   placeholder="Enter stock quantity" 
                   min="0" 
                   required 
                 />
               </div>
 
-              {/* Low Stock Threshold field in modal */}
               <div>
-                <label className={`block text-sm font-medium mb-2 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+                <label className={`block text-sm font-bold mb-2 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>
                   Low Stock Alert At
                   <span className="text-xs ml-1 opacity-60">(Default: 5)</span>
                 </label>
@@ -1447,11 +1402,11 @@ const Inventory = ({ darkMode }) => {
                   name="lowStockThreshold" 
                   value={formData.lowStockThreshold} 
                   onChange={handleInputChange} 
-                  className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-red-400 ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'border-gray-300'}`} 
+                  className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-400 font-medium ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'border-gray-300'}`} 
                   placeholder="Alert when stock below" 
                   min="0" 
                 />
-                <p className={`text-xs mt-1 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                <p className={`text-xs font-bold mt-1 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
                   ⚠️ UI alert only - No email will be sent
                 </p>
               </div>
@@ -1460,13 +1415,13 @@ const Inventory = ({ darkMode }) => {
                 <button 
                   type="button" 
                   onClick={() => { setIsModalOpen(false); setEditingProduct(null); setFormData({ name: '', purchasePrice: '', sellingPrice: '', quantity: '', lowStockThreshold: 5 }); }} 
-                  className={`flex-1 px-4 py-2 rounded-lg transition ${darkMode ? 'bg-gray-800 hover:bg-gray-700 text-white' : 'bg-gray-200 hover:bg-gray-300 text-gray-700'}`}
+                  className={`flex-1 px-4 py-2 rounded-lg transition font-bold ${darkMode ? 'bg-gray-800 hover:bg-gray-700 text-white' : 'bg-gray-200 hover:bg-gray-300 text-gray-700'}`}
                 >
                   Cancel
                 </button>
                 <button 
                   type="submit" 
-                  className="flex-1 px-4 py-2 bg-gray-800 text-white rounded-lg hover:bg-gray-700 transition flex items-center justify-center gap-2 shadow-md"
+                  className="flex-1 px-4 py-2 bg-amber-400 text-gray-900 rounded-lg hover:bg-amber-300 transition flex items-center justify-center gap-2 shadow-md font-bold"
                 >
                   <FiCheckCircle className="text-sm" /> 
                   {editingProduct ? 'Update Product' : 'Add Product'}

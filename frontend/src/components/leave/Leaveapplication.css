@@ -1,0 +1,479 @@
+/* src/components/leave/LeaveApplication.css */
+
+/* ============================================ */
+/* PAGE CONTAINER */
+/* ============================================ */
+.leaveapp-page {
+  padding: 24px;
+  min-height: 95vh;
+}
+
+.leaveapp-page.dark {
+  background-color: #111827;
+}
+
+/* ============================================ */
+/* PAGE HEADER */
+/* ============================================ */
+.leaveapp-page-header {
+  margin-bottom: 24px;
+}
+
+.leaveapp-page-header h2 {
+  font-size: 1.6rem;
+  font-weight: 800;
+  color: #1E1B4B;
+  margin: 0 0 4px 0;
+}
+
+.leaveapp-page-header h2.dark {
+  color: #ffffff;
+}
+
+.leaveapp-page-header p {
+  color: #6b7280;
+  font-size: 0.9rem;
+  margin: 0;
+}
+
+.leaveapp-page-header p.dark {
+  color: #9ca3af;
+}
+
+/* ============================================ */
+/* CONTENT GRID */
+/* ============================================ */
+.leaveapp-content-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+  align-items: start;
+}
+
+@media (max-width: 900px) {
+  .leaveapp-content-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ============================================ */
+/* FORM CARD - Amber Theme */
+/* ============================================ */
+.leaveapp-form-card {
+  background: #ffffff;
+  border-radius: 12px;
+  padding: 28px;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.06);
+  border-top: 4px solid #f59e0b;
+}
+
+.leaveapp-form-card.dark {
+  background: #1f2937;
+  border-top: 4px solid #f59e0b;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+}
+
+/* ============================================ */
+/* FORM GROUP */
+/* ============================================ */
+.leaveapp-form-group {
+  margin-bottom: 20px;
+}
+
+.leaveapp-form-group label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #1E1B4B;
+  margin-bottom: 8px;
+}
+
+.leaveapp-form-group label.dark {
+  color: #d1d5db;
+}
+
+/* ============================================ */
+/* FORM INPUTS */
+/* ============================================ */
+.leaveapp-form-input {
+  width: 100%;
+  padding: 11px 14px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  font-size: 0.92rem;
+  color: #1a1a2e;
+  background: #fafafa;
+  transition: border-color 0.15s ease;
+  box-sizing: border-box;
+}
+
+.leaveapp-form-input:focus {
+  outline: none;
+  border-color: #f59e0b;
+  background: #ffffff;
+}
+
+.leaveapp-form-input.dark {
+  background: #1f2937;
+  border-color: #374151;
+  color: #ffffff;
+}
+
+.leaveapp-form-input.dark:focus {
+  border-color: #f59e0b;
+  background: #1f2937;
+}
+
+.leaveapp-form-input.dark::placeholder {
+  color: #6b7280;
+}
+
+.leaveapp-form-input.dark option {
+  background: #1f2937;
+  color: #ffffff;
+}
+
+/* ✅ min-height 90px se 220px kar diya taake form card ki height
+   "Recent Leave Records" card jitni ho jaye */
+.leaveapp-form-textarea {
+  resize: vertical;
+  min-height: 100px;
+  font-family: inherit;
+}
+
+/* ============================================ */
+/* SUBMIT BUTTON - Amber Theme */
+/* ============================================ */
+.leaveapp-submit-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: #f59e0b;
+  color: #1f2937;
+  border: none;
+  border-radius: 8px;
+  padding: 13px;
+  font-size: 0.95rem;
+  font-weight: 700;
+  cursor: pointer;
+  opacity: 1;
+  visibility: visible;
+  transition: background 0.15s ease;
+}
+
+.leaveapp-submit-btn.dark {
+  background: #f59e0b;
+  color: #1f2937;
+}
+
+.leaveapp-submit-btn:hover:not(:disabled) {
+  background: #d97706;
+}
+
+.leaveapp-submit-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* ============================================ */
+/* RECENT APPLICATIONS CARD - Amber Theme */
+/* ============================================ */
+.leaveapp-recent-card {
+  background: #ffffff;
+  border-radius: 12px;
+  padding: 24px;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.06);
+}
+
+.leaveapp-recent-card.dark {
+  background: #1f2937;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+}
+
+.leaveapp-recent-card h3 {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #1E1B4B;
+  margin: 0 0 16px 0;
+}
+
+.leaveapp-recent-card h3.dark {
+  color: #ffffff;
+}
+
+/* ============================================ */
+/* RECENT LIST */
+/* ============================================ */
+.leaveapp-recent-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-height: 480px;
+  overflow-y: auto;
+}
+
+/* ============================================ */
+/* RECENT LIST ITEM */
+/* ============================================ */
+.leaveapp-recent-item {
+  border: 1px solid #f0f0f0;
+  border-radius: 10px;
+  padding: 12px 14px;
+}
+
+.leaveapp-recent-item.dark {
+  border-color: #374151;
+}
+
+.leaveapp-recent-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.leaveapp-recent-name {
+  font-weight: 700;
+  color: #1a1a2e;
+  font-size: 0.9rem;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.leaveapp-recent-name.dark {
+  color: #ffffff;
+}
+
+.leaveapp-recent-branch {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 0.7rem;
+  font-weight: 500;
+  color: #6b7280;
+}
+
+.leaveapp-recent-branch.dark {
+  color: #9ca3af;
+}
+
+.leaveapp-recent-date {
+  font-size: 0.8rem;
+  color: #f59e0b;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+.leaveapp-recent-reason {
+  font-size: 0.82rem;
+  color: #6b7280;
+}
+
+.leaveapp-recent-reason.dark {
+  color: #9ca3af;
+}
+
+/* ============================================ */
+/* BADGES */
+/* ============================================ */
+.leaveapp-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  border-radius: 20px;
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.leaveapp-badge-approved {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.leaveapp-badge-rejected {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.leaveapp-badge-pending {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+/* Dark mode badges */
+.leaveapp-page.dark .leaveapp-badge-approved {
+  background: rgba(22, 163, 74, 0.25);
+  color: #4ade80;
+}
+
+.leaveapp-page.dark .leaveapp-badge-rejected {
+  background: rgba(220, 38, 38, 0.25);
+  color: #f87171;
+}
+
+.leaveapp-page.dark .leaveapp-badge-pending {
+  background: rgba(217, 119, 6, 0.25);
+  color: #fbbf24;
+}
+
+/* ============================================ */
+/* LOADING SPINNER */
+/* ============================================ */
+.leaveapp-loading {
+  display: flex;
+  justify-content: center;
+  padding: 40px 0;
+}
+
+.leaveapp-spinner {
+  width: 28px;
+  height: 28px;
+  border: 3px solid #f0f0f0;
+  border-top-color: #f59e0b;
+  border-radius: 50%;
+  animation: leaveapp-spin 0.7s linear infinite;
+}
+
+.leaveapp-spinner.dark {
+  border-color: #374151;
+  border-top-color: #f59e0b;
+}
+
+@keyframes leaveapp-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ============================================ */
+/* EMPTY STATE */
+/* ============================================ */
+.leaveapp-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 40px 0;
+  color: #9ca3af;
+}
+
+.leaveapp-empty.dark {
+  color: #6b7280;
+}
+
+.leaveapp-empty p {
+  font-size: 0.85rem;
+  margin: 0;
+}
+
+/* ============================================ */
+/* SCROLLBAR STYLING */
+/* ============================================ */
+.leaveapp-recent-list::-webkit-scrollbar {
+  width: 4px;
+}
+
+.leaveapp-recent-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.leaveapp-recent-list::-webkit-scrollbar-thumb {
+  background: #f59e0b;
+  border-radius: 4px;
+}
+
+.leaveapp-recent-list::-webkit-scrollbar-thumb:hover {
+  background: #d97706;
+}
+
+/* Dark mode scrollbar */
+.leaveapp-page.dark .leaveapp-recent-list::-webkit-scrollbar-track {
+  background: #1f2937;
+}
+
+.leaveapp-page.dark .leaveapp-recent-list::-webkit-scrollbar-thumb {
+  background: #f59e0b;
+}
+
+/* ============================================ */
+/* RESPONSIVE */
+/* ============================================ */
+@media (max-width: 768px) {
+  .leaveapp-page {
+    padding: 16px;
+  }
+  
+  .leaveapp-page-header h2 {
+    font-size: 1.3rem;
+  }
+  
+  .leaveapp-form-card {
+    padding: 20px;
+  }
+  
+  .leaveapp-recent-card {
+    padding: 18px;
+  }
+  
+  .leaveapp-content-grid {
+    gap: 16px;
+  }
+}
+
+@media (max-width: 480px) {
+  .leaveapp-page {
+    padding: 12px;
+  }
+  
+  .leaveapp-page-header h2 {
+    font-size: 1.1rem;
+  }
+  
+  .leaveapp-page-header p {
+    font-size: 0.8rem;
+  }
+  
+  .leaveapp-form-card {
+    padding: 16px;
+    border-radius: 10px;
+  }
+  
+  .leaveapp-recent-card {
+    padding: 14px;
+    border-radius: 10px;
+  }
+  
+  .leaveapp-form-group {
+    margin-bottom: 14px;
+  }
+  
+  .leaveapp-form-input {
+    padding: 9px 12px;
+    font-size: 0.85rem;
+  }
+  
+  .leaveapp-submit-btn {
+    padding: 11px;
+    font-size: 0.85rem;
+  }
+  
+  .leaveapp-recent-item {
+    padding: 10px 12px;
+  }
+  
+  .leaveapp-recent-name {
+    font-size: 0.8rem;
+  }
+  
+  .leaveapp-recent-date {
+    font-size: 0.7rem;
+  }
+  
+  .leaveapp-recent-reason {
+    font-size: 0.75rem;
+  }
+}

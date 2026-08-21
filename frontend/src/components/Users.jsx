@@ -1,7 +1,8 @@
 // src/components/Users.jsx
+
 import React, { useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
-import { FiUsers, FiPlus, FiX, FiEdit2, FiTrash2, FiCheckCircle, FiLoader } from 'react-icons/fi';
+import { FiUsers, FiPlus, FiX, FiEdit2, FiTrash2, FiCheckCircle, FiLoader, FiUser, FiMail, FiShield } from 'react-icons/fi';
 import api from '../services/api';
 
 const Users = ({ darkMode }) => {
@@ -21,7 +22,6 @@ const Users = ({ darkMode }) => {
     try {
       setLoading(true);
       const response = await api.get('/users');
-      console.log('📥 Users API Response:', response.data);
       
       let userData = [];
       if (response.data?.data && Array.isArray(response.data.data)) {
@@ -32,7 +32,6 @@ const Users = ({ darkMode }) => {
         userData = response.data.data;
       } else {
         userData = [];
-        console.warn('⚠️ Unexpected API response format:', response.data);
       }
       
       setUsers(userData);
@@ -120,88 +119,102 @@ const Users = ({ darkMode }) => {
   if (loading) {
     return (
       <div className="min-h-[400px] flex items-center justify-center">
-        <FiLoader className="text-5xl text-red-500 animate-spin" />
+        <FiLoader className="text-5xl text-amber-400 animate-spin" />
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
-      <div className={`${darkMode ? 'bg-gray-800' : 'bg-white'} rounded-2xl shadow-xl p-6 border ${darkMode ? 'border-gray-700' : 'border-gray-200'}`}>
-        <div className="flex justify-between items-center">
+    <div className="space-y-4">
+      {/* Header - Amber Theme */}
+      <div className={`${darkMode ? 'bg-gray-900' : 'bg-white'} rounded-xl border ${darkMode ? 'border-gray-800' : 'border-gray-200 shadow-sm'} p-5`}>
+        <div className="flex justify-between items-center flex-wrap gap-3">
           <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-full bg-red-500/20 flex items-center justify-center">
-              <FiUsers className="text-2xl text-red-500" />
+            <div className="w-12 h-12 rounded-full bg-amber-500/20 flex items-center justify-center">
+              <FiUsers className="text-2xl text-amber-400" />
             </div>
             <div>
               <h1 className={`text-2xl font-bold ${darkMode ? 'text-white' : 'text-gray-900'}`}>Users</h1>
-              <p className={`text-sm ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+              <p className={`text-sm font-medium ${darkMode ? 'text-gray-300' : 'text-gray-500'}`}>
                 Manage system users and employees
               </p>
             </div>
           </div>
           <button
             onClick={openAddModal}
-            className="px-4 py-2 bg-red-500 text-white rounded-xl font-semibold hover:bg-red-600 transition flex items-center gap-2 shadow-lg"
+            className="px-4 py-2 bg-amber-400 text-gray-900 rounded-lg text-sm font-bold hover:bg-amber-300 transition flex items-center gap-2 shadow-md"
           >
-            <FiPlus /> Add User
+            <FiPlus className="text-base" /> Add User
           </button>
         </div>
       </div>
 
-      <div className={`${darkMode ? 'bg-gray-800' : 'bg-white'} rounded-2xl shadow-xl overflow-hidden border ${darkMode ? 'border-gray-700' : 'border-gray-200'}`}>
+      {/* Table - Amber Theme with Bold Text */}
+      <div className={`${darkMode ? 'bg-gray-900' : 'bg-white'} rounded-xl border ${darkMode ? 'border-gray-800' : 'border-gray-200 shadow-sm'} overflow-hidden`}>
         <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className={`${darkMode ? 'bg-gray-700' : 'bg-gray-50'}`}>
+          <table className="w-full text-sm">
+            <thead className={darkMode ? 'bg-gray-800' : 'bg-gray-50'}>
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-semibold uppercase">#</th>
-                <th className="px-6 py-3 text-left text-xs font-semibold uppercase">Name</th>
-                <th className="px-6 py-3 text-left text-xs font-semibold uppercase">Email</th>
-                <th className="px-6 py-3 text-left text-xs font-semibold uppercase">Role</th>
-                <th className="px-6 py-3 text-left text-xs font-semibold uppercase">Created At</th>
-                <th className="px-6 py-3 text-center text-xs font-semibold uppercase">Actions</th>
+                <th className={`px-5 py-3 text-left text-sm font-bold uppercase tracking-wider ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>#</th>
+                <th className={`px-5 py-3 text-left text-sm font-bold uppercase tracking-wider ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>Name</th>
+                <th className={`px-5 py-3 text-left text-sm font-bold uppercase tracking-wider ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>Email</th>
+                <th className={`px-5 py-3 text-left text-sm font-bold uppercase tracking-wider ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>Role</th>
+                <th className={`px-5 py-3 text-left text-sm font-bold uppercase tracking-wider ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>Created At</th>
+                <th className={`px-5 py-3 text-center text-sm font-bold uppercase tracking-wider ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>Actions</th>
               </tr>
             </thead>
-            <tbody className={`divide-y ${darkMode ? 'divide-gray-700' : 'divide-gray-200'}`}>
+            <tbody className={`divide-y ${darkMode ? 'divide-gray-800' : 'divide-gray-200'}`}>
               {users.length === 0 ? (
                 <tr>
-                  <td colSpan="6" className="px-6 py-12 text-center text-gray-500">
-                    No users found
+                  <td colSpan="6" className="px-5 py-12 text-center">
+                    <FiUsers className="text-4xl mx-auto mb-3 text-gray-400" />
+                    <p className={`text-base font-bold ${darkMode ? 'text-gray-300' : 'text-gray-500'}`}>No users found</p>
                   </td>
                 </tr>
               ) : (
                 users.map((user, index) => (
-                  <tr key={user.id || index} className={`${darkMode ? 'hover:bg-gray-700/50' : 'hover:bg-gray-50'}`}>
-                    <td className="px-6 py-4 text-sm">{index + 1}</td>
-                    <td className="px-6 py-4">
-                      <span className={`font-medium ${darkMode ? 'text-white' : 'text-gray-900'}`}>{user.name}</span>
-                    </td>
-                    <td className="px-6 py-4 text-sm">{user.email}</td>
-                    <td className="px-6 py-4">
-                      <span className={`px-2 py-1 rounded-full text-xs font-semibold ${
-                        user.role === 'admin' 
-                          ? 'bg-red-500/20 text-red-500' 
-                          : 'bg-blue-500/20 text-blue-500'
-                      }`}>
-                        {user.role === 'admin' ? '👑 Admin' : '👤 Employee'}
+                  <tr key={user.id || index} className={`${darkMode ? 'hover:bg-gray-800/50' : 'hover:bg-gray-50'}`}>
+                    <td className={`px-5 py-3.5 text-sm font-bold ${darkMode ? 'text-gray-300' : 'text-gray-500'}`}>{index + 1}</td>
+                    <td className="px-5 py-3.5">
+                      <span className={`font-bold text-base ${darkMode ? 'text-white' : 'text-gray-900'}`}>
+                        <FiUser className="inline mr-2 text-amber-400 text-sm" />
+                        {user.name}
                       </span>
                     </td>
-                    <td className="px-6 py-4 text-sm">
+                    <td className="px-5 py-3.5">
+                      <span className={`text-sm font-semibold ${darkMode ? 'text-white' : 'text-gray-700'}`}>
+                        <FiMail className="inline mr-2 text-gray-400 text-sm" />
+                        {user.email}
+                      </span>
+                    </td>
+                    <td className="px-5 py-3.5">
+                      <span className={`px-3 py-1 rounded-full text-sm font-bold flex items-center gap-1.5 w-fit ${
+                        user.role === 'admin' 
+                          ? 'bg-amber-500/20 text-amber-500' 
+                          : 'bg-blue-500/20 text-blue-500'
+                      }`}>
+                        <FiShield className="text-sm" />
+                        {user.role === 'admin' ? 'Admin' : 'Employee'}
+                      </span>
+                    </td>
+                    <td className={`px-5 py-3.5 text-sm font-semibold ${darkMode ? 'text-white' : 'text-gray-500'}`}>
                       {user.created_at ? new Date(user.created_at).toLocaleDateString() : 'N/A'}
                     </td>
-                    <td className="px-6 py-4">
+                    <td className="px-5 py-3.5">
                       <div className="flex items-center justify-center gap-2">
                         <button
                           onClick={() => openEditModal(user)}
-                          className="p-2 rounded-lg bg-blue-500/10 text-blue-500 hover:bg-blue-500 hover:text-white transition"
+                          className="p-2 rounded-lg bg-blue-500/10 text-blue-500 hover:bg-blue-500 hover:text-white transition font-bold"
+                          title="Edit User"
                         >
-                          <FiEdit2 className="text-sm" />
+                          <FiEdit2 className="text-base" />
                         </button>
                         <button
                           onClick={() => handleDelete(user)}
-                          className="p-2 rounded-lg bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white transition"
+                          className="p-2 rounded-lg bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white transition font-bold"
+                          title="Delete User"
                         >
-                          <FiTrash2 className="text-sm" />
+                          <FiTrash2 className="text-base" />
                         </button>
                       </div>
                     </td>
@@ -211,30 +224,46 @@ const Users = ({ darkMode }) => {
             </tbody>
           </table>
         </div>
+        
+        {/* Footer */}
+        <div className={`px-5 py-3 border-t ${darkMode ? 'border-gray-800 bg-gray-800/50' : 'border-gray-200 bg-gray-50'} flex justify-between items-center flex-wrap gap-2`}>
+          <div className={`text-sm font-bold ${darkMode ? 'text-white' : 'text-gray-600'}`}>
+            Total Users: <strong className={darkMode ? 'text-white' : 'text-gray-900'}>{users.length}</strong>
+          </div>
+          <button
+            onClick={fetchUsers}
+            className={`text-sm font-bold px-4 py-1.5 rounded-lg transition ${
+              darkMode ? 'bg-gray-800 text-white hover:bg-gray-700' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+            }`}
+          >
+            Refresh
+          </button>
+        </div>
       </div>
 
-      {/* Add/Edit User Modal */}
+      {/* Add/Edit User Modal - Amber Theme */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
-          <div className={`max-w-md w-full rounded-2xl shadow-2xl ${darkMode ? 'bg-gray-800' : 'bg-white'} border ${darkMode ? 'border-gray-700' : 'border-gray-200'}`}>
-            <div className={`flex justify-between items-center p-4 border-b ${darkMode ? 'border-gray-700' : 'border-gray-200'}`}>
-              <h2 className={`text-xl font-bold ${darkMode ? 'text-white' : 'text-gray-900'}`}>
+          <div className={`max-w-md w-full rounded-xl shadow-2xl ${darkMode ? 'bg-gray-900' : 'bg-white'} border ${darkMode ? 'border-gray-800' : 'border-gray-200'}`}>
+            <div className={`flex justify-between items-center p-5 border-b ${darkMode ? 'border-gray-800' : 'border-gray-200'}`}>
+              <h2 className={`text-xl font-bold flex items-center gap-2 ${darkMode ? 'text-white' : 'text-gray-900'}`}>
+                <FiUsers className="text-amber-400 text-2xl" />
                 {editingUser ? 'Edit User' : 'Add New User'}
               </h2>
-              <button onClick={() => setShowModal(false)} className="p-2 text-gray-500 hover:text-gray-700">
-                <FiX />
+              <button onClick={() => setShowModal(false)} className="p-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition">
+                <FiX className="text-xl" />
               </button>
             </div>
             
-            <form onSubmit={handleSubmit} className="p-6 space-y-4">
+            <form onSubmit={handleSubmit} className="p-6 space-y-5">
               <div>
-                <label className={`block text-sm font-medium mb-1 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>Full Name *</label>
+                <label className={`block text-sm font-bold mb-1.5 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>Full Name *</label>
                 <input
                   type="text"
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  className={`w-full px-4 py-2 rounded-xl border-2 focus:ring-2 focus:ring-red-500 outline-none transition ${
-                    darkMode ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300'
+                  className={`w-full px-4 py-2.5 rounded-lg border text-base font-medium focus:ring-2 focus:ring-amber-400 outline-none transition ${
+                    darkMode ? 'bg-gray-800 border-gray-700 text-white placeholder-gray-500' : 'bg-white border-gray-300 text-gray-900'
                   }`}
                   placeholder="Enter full name"
                   required
@@ -242,13 +271,13 @@ const Users = ({ darkMode }) => {
               </div>
               
               <div>
-                <label className={`block text-sm font-medium mb-1 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>Email Address *</label>
+                <label className={`block text-sm font-bold mb-1.5 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>Email Address *</label>
                 <input
                   type="email"
                   value={formData.email}
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  className={`w-full px-4 py-2 rounded-xl border-2 focus:ring-2 focus:ring-red-500 outline-none transition ${
-                    darkMode ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300'
+                  className={`w-full px-4 py-2.5 rounded-lg border text-base font-medium focus:ring-2 focus:ring-amber-400 outline-none transition ${
+                    darkMode ? 'bg-gray-800 border-gray-700 text-white placeholder-gray-500' : 'bg-white border-gray-300 text-gray-900'
                   }`}
                   placeholder="Enter email address"
                   required
@@ -256,15 +285,15 @@ const Users = ({ darkMode }) => {
               </div>
               
               <div>
-                <label className={`block text-sm font-medium mb-1 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>
-                  Password {editingUser && <span className="text-xs text-gray-400">(Leave blank to keep current)</span>}
+                <label className={`block text-sm font-bold mb-1.5 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+                  Password {editingUser && <span className="text-sm text-gray-400">(Leave blank to keep current)</span>}
                 </label>
                 <input
                   type="password"
                   value={formData.password}
                   onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                  className={`w-full px-4 py-2 rounded-xl border-2 focus:ring-2 focus:ring-red-500 outline-none transition ${
-                    darkMode ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300'
+                  className={`w-full px-4 py-2.5 rounded-lg border text-base font-medium focus:ring-2 focus:ring-amber-400 outline-none transition ${
+                    darkMode ? 'bg-gray-800 border-gray-700 text-white placeholder-gray-500' : 'bg-white border-gray-300 text-gray-900'
                   }`}
                   placeholder={editingUser ? 'Enter new password (optional)' : 'Enter password'}
                   required={!editingUser}
@@ -273,12 +302,12 @@ const Users = ({ darkMode }) => {
               </div>
               
               <div>
-                <label className={`block text-sm font-medium mb-1 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>Role *</label>
+                <label className={`block text-sm font-bold mb-1.5 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>Role *</label>
                 <select
                   value={formData.role}
                   onChange={(e) => setFormData({ ...formData, role: e.target.value })}
-                  className={`w-full px-4 py-2 rounded-xl border-2 focus:ring-2 focus:ring-red-500 outline-none transition ${
-                    darkMode ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300'
+                  className={`w-full px-4 py-2.5 rounded-lg border text-base font-medium focus:ring-2 focus:ring-amber-400 outline-none transition ${
+                    darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300 text-gray-900'
                   }`}
                 >
                   <option value="employee">Employee</option>
@@ -286,12 +315,12 @@ const Users = ({ darkMode }) => {
                 </select>
               </div>
               
-              <div className="flex gap-3 pt-2">
+              <div className="flex gap-3 pt-3">
                 <button
                   type="button"
                   onClick={() => setShowModal(false)}
-                  className={`flex-1 px-4 py-2 rounded-xl transition ${
-                    darkMode ? 'bg-gray-700 hover:bg-gray-600 text-white' : 'bg-gray-200 hover:bg-gray-300 text-gray-700'
+                  className={`flex-1 px-4 py-2.5 rounded-lg transition text-base font-bold ${
+                    darkMode ? 'bg-gray-800 hover:bg-gray-700 text-white' : 'bg-gray-200 hover:bg-gray-300 text-gray-700'
                   }`}
                 >
                   Cancel
@@ -299,9 +328,9 @@ const Users = ({ darkMode }) => {
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className="flex-1 px-4 py-2 bg-red-500 text-white rounded-xl font-semibold hover:bg-red-600 transition flex items-center justify-center gap-2 shadow-md"
+                  className="flex-1 px-4 py-2.5 bg-amber-400 text-gray-900 rounded-lg text-base font-bold hover:bg-amber-300 transition flex items-center justify-center gap-2 shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {isSubmitting ? <FiLoader className="animate-spin" /> : <FiCheckCircle />}
+                  {isSubmitting ? <FiLoader className="animate-spin text-lg" /> : <FiCheckCircle className="text-lg" />}
                   {isSubmitting ? 'Saving...' : editingUser ? 'Update User' : 'Create User'}
                 </button>
               </div>

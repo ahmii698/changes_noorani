@@ -44,20 +44,6 @@ const formatPakistanTime = (dateString) => {
   }
 };
 
-// ✅ Memoized Stats Card Component
-const StatsCard = React.memo(({ title, value, subtitle, icon: Icon, color, darkMode }) => (
-  <div className={`bg-gradient-to-r ${color} rounded-2xl p-6 text-white shadow-lg`}>
-    <div className="flex justify-between items-start">
-      <div>
-        <p className="text-sm opacity-90">{title}</p>
-        <p className="text-3xl font-bold mt-2">{value}</p>
-        {subtitle && <p className="text-xs opacity-75 mt-1">{subtitle}</p>}
-      </div>
-      <Icon className="text-3xl opacity-50" />
-    </div>
-  </div>
-));
-
 const Credit = ({ darkMode }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
@@ -155,7 +141,6 @@ const Credit = ({ darkMode }) => {
     
     // ✅ CRITICAL FIX: Sort vendors by their latest record date (NEWEST FIRST)
     return Object.values(grouped).sort((a, b) => {
-      // Get the latest record date from each vendor
       const getLatestDate = (vendor) => {
         if (!vendor.records || vendor.records.length === 0) return new Date(0);
         const latest = vendor.records.reduce((latest, r) => 
@@ -167,7 +152,6 @@ const Credit = ({ darkMode }) => {
       const dateA = getLatestDate(a);
       const dateB = getLatestDate(b);
       
-      // Sort newest first (descending)
       return dateB - dateA;
     });
   };
@@ -304,14 +288,12 @@ const Credit = ({ darkMode }) => {
 
   // ✅ Add product to selection with DUPLICATE CHECK
   const handleAddProductToSelection = (product) => {
-    // Check if product already exists in selected list (by id)
     const existingById = selectedProducts.find(p => p.product_id === product.id);
     if (existingById) {
       toast.error('Product already added to this vendor!');
       return;
     }
     
-    // Check if product with SAME NAME already exists (case-insensitive)
     const existingByName = selectedProducts.find(p => 
       p.product_name?.toLowerCase().trim() === product.name?.toLowerCase().trim()
     );
@@ -320,7 +302,6 @@ const Credit = ({ darkMode }) => {
       return;
     }
     
-    // If no duplicate, add the product
     setSelectedProducts([
       ...selectedProducts,
       {
@@ -533,7 +514,7 @@ const Credit = ({ darkMode }) => {
     return (
       <div className={`flex items-center justify-center h-96 ${darkMode ? 'bg-gray-900' : 'bg-gray-100'}`}>
         <div className="text-center">
-          <FiLoader className="text-5xl text-red-500 animate-spin mx-auto mb-4" />
+          <FiLoader className="text-5xl text-amber-500 animate-spin mx-auto mb-4" />
           <p className={`${darkMode ? 'text-white' : 'text-gray-700'}`}>Loading vendors...</p>
         </div>
       </div>
@@ -549,7 +530,7 @@ const Credit = ({ darkMode }) => {
     <>
       <div className={`credit-container ${darkMode ? 'dark' : ''}`}>
         <div className={`credit-card ${darkMode ? 'dark' : ''}`}>
-          {/* Header */}
+          {/* Header - Amber Theme */}
           <div className="credit-header">
             <div className="credit-header-left">
               <FiList className="credit-header-icon" />
@@ -559,17 +540,17 @@ const Credit = ({ darkMode }) => {
                   Total Vendors: {statistics.totalVendors || vendors.length} | 
                   Total Balance: Rs. {(statistics.totalBalance || vendors.reduce((sum, v) => sum + (v?.balanceAmount || 0), 0)).toLocaleString()}
                   {statistics.pending > 0 && (
-                    <span className="ml-2 px-2 py-0.5 bg-red-500/30 text-white rounded-full text-xs">
+                    <span className="ml-2 px-2 py-0.5 bg-red-500/30 text-white rounded-full text-xs font-bold">
                       {statistics.pending} Pending
                     </span>
                   )}
                   {statistics.partial > 0 && (
-                    <span className="ml-2 px-2 py-0.5 bg-yellow-500/30 text-white rounded-full text-xs">
+                    <span className="ml-2 px-2 py-0.5 bg-yellow-500/30 text-white rounded-full text-xs font-bold">
                       {statistics.partial} Partial
                     </span>
                   )}
                   {statistics.fullyPaid > 0 && (
-                    <span className="ml-2 px-2 py-0.5 bg-green-500/30 text-white rounded-full text-xs">
+                    <span className="ml-2 px-2 py-0.5 bg-green-500/30 text-white rounded-full text-xs font-bold">
                       {statistics.fullyPaid} Paid
                     </span>
                   )}
@@ -581,25 +562,25 @@ const Credit = ({ darkMode }) => {
             </button>
           </div>
 
-          {/* ✅ 3 STATS CARDS - Total Amount, Total Paid, Total Balance */}
+          {/* ✅ 3 STATS CARDS - Amber Theme */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4">
-            <div className="bg-gradient-to-r from-red-500 to-red-600 rounded-2xl p-5 text-white shadow-lg">
+            <div className="bg-gradient-to-r from-amber-500 to-amber-600 rounded-2xl p-5 text-white shadow-lg">
               <div className="flex justify-between items-start">
                 <div>
-                  <p className="text-sm opacity-90">Total Amount</p>
+                  <p className="text-sm opacity-90 font-bold">Total Amount</p>
                   <p className="text-2xl font-bold mt-1">Rs. {totalAmount.toLocaleString()}</p>
-                  <p className="text-xs opacity-75 mt-1">Total vendor liability</p>
+                  <p className="text-xs opacity-75 mt-1 font-medium">Total vendor liability</p>
                 </div>
                 <FiDollarSign className="text-3xl opacity-50" />
               </div>
             </div>
             
-            <div className="bg-gradient-to-r from-green-500 to-green-600 rounded-2xl p-5 text-white shadow-lg">
+            <div className="bg-gradient-to-r from-emerald-500 to-emerald-600 rounded-2xl p-5 text-white shadow-lg">
               <div className="flex justify-between items-start">
                 <div>
-                  <p className="text-sm opacity-90">Total Paid</p>
+                  <p className="text-sm opacity-90 font-bold">Total Paid</p>
                   <p className="text-2xl font-bold mt-1">Rs. {totalPaid.toLocaleString()}</p>
-                  <p className="text-xs opacity-75 mt-1">Total amount paid</p>
+                  <p className="text-xs opacity-75 mt-1 font-medium">Total amount paid</p>
                 </div>
                 <FiCheckCircle className="text-3xl opacity-50" />
               </div>
@@ -608,9 +589,9 @@ const Credit = ({ darkMode }) => {
             <div className="bg-gradient-to-r from-blue-500 to-blue-600 rounded-2xl p-5 text-white shadow-lg">
               <div className="flex justify-between items-start">
                 <div>
-                  <p className="text-sm opacity-90">Total Balance</p>
+                  <p className="text-sm opacity-90 font-bold">Total Balance</p>
                   <p className="text-2xl font-bold mt-1">Rs. {totalBalance.toLocaleString()}</p>
-                  <p className="text-xs opacity-75 mt-1">Remaining balance</p>
+                  <p className="text-xs opacity-75 mt-1 font-medium">Remaining balance</p>
                 </div>
                 <FiCreditCard className="text-3xl opacity-50" />
               </div>
@@ -639,13 +620,13 @@ const Credit = ({ darkMode }) => {
                   <th>Vendor Name</th>
                   <th>Products</th>
                   <th>Total Orders</th>
-                  <th>Total Amount</th>
-                  <th>Total Paid</th>
-                  <th>Total Balance</th>
+                  <th className="credit-text-right">Total Amount</th>
+                  <th className="credit-text-right">Total Paid</th>
+                  <th className="credit-text-right">Total Balance</th>
                   <th>Actions</th>
                 </tr>
               </thead>
-              <tbody>
+            <tbody className={darkMode ? 'dark' : ''}>
                 {currentVendors.length === 0 ? (
                   <tr>
                     <td colSpan="7" className="credit-empty">
@@ -661,15 +642,15 @@ const Credit = ({ darkMode }) => {
                       <tr key={vendor?.id || Math.random()} className={darkMode ? 'dark' : ''}>
                         <td className="credit-vendor-name">
                           <div className="flex items-center gap-2">
-                            <FiUser className="text-red-500" />
-                            {vendor?.name || 'N/A'}
+                            <FiUser className="text-amber-500" />
+                            <span className="font-bold">{vendor?.name || 'N/A'}</span>
                           </div>
                         </td>
-                        <td className="credit-cell-truncate">{vendor?.products || 'N/A'}</td>
-                        <td className="text-center">{totalOrders}</td>
-                        <td className="credit-amount-total">Rs.{(vendor?.totalAmount || 0).toLocaleString()}</td>
-                        <td className="credit-amount-paid">Rs.{(vendor?.paidAmount || 0).toLocaleString()}</td>
-                        <td>
+                        <td className="credit-cell-truncate font-medium">{vendor?.products || 'N/A'}</td>
+                        <td className="text-center font-bold">{totalOrders}</td>
+                        <td className="credit-text-right credit-amount-total">Rs.{(vendor?.totalAmount || 0).toLocaleString()}</td>
+                        <td className="credit-text-right credit-amount-paid">Rs.{(vendor?.paidAmount || 0).toLocaleString()}</td>
+                        <td className="credit-text-right">
                           <span className={`credit-balance ${(vendor?.balanceAmount || 0) > 0 ? 'due' : 'paid'}`}>
                             Rs.{(vendor?.balanceAmount || 0).toLocaleString()}
                             {(vendor?.balanceAmount || 0) > 0 && (
@@ -752,7 +733,7 @@ const Credit = ({ darkMode }) => {
         </div>
       </div>
 
-      {/* View History Modal - ✅ FIXED: Records sorted NEWEST FIRST */}
+      {/* View History Modal - Amber Theme */}
       {isViewModalOpen && selectedVendor && (
         <div className="credit-modal-overlay">
           <div className={`credit-modal ${darkMode ? 'dark' : ''}`}>
@@ -768,7 +749,7 @@ const Credit = ({ darkMode }) => {
               </button>
             </div>
             <div className="credit-modal-body">
-              {/* Vendor Summary */}
+              {/* Vendor Summary - Amber Theme */}
               <div className="credit-summary">
                 <div className="credit-summary-item">
                   <p className="credit-summary-label">Total Orders</p>
@@ -788,10 +769,10 @@ const Credit = ({ darkMode }) => {
                 </div>
               </div>
 
-              {/* All Records - ✅ SORTED NEWEST FIRST */}
+              {/* All Records */}
               <div className="mb-6">
                 <h3 className="credit-history-title">
-                  <FiBox className="credit-history-icon" /> All Records
+                  <FiBox className="credit-history-icon text-amber-500" /> All Records
                 </h3>
                 {!selectedVendor?.records || selectedVendor.records.length === 0 ? (
                   <div className="credit-empty-history">
@@ -813,14 +794,13 @@ const Credit = ({ darkMode }) => {
                         </tr>
                       </thead>
                       <tbody>
-                        {/* ✅ FIXED: Sort records by createdAt - NEWEST FIRST */}
                         {[...selectedVendor.records]
                           .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
                           .map((record, idx) => (
                             <tr key={record.id || idx}>
-                              <td>{idx + 1}</td>
-                              <td>{record.invoiceNumber || 'N/A'}</td>
-                              <td>{record.createdAt ? new Date(record.createdAt).toLocaleDateString() : 'N/A'}</td>
+                              <td className="font-bold">{idx + 1}</td>
+                              <td className="font-medium">{record.invoiceNumber || 'N/A'}</td>
+                              <td className="font-medium">{record.createdAt ? new Date(record.createdAt).toLocaleDateString() : 'N/A'}</td>
                               <td className="credit-text-right credit-amount-total">Rs.{record.totalAmount.toLocaleString()}</td>
                               <td className="credit-text-right credit-amount-paid">Rs.{record.paidAmount.toLocaleString()}</td>
                               <td className="credit-text-right">
@@ -828,16 +808,16 @@ const Credit = ({ darkMode }) => {
                                   Rs.{record.balanceAmount.toLocaleString()}
                                 </span>
                               </td>
-                              <td className="credit-cell-truncate">{record.products || 'N/A'}</td>
+                              <td className="credit-cell-truncate font-medium">{record.products || 'N/A'}</td>
                             </tr>
                           ))}
                       </tbody>
                       <tfoot className={darkMode ? 'dark' : ''}>
                         <tr>
-                          <td colSpan="3" className="credit-text-right credit-total-label">Total:</td>
-                          <td className="credit-text-right credit-total-amount">Rs.{selectedVendor?.totalAmount?.toLocaleString() || 0}</td>
-                          <td className="credit-text-right credit-total-amount">Rs.{selectedVendor?.paidAmount?.toLocaleString() || 0}</td>
-                          <td className="credit-text-right credit-total-amount">Rs.{selectedVendor?.balanceAmount?.toLocaleString() || 0}</td>
+                          <td colSpan="3" className="credit-text-right credit-total-label font-extrabold">Total:</td>
+                          <td className="credit-text-right credit-total-amount font-extrabold">Rs.{selectedVendor?.totalAmount?.toLocaleString() || 0}</td>
+                          <td className="credit-text-right credit-total-amount font-extrabold">Rs.{selectedVendor?.paidAmount?.toLocaleString() || 0}</td>
+                          <td className="credit-text-right credit-total-amount font-extrabold">Rs.{selectedVendor?.balanceAmount?.toLocaleString() || 0}</td>
                           <td></td>
                         </tr>
                       </tfoot>
@@ -849,7 +829,7 @@ const Credit = ({ darkMode }) => {
               {/* Payment History */}
               <div>
                 <h3 className="credit-history-title">
-                  <FiCreditCard className="credit-history-icon text-green-500" /> Payment History
+                  <FiCreditCard className="credit-history-icon text-emerald-500" /> Payment History
                   <span className="ml-2 text-sm font-normal text-gray-500">
                     ({selectedVendor?.payments?.length || 0} payments)
                   </span>
@@ -879,28 +859,28 @@ const Credit = ({ darkMode }) => {
                             const { date, time } = formatPakistanTime(paymentDate);
                             return (
                               <tr key={payment.id || idx}>
-                                <td>{idx + 1}</td>
+                                <td className="font-bold">{idx + 1}</td>
                                 <td>
                                   <div className="flex flex-col">
-                                    <span className="font-medium">{date}</span>
+                                    <span className="font-bold">{date}</span>
                                     <span className="text-xs text-gray-500">{time}</span>
                                   </div>
                                 </td>
-                                <td className="credit-text-right credit-amount-paid">
+                                <td className="credit-text-right credit-amount-paid font-bold">
                                   Rs.{payment.amount?.toLocaleString() || 0}
                                 </td>
-                                <td>{payment.note || '-'}</td>
-                                <td>{payment.createdBy || 'System'}</td>
+                                <td className="font-medium">{payment.note || '-'}</td>
+                                <td className="font-medium">{payment.createdBy || 'System'}</td>
                               </tr>
                             );
                           })}
                       </tbody>
                       <tfoot className={darkMode ? 'dark' : ''}>
                         <tr>
-                          <td colSpan="2" className="credit-text-right credit-total-label font-bold">
+                          <td colSpan="2" className="credit-text-right credit-total-label font-extrabold">
                             Total Paid:
                           </td>
-                          <td className="credit-text-right credit-total-amount font-bold">
+                          <td className="credit-text-right credit-total-amount font-extrabold">
                             Rs.{selectedVendor?.paidAmount?.toLocaleString() || 0}
                           </td>
                           <td></td>
@@ -921,7 +901,7 @@ const Credit = ({ darkMode }) => {
         </div>
       )}
 
-      {/* Pay Now Modal */}
+      {/* Pay Now Modal - Amber Theme */}
       {isPayModalOpen && selectedVendor && (
         <div className="credit-modal-overlay">
           <div className={`credit-modal ${darkMode ? 'dark' : ''}`}>
@@ -956,7 +936,7 @@ const Credit = ({ darkMode }) => {
                   className={`credit-form-input ${darkMode ? 'dark' : ''}`} 
                   placeholder="Enter amount to pay" 
                 />
-                <p className={`text-xs mt-1 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                <p className={`text-xs mt-1 font-medium ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
                   Maximum: Rs. {(selectedVendor?.balanceAmount || 0).toLocaleString()}
                 </p>
               </div>
@@ -986,7 +966,7 @@ const Credit = ({ darkMode }) => {
         </div>
       )}
 
-      {/* Edit Vendor Modal */}
+      {/* Edit Vendor Modal - Amber Theme */}
       {isModalOpen && selectedVendor && (
         <div className="credit-modal-overlay">
           <div className={`credit-modal ${darkMode ? 'dark' : ''}`}>
@@ -1029,7 +1009,7 @@ const Credit = ({ darkMode }) => {
                   readOnly 
                   style={{ backgroundColor: darkMode ? '#374151' : '#f3f4f6', cursor: 'not-allowed' }}
                 />
-                <p className={`text-xs mt-1 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                <p className={`text-xs mt-1 font-medium ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
                   Total amount from all orders (cannot be changed)
                 </p>
               </div>
@@ -1043,7 +1023,7 @@ const Credit = ({ darkMode }) => {
                   readOnly 
                   style={{ backgroundColor: darkMode ? '#374151' : '#f3f4f6', cursor: 'not-allowed' }}
                 />
-                <p className={`text-xs mt-1 ${darkMode ? 'text-green-400' : 'text-green-600'}`}>
+                <p className={`text-xs mt-1 font-bold ${darkMode ? 'text-green-400' : 'text-green-600'}`}>
                   Total paid so far: Rs. {(selectedVendor?.paidAmount || 0).toLocaleString()} | 
                   Balance: Rs. {(selectedVendor?.balanceAmount || 0).toLocaleString()}
                 </p>
@@ -1061,7 +1041,7 @@ const Credit = ({ darkMode }) => {
                   className={`credit-form-input ${darkMode ? 'dark' : ''}`} 
                   placeholder="Enter amount to pay now"
                 />
-                <p className={`text-xs mt-1 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                <p className={`text-xs mt-1 font-medium ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
                   Maximum: Rs. {(selectedVendor?.balanceAmount || 0).toLocaleString()}
                 </p>
               </div>
@@ -1098,7 +1078,7 @@ const Credit = ({ darkMode }) => {
         </div>
       )}
 
-      {/* ✅ Add Vendor Modal - "New" button REMOVED, only existing products */}
+      {/* Add Vendor Modal - Amber Theme */}
       {isAddModalOpen && (
         <div className="credit-modal-overlay">
           <div className={`credit-modal ${darkMode ? 'dark' : ''}`}>
@@ -1139,11 +1119,10 @@ const Credit = ({ darkMode }) => {
                     <button
                       type="button"
                       onClick={() => setShowProductDropdown(!showProductDropdown)}
-                      className="px-3 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition"
+                      className="px-3 py-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 transition font-bold"
                     >
                       <FiShoppingCart />
                     </button>
-                    {/* ✅ "New" button REMOVED - user can only select existing products */}
                   </div>
                   
                   {showProductDropdown && (
@@ -1161,9 +1140,9 @@ const Credit = ({ darkMode }) => {
                             key={product.id}
                             type="button"
                             onClick={() => handleAddProductToSelection(product)}
-                            className={`w-full text-left px-3 py-2 hover:bg-red-500 hover:text-white transition flex justify-between items-center ${darkMode ? 'text-white hover:bg-red-600' : 'text-gray-900'}`}
+                            className={`w-full text-left px-3 py-2 hover:bg-amber-500 hover:text-white transition flex justify-between items-center ${darkMode ? 'text-white hover:bg-amber-600' : 'text-gray-900'}`}
                           >
-                            <span>{product.name}</span>
+                            <span className="font-medium">{product.name}</span>
                             <span className="text-xs text-gray-400">Stock: {product.quantity}</span>
                           </button>
                         ))
@@ -1171,7 +1150,7 @@ const Credit = ({ darkMode }) => {
                     </div>
                   )}
                 </div>
-                <p className={`text-xs mt-1 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                <p className={`text-xs mt-1 font-medium ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
                   Only products from inventory can be selected
                 </p>
               </div>
@@ -1182,26 +1161,26 @@ const Credit = ({ darkMode }) => {
                   <div className="space-y-2 max-h-40 overflow-y-auto">
                     {selectedProducts.map((item, index) => (
                       <div key={index} className={`flex items-center gap-2 p-2 rounded-lg ${darkMode ? 'bg-gray-800' : 'bg-gray-100'}`}>
-                        <span className="flex-1 font-medium">{item.product_name}</span>
+                        <span className="flex-1 font-bold">{item.product_name}</span>
                         <div className="flex items-center gap-1">
-                          <label className="text-xs">Qty:</label>
+                          <label className="text-xs font-bold">Qty:</label>
                           <input
                             type="number"
                             min="1"
                             value={item.quantity}
                             onChange={(e) => updateSelectedProductQty(index, parseInt(e.target.value) || 1)}
-                            className={`w-16 px-1 py-1 text-sm rounded border ${darkMode ? 'bg-gray-700 border-gray-600 text-white' : 'border-gray-300'}`}
+                            className={`w-16 px-1 py-1 text-sm rounded border font-bold ${darkMode ? 'bg-gray-700 border-gray-600 text-white' : 'border-gray-300'}`}
                           />
                         </div>
                         <div className="flex items-center gap-1">
-                          <label className="text-xs">Price:</label>
+                          <label className="text-xs font-bold">Price:</label>
                           <input
                             type="number"
                             min="0"
                             step="0.01"
                             value={item.purchase_price}
                             onChange={(e) => updateSelectedProductPrice(index, e.target.value)}
-                            className={`w-24 px-1 py-1 text-sm rounded border ${darkMode ? 'bg-gray-700 border-gray-600 text-white' : 'border-gray-300'}`}
+                            className={`w-24 px-1 py-1 text-sm rounded border font-bold ${darkMode ? 'bg-gray-700 border-gray-600 text-white' : 'border-gray-300'}`}
                           />
                         </div>
                         <button
@@ -1214,7 +1193,7 @@ const Credit = ({ darkMode }) => {
                       </div>
                     ))}
                   </div>
-                  <div className={`mt-2 text-sm font-semibold ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+                  <div className={`mt-2 text-sm font-bold ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>
                     Total Amount: Rs. {selectedProducts.reduce((sum, p) => sum + (p.purchase_price * p.quantity), 0).toLocaleString()}
                   </div>
                 </div>

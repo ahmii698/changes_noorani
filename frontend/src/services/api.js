@@ -329,7 +329,73 @@ export const getBatteryStats = async () => {
     return { ...response, data: batterySales };
 };
 
-// API methods for common operations
+// ==================== LEAVE APPLICATION ENDPOINTS ====================
+// ✅ NEW: Leave Application endpoints
+
+// Get all leave applications
+export const getLeaveApplications = async () => {
+    const response = await api.get('/leave-applications');
+    return response.data;
+};
+
+// Get a single leave application by ID
+export const getLeaveApplication = async (id) => {
+    const response = await api.get(`/leave-applications/${id}`);
+    return response.data;
+};
+
+// Create a new leave application
+export const createLeaveApplication = async (data) => {
+    const response = await api.post('/leave-applications', data);
+    return response.data;
+};
+
+// Update a leave application
+export const updateLeaveApplication = async (id, data) => {
+    const response = await api.put(`/leave-applications/${id}`, data);
+    return response.data;
+};
+
+// Delete a leave application
+export const deleteLeaveApplication = async (id) => {
+    const response = await api.delete(`/leave-applications/${id}`);
+    return response.data;
+};
+
+// Update leave application status (Approve/Reject)
+export const updateLeaveStatus = async (id, status, reason = null) => {
+    const response = await api.patch(`/leave-applications/${id}/status`, { 
+        status: status,
+        reason: reason 
+    });
+    return response.data;
+};
+
+// Get leave applications by user
+export const getLeaveByUser = async (userId) => {
+    const response = await api.get(`/leave-applications/user/${userId}`);
+    return response.data;
+};
+
+// Get leave applications by date range
+export const getLeaveByDateRange = async (from, to) => {
+    const response = await api.get(`/leave-applications/date-range?from=${from}&to=${to}`);
+    return response.data;
+};
+
+// Get leave applications by status
+export const getLeaveByStatus = async (status) => {
+    const response = await api.get(`/leave-applications/status/${status}`);
+    return response.data;
+};
+
+// Get leave statistics (pending, approved, rejected, total)
+export const getLeaveStats = async () => {
+    const response = await api.get('/leave-applications/stats');
+    return response.data;
+};
+
+// ==================== API SERVICE OBJECT ====================
 export const apiService = {
     // Auth
     login: (credentials) => api.post('/login', credentials),
@@ -408,6 +474,18 @@ export const apiService = {
     searchEstimates: searchEstimates,
     duplicateEstimate: duplicateEstimate,
     updateEstimateStatus: updateEstimateStatus,
+    
+    // ✅ Leave Application
+    getLeaveApplications: getLeaveApplications,
+    getLeaveApplication: getLeaveApplication,
+    createLeaveApplication: createLeaveApplication,
+    updateLeaveApplication: updateLeaveApplication,
+    deleteLeaveApplication: deleteLeaveApplication,
+    updateLeaveStatus: updateLeaveStatus,
+    getLeaveByUser: getLeaveByUser,
+    getLeaveByDateRange: getLeaveByDateRange,
+    getLeaveByStatus: getLeaveByStatus,
+    getLeaveStats: getLeaveStats,
 };
 
 export default api;

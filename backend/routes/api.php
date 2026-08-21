@@ -16,6 +16,8 @@ use App\Http\Controllers\CreditPaymentController;
 use App\Http\Controllers\EmployeeController;
 use App\Http\Controllers\SavedCartController;
 use App\Http\Controllers\EstimateController;
+// ✅ LEAVE CONTROLLER - Add this import
+use App\Http\Controllers\LeaveController;
 
 /*
 |--------------------------------------------------------------------------
@@ -163,6 +165,18 @@ Route::prefix('estimates')->group(function () {
     Route::patch('/{id}/status', [EstimateController::class, 'updateStatus']);
     
     Route::delete('/{id}', [EstimateController::class, 'destroy']);
+});
+
+// ==================== ✅ LEAVE APPLICATION ROUTES ====================
+Route::prefix('leaves')->group(function () {
+    // Get all leaves (with optional filters)
+    Route::get('/', [LeaveController::class, 'index']);
+    
+    // Create a new leave record
+    Route::post('/', [LeaveController::class, 'store']);
+    
+    // Delete a leave record
+    Route::delete('/{id}', [LeaveController::class, 'destroy']);
 });
 
 // ==================== PROTECTED ROUTES (Authentication Required) ====================

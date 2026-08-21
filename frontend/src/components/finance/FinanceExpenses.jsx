@@ -1,8 +1,9 @@
 // src/components/finance/FinanceExpenses.jsx
+
 import React, { useState, useEffect, useCallback } from 'react';
 import ExpensesRecord from './ExpensesRecord';
 import EmployeeSalary from './EmployeeSalary';
-import { FiLoader } from 'react-icons/fi';
+import { FiLoader, FiPackage, FiUsers } from 'react-icons/fi';
 import api from '../../services/api';
 import toast from 'react-hot-toast';
 
@@ -93,7 +94,7 @@ const FinanceExpenses = ({ darkMode }) => {
     return (
       <div className={`min-h-[400px] flex items-center justify-center ${darkMode ? 'bg-gray-900' : 'bg-gray-100'}`}>
         <div className="text-center">
-          <FiLoader className="text-5xl text-red-500 animate-spin mx-auto mb-4" />
+          <FiLoader className="text-5xl text-amber-400 animate-spin mx-auto mb-4" />
           <p className={`${darkMode ? 'text-white' : 'text-gray-700'}`}>Loading...</p>
         </div>
       </div>
@@ -101,28 +102,30 @@ const FinanceExpenses = ({ darkMode }) => {
   }
 
   return (
-    <div className="space-y-6">
-      {/* Tabs */}
-      <div className={`flex gap-2 p-1 rounded-xl ${darkMode ? 'bg-gray-800' : 'bg-gray-100'}`}>
+    <div className="space-y-4">
+      {/* Tabs - Amber Theme */}
+      <div className={`flex gap-1.5 p-1 rounded-xl ${darkMode ? 'bg-gray-800' : 'bg-gray-100'}`}>
         <button
           onClick={() => setActiveTab('expenses')}
-          className={`flex-1 px-4 py-2 rounded-lg text-sm font-medium transition ${
+          className={`flex-1 px-4 py-2.5 rounded-lg text-sm font-bold transition flex items-center justify-center gap-2 ${
             activeTab === 'expenses'
-              ? 'bg-red-500 text-white shadow-lg'
-              : darkMode ? 'text-gray-400 hover:text-white' : 'text-gray-600 hover:text-gray-800'
+              ? 'bg-amber-400 text-gray-900 shadow-md'
+              : darkMode ? 'text-gray-400 hover:text-white hover:bg-gray-700' : 'text-gray-600 hover:text-gray-800 hover:bg-gray-200'
           }`}
         >
-          📋 Other Expenses
+          <FiPackage className="text-base" />
+          Other Expenses
         </button>
         <button
           onClick={() => setActiveTab('salaries')}
-          className={`flex-1 px-4 py-2 rounded-lg text-sm font-medium transition ${
+          className={`flex-1 px-4 py-2.5 rounded-lg text-sm font-bold transition flex items-center justify-center gap-2 ${
             activeTab === 'salaries'
-              ? 'bg-red-500 text-white shadow-lg'
-              : darkMode ? 'text-gray-400 hover:text-white' : 'text-gray-600 hover:text-gray-800'
+              ? 'bg-amber-400 text-gray-900 shadow-md'
+              : darkMode ? 'text-gray-400 hover:text-white hover:bg-gray-700' : 'text-gray-600 hover:text-gray-800 hover:bg-gray-200'
           }`}
         >
-          👨‍💼 Employee Salaries
+          <FiUsers className="text-base" />
+          Employee Salaries
         </button>
       </div>
 
@@ -133,19 +136,20 @@ const FinanceExpenses = ({ darkMode }) => {
           onAddExpense={handleAddExpense} 
           onUpdateExpense={handleUpdateExpense} 
           darkMode={darkMode} 
+          refreshExpenses={fetchExpenses}
         />
       ) : (
         <EmployeeSalary 
-          darkMode={darkMode}  // ✅ Sirf darkMode pass karo, EmployeeSalary apne aap data fetch karega
+          darkMode={darkMode}
         />
       )}
       
       {error && (
-        <div className="p-4 bg-red-50 dark:bg-red-900/20 rounded-lg text-center border border-red-200 dark:border-red-800">
-          <p className="text-sm text-red-700 dark:text-red-400">⚠️ {error}</p>
+        <div className={`p-4 rounded-xl text-center border ${darkMode ? 'bg-red-900/20 border-red-800' : 'bg-red-50 border-red-200'}`}>
+          <p className={`text-sm font-bold ${darkMode ? 'text-red-400' : 'text-red-700'}`}>⚠️ {error}</p>
           <button 
             onClick={fetchExpenses}
-            className="mt-2 px-4 py-1 bg-red-500 text-white rounded-lg text-sm hover:bg-red-600 transition"
+            className="mt-2 px-4 py-1.5 bg-amber-400 text-gray-900 rounded-lg text-sm font-bold hover:bg-amber-300 transition"
           >
             Retry
           </button>

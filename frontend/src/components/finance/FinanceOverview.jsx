@@ -235,6 +235,9 @@ const FinanceOverview = ({ darkMode }) => {
   const [showMonthExpenses, setShowMonthExpenses] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+
+  // ✅ Collapse/expand state for the stats card rows (like Low Stock Alerts)
+  const [showAllStats, setShowAllStats] = useState(false);
   
   // Pagination state for yearly report
   const [currentPage, setCurrentPage] = useState(1);
@@ -878,209 +881,230 @@ const FinanceOverview = ({ darkMode }) => {
         </span>
       </div>
 
-      {/* ✅ DYNAMIC FILTERED SALES CARD */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <div className={`rounded-xl p-4 border ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200 shadow-sm'}`}>
-          <div className="flex items-center gap-2 mb-1">
-            <div className="p-1.5 rounded-full bg-amber-500/15">
-              <FiDollarSign className="text-sm text-amber-400" />
-            </div>
-            <span className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>{getFilterLabel()} Sales</span>
+      {/* ✅ COLLAPSIBLE STATS SECTION - like Low Stock Alerts */}
+      <div className={`rounded-xl border ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200 shadow-sm'}`}>
+        <button
+          onClick={() => setShowAllStats(!showAllStats)}
+          className="w-full px-4 py-3 flex justify-between items-center hover:bg-amber-50 dark:hover:bg-amber-900/20 transition"
+        >
+          <div className="flex items-center gap-2">
+            <FiBarChart2 className="text-amber-400 text-lg" />
+            <h3 className="text-sm font-semibold">Financial Snapshot</h3>
           </div>
-          <p className={`text-lg font-bold ${darkMode ? 'text-white' : 'text-gray-900'}`}>Rs. {filteredSalesData.total.toLocaleString()}</p>
-          <p className={`text-xs ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>{filteredSalesData.items} items sold</p>
-          <p className={`text-xs text-emerald-400`}>Profit: Rs. {filteredSalesData.profit.toLocaleString()}</p>
-        </div>
-        
-        <div className={`rounded-xl p-4 border ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200 shadow-sm'}`}>
-          <div className="flex items-center gap-2 mb-1">
-            <div className="p-1.5 rounded-full bg-blue-500/15">
-              <FiTrendingDown className="text-sm text-blue-400" />
-            </div>
-            <span className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>{getFilterLabel()} Expenses</span>
-          </div>
-          <p className={`text-lg font-bold ${darkMode ? 'text-white' : 'text-gray-900'}`}>Rs. {filteredStats.expenses.toLocaleString()}</p>
-          <p className={`text-xs ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>{filteredStats.expenseCount} transactions</p>
-        </div>
-        
-        <div className={`rounded-xl p-4 border ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200 shadow-sm'}`}>
-          <div className="flex items-center gap-2 mb-1">
-            <div className={`p-1.5 rounded-full ${filteredStats.profit >= 0 ? 'bg-emerald-500/15' : 'bg-red-500/15'}`}>
-              <FiTrendingUp className={`text-sm ${filteredStats.profit >= 0 ? 'text-emerald-400' : 'text-red-400'}`} />
-            </div>
-            <span className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>{getFilterLabel()} Profit</span>
-          </div>
-          <p className={`text-lg font-bold ${filteredStats.profit >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-            Rs. {filteredStats.profit.toLocaleString()}
-          </p>
-          <p className={`text-xs ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>After expenses</p>
-        </div>
-      </div>
+          {showAllStats ? <FiChevronUp className="text-gray-500" /> : <FiChevronDown className="text-gray-500" />}
+        </button>
 
-      {/* Sales Cards - Clean Design */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <div className={`rounded-xl p-4 border cursor-pointer hover:scale-[1.02] transition ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200 shadow-sm'}`} onClick={() => setShowTodayDetails(!showTodayDetails)}>
-          <div className="flex items-center gap-2 mb-1">
-            <div className="p-1.5 rounded-full bg-amber-500/15">
-              <FiCalendar className="text-sm text-amber-400" />
+        <div className="p-4 pt-0 space-y-3">
+          {/* ✅ DYNAMIC FILTERED SALES CARD - always visible (row 1) */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className={`rounded-xl p-4 border ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200 shadow-sm'}`}>
+              <div className="flex items-center gap-2 mb-1">
+                <div className="p-1.5 rounded-full bg-amber-500/15">
+                  <FiDollarSign className="text-sm text-amber-400" />
+                </div>
+                <span className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>{getFilterLabel()} Sales</span>
+              </div>
+              <p className={`text-lg font-bold ${darkMode ? 'text-white' : 'text-gray-900'}`}>Rs. {filteredSalesData.total.toLocaleString()}</p>
+              <p className={`text-xs ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>{filteredSalesData.items} items sold</p>
+              <p className={`text-xs text-emerald-400`}>Profit: Rs. {filteredSalesData.profit.toLocaleString()}</p>
             </div>
-            <span className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Today's Sales</span>
-          </div>
-          <p className={`text-lg font-bold ${darkMode ? 'text-white' : 'text-gray-900'}`}>Rs. {todaySales.total.toLocaleString()}</p>
-          <p className={`text-xs ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>{todaySales.items} items sold</p>
-          <p className={`text-xs text-emerald-400`}>Profit: Rs. {todaySales.profit.toLocaleString()}</p>
-          <p className={`text-xs mt-1 flex items-center gap-1 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}><FiClock className="text-xs" /> Click for details</p>
-        </div>
-        
-        <div className={`rounded-xl p-4 border cursor-pointer hover:scale-[1.02] transition ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200 shadow-sm'}`} onClick={() => setShowWeekDetails(!showWeekDetails)}>
-          <div className="flex items-center gap-2 mb-1">
-            <div className="p-1.5 rounded-full bg-amber-500/15">
-              <FiTrendingUp className="text-sm text-amber-400" />
+            
+            <div className={`rounded-xl p-4 border ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200 shadow-sm'}`}>
+              <div className="flex items-center gap-2 mb-1">
+                <div className="p-1.5 rounded-full bg-blue-500/15">
+                  <FiTrendingDown className="text-sm text-blue-400" />
+                </div>
+                <span className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>{getFilterLabel()} Expenses</span>
+              </div>
+              <p className={`text-lg font-bold ${darkMode ? 'text-white' : 'text-gray-900'}`}>Rs. {filteredStats.expenses.toLocaleString()}</p>
+              <p className={`text-xs ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>{filteredStats.expenseCount} transactions</p>
             </div>
-            <span className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>This Week's Sales</span>
-          </div>
-          <p className={`text-lg font-bold ${darkMode ? 'text-white' : 'text-gray-900'}`}>Rs. {weeklySales.total.toLocaleString()}</p>
-          <p className={`text-xs ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>{weeklySales.items} items sold</p>
-          <p className={`text-xs text-emerald-400`}>Profit: Rs. {weeklySales.profit.toLocaleString()}</p>
-          <p className={`text-xs mt-1 flex items-center gap-1 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}><FiClock className="text-xs" /> Click for details</p>
-        </div>
-        
-        <div className={`rounded-xl p-4 border cursor-pointer hover:scale-[1.02] transition ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200 shadow-sm'}`} onClick={() => setShowMonthDetails(!showMonthDetails)}>
-          <div className="flex items-center gap-2 mb-1">
-            <div className="p-1.5 rounded-full bg-amber-500/15">
-              <FiDollarSign className="text-sm text-amber-400" />
+            
+            <div className={`rounded-xl p-4 border ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200 shadow-sm'}`}>
+              <div className="flex items-center gap-2 mb-1">
+                <div className={`p-1.5 rounded-full ${filteredStats.profit >= 0 ? 'bg-emerald-500/15' : 'bg-red-500/15'}`}>
+                  <FiTrendingUp className={`text-sm ${filteredStats.profit >= 0 ? 'text-emerald-400' : 'text-red-400'}`} />
+                </div>
+                <span className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>{getFilterLabel()} Profit</span>
+              </div>
+              <p className={`text-lg font-bold ${filteredStats.profit >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                Rs. {filteredStats.profit.toLocaleString()}
+              </p>
+              <p className={`text-xs ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>After expenses</p>
             </div>
-            <span className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>This Month's Sales</span>
           </div>
-          <p className={`text-lg font-bold ${darkMode ? 'text-white' : 'text-gray-900'}`}>Rs. {monthlySales.total.toLocaleString()}</p>
-          <p className={`text-xs ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>{monthlySales.items} items sold</p>
-          <p className={`text-xs text-emerald-400`}>Profit: Rs. {monthlySales.profit.toLocaleString()}</p>
-          <p className={`text-xs mt-1 flex items-center gap-1 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}><FiClock className="text-xs" /> Click for details</p>
-        </div>
-      </div>
 
-      {showTodayDetails && <InvoiceDetails title="Today's Sales" data={todaySales} darkMode={darkMode} onClose={() => setShowTodayDetails(false)} />}
-      {showWeekDetails && <InvoiceDetails title="This Week's Sales" data={weeklySales} darkMode={darkMode} onClose={() => setShowWeekDetails(false)} />}
-      {showMonthDetails && <InvoiceDetails title="This Month's Sales" data={monthlySales} darkMode={darkMode} onClose={() => setShowMonthDetails(false)} />}
+          {/* Sales Cards - always visible (row 2) */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className={`rounded-xl p-4 border cursor-pointer hover:scale-[1.02] transition ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200 shadow-sm'}`} onClick={() => setShowTodayDetails(!showTodayDetails)}>
+              <div className="flex items-center gap-2 mb-1">
+                <div className="p-1.5 rounded-full bg-amber-500/15">
+                  <FiCalendar className="text-sm text-amber-400" />
+                </div>
+                <span className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Today's Sales</span>
+              </div>
+              <p className={`text-lg font-bold ${darkMode ? 'text-white' : 'text-gray-900'}`}>Rs. {todaySales.total.toLocaleString()}</p>
+              <p className={`text-xs ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>{todaySales.items} items sold</p>
+              <p className={`text-xs text-emerald-400`}>Profit: Rs. {todaySales.profit.toLocaleString()}</p>
+              <p className={`text-xs mt-1 flex items-center gap-1 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}><FiClock className="text-xs" /> Click for details</p>
+            </div>
+            
+            <div className={`rounded-xl p-4 border cursor-pointer hover:scale-[1.02] transition ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200 shadow-sm'}`} onClick={() => setShowWeekDetails(!showWeekDetails)}>
+              <div className="flex items-center gap-2 mb-1">
+                <div className="p-1.5 rounded-full bg-amber-500/15">
+                  <FiTrendingUp className="text-sm text-amber-400" />
+                </div>
+                <span className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>This Week's Sales</span>
+              </div>
+              <p className={`text-lg font-bold ${darkMode ? 'text-white' : 'text-gray-900'}`}>Rs. {weeklySales.total.toLocaleString()}</p>
+              <p className={`text-xs ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>{weeklySales.items} items sold</p>
+              <p className={`text-xs text-emerald-400`}>Profit: Rs. {weeklySales.profit.toLocaleString()}</p>
+              <p className={`text-xs mt-1 flex items-center gap-1 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}><FiClock className="text-xs" /> Click for details</p>
+            </div>
+            
+            <div className={`rounded-xl p-4 border cursor-pointer hover:scale-[1.02] transition ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200 shadow-sm'}`} onClick={() => setShowMonthDetails(!showMonthDetails)}>
+              <div className="flex items-center gap-2 mb-1">
+                <div className="p-1.5 rounded-full bg-amber-500/15">
+                  <FiDollarSign className="text-sm text-amber-400" />
+                </div>
+                <span className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>This Month's Sales</span>
+              </div>
+              <p className={`text-lg font-bold ${darkMode ? 'text-white' : 'text-gray-900'}`}>Rs. {monthlySales.total.toLocaleString()}</p>
+              <p className={`text-xs ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>{monthlySales.items} items sold</p>
+              <p className={`text-xs text-emerald-400`}>Profit: Rs. {monthlySales.profit.toLocaleString()}</p>
+              <p className={`text-xs mt-1 flex items-center gap-1 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}><FiClock className="text-xs" /> Click for details</p>
+            </div>
+          </div>
 
-      {/* Expense Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <div className={`rounded-xl p-4 border cursor-pointer hover:scale-[1.02] transition ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200 shadow-sm'}`} onClick={() => setShowTodayExpenses(!showTodayExpenses)}>
-          <div className="flex items-center gap-2 mb-1">
-            <div className="p-1.5 rounded-full bg-blue-500/15">
-              <FiTrendingDown className="text-sm text-blue-400" />
-            </div>
-            <span className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Today's Expenses</span>
-          </div>
-          <p className={`text-lg font-bold ${darkMode ? 'text-white' : 'text-gray-900'}`}>Rs. {stats.todayExpenses.toLocaleString()}</p>
-          <p className={`text-xs ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>{stats.todayExpenseCount} transactions</p>
-          <p className={`text-xs mt-1 flex items-center gap-1 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}><FiClock className="text-xs" /> Click for details</p>
-        </div>
-        
-        <div className={`rounded-xl p-4 border cursor-pointer hover:scale-[1.02] transition ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200 shadow-sm'}`} onClick={() => setShowWeekExpenses(!showWeekExpenses)}>
-          <div className="flex items-center gap-2 mb-1">
-            <div className="p-1.5 rounded-full bg-blue-500/15">
-              <FiTrendingDown className="text-sm text-blue-400" />
-            </div>
-            <span className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>This Week's Expenses</span>
-          </div>
-          <p className={`text-lg font-bold ${darkMode ? 'text-white' : 'text-gray-900'}`}>Rs. {stats.weekExpenses.toLocaleString()}</p>
-          <p className={`text-xs ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>{stats.weekExpenseCount} transactions</p>
-          <p className={`text-xs mt-1 flex items-center gap-1 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}><FiClock className="text-xs" /> Click for details</p>
-        </div>
-        
-        <div className={`rounded-xl p-4 border cursor-pointer hover:scale-[1.02] transition ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200 shadow-sm'}`} onClick={() => setShowMonthExpenses(!showMonthExpenses)}>
-          <div className="flex items-center gap-2 mb-1">
-            <div className="p-1.5 rounded-full bg-blue-500/15">
-              <FiTrendingDown className="text-sm text-blue-400" />
-            </div>
-            <span className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>This Month's Expenses</span>
-          </div>
-          <p className={`text-lg font-bold ${darkMode ? 'text-white' : 'text-gray-900'}`}>Rs. {stats.monthExpenses.toLocaleString()}</p>
-          <p className={`text-xs ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>{stats.monthExpenseCount} transactions</p>
-          <p className={`text-xs mt-1 flex items-center gap-1 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}><FiClock className="text-xs" /> Click for details</p>
-        </div>
-      </div>
+          {showTodayDetails && <InvoiceDetails title="Today's Sales" data={todaySales} darkMode={darkMode} onClose={() => setShowTodayDetails(false)} />}
+          {showWeekDetails && <InvoiceDetails title="This Week's Sales" data={weeklySales} darkMode={darkMode} onClose={() => setShowWeekDetails(false)} />}
+          {showMonthDetails && <InvoiceDetails title="This Month's Sales" data={monthlySales} darkMode={darkMode} onClose={() => setShowMonthDetails(false)} />}
 
-      {showTodayExpenses && <ExpenseDetails title="Today's Expenses" expenses={todayExpenseDetails} darkMode={darkMode} onClose={() => setShowTodayExpenses(false)} />}
-      {showWeekExpenses && <ExpenseDetails title="This Week's Expenses" expenses={weekExpenseDetails} darkMode={darkMode} onClose={() => setShowWeekExpenses(false)} />}
-      {showMonthExpenses && <ExpenseDetails title="This Month's Expenses" expenses={monthExpenseDetails} darkMode={darkMode} onClose={() => setShowMonthExpenses(false)} />}
+          {/* ✅ REST OF STAT ROWS - only visible when expanded */}
+          {showAllStats && (
+            <>
+              {/* Expense Cards */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className={`rounded-xl p-4 border cursor-pointer hover:scale-[1.02] transition ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200 shadow-sm'}`} onClick={() => setShowTodayExpenses(!showTodayExpenses)}>
+                  <div className="flex items-center gap-2 mb-1">
+                    <div className="p-1.5 rounded-full bg-blue-500/15">
+                      <FiTrendingDown className="text-sm text-blue-400" />
+                    </div>
+                    <span className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Today's Expenses</span>
+                  </div>
+                  <p className={`text-lg font-bold ${darkMode ? 'text-white' : 'text-gray-900'}`}>Rs. {stats.todayExpenses.toLocaleString()}</p>
+                  <p className={`text-xs ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>{stats.todayExpenseCount} transactions</p>
+                  <p className={`text-xs mt-1 flex items-center gap-1 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}><FiClock className="text-xs" /> Click for details</p>
+                </div>
+                
+                <div className={`rounded-xl p-4 border cursor-pointer hover:scale-[1.02] transition ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200 shadow-sm'}`} onClick={() => setShowWeekExpenses(!showWeekExpenses)}>
+                  <div className="flex items-center gap-2 mb-1">
+                    <div className="p-1.5 rounded-full bg-blue-500/15">
+                      <FiTrendingDown className="text-sm text-blue-400" />
+                    </div>
+                    <span className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>This Week's Expenses</span>
+                  </div>
+                  <p className={`text-lg font-bold ${darkMode ? 'text-white' : 'text-gray-900'}`}>Rs. {stats.weekExpenses.toLocaleString()}</p>
+                  <p className={`text-xs ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>{stats.weekExpenseCount} transactions</p>
+                  <p className={`text-xs mt-1 flex items-center gap-1 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}><FiClock className="text-xs" /> Click for details</p>
+                </div>
+                
+                <div className={`rounded-xl p-4 border cursor-pointer hover:scale-[1.02] transition ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200 shadow-sm'}`} onClick={() => setShowMonthExpenses(!showMonthExpenses)}>
+                  <div className="flex items-center gap-2 mb-1">
+                    <div className="p-1.5 rounded-full bg-blue-500/15">
+                      <FiTrendingDown className="text-sm text-blue-400" />
+                    </div>
+                    <span className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>This Month's Expenses</span>
+                  </div>
+                  <p className={`text-lg font-bold ${darkMode ? 'text-white' : 'text-gray-900'}`}>Rs. {stats.monthExpenses.toLocaleString()}</p>
+                  <p className={`text-xs ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>{stats.monthExpenseCount} transactions</p>
+                  <p className={`text-xs mt-1 flex items-center gap-1 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}><FiClock className="text-xs" /> Click for details</p>
+                </div>
+              </div>
 
-      {/* Profit Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <div className={`rounded-xl p-4 border ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200 shadow-sm'}`}>
-          <div className="flex items-center gap-2 mb-1">
-            <div className={`p-1.5 rounded-full ${stats.todayProfit >= 0 ? 'bg-emerald-500/15' : 'bg-red-500/15'}`}>
-              <FiTrendingUp className={`text-sm ${stats.todayProfit >= 0 ? 'text-emerald-400' : 'text-red-400'}`} />
-            </div>
-            <span className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Today's Profit</span>
-          </div>
-          <p className={`text-lg font-bold ${stats.todayProfit >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-            Rs. {stats.todayProfit?.toLocaleString() || 0}
-          </p>
-          <p className={`text-xs ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>After expenses</p>
-        </div>
-        
-        <div className={`rounded-xl p-4 border ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200 shadow-sm'}`}>
-          <div className="flex items-center gap-2 mb-1">
-            <div className={`p-1.5 rounded-full ${stats.weekProfit >= 0 ? 'bg-emerald-500/15' : 'bg-red-500/15'}`}>
-              <FiTrendingUp className={`text-sm ${stats.weekProfit >= 0 ? 'text-emerald-400' : 'text-red-400'}`} />
-            </div>
-            <span className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>This Week's Profit</span>
-          </div>
-          <p className={`text-lg font-bold ${stats.weekProfit >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-            Rs. {stats.weekProfit?.toLocaleString() || 0}
-          </p>
-          <p className={`text-xs ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>After expenses</p>
-        </div>
-        
-        <div className={`rounded-xl p-4 border ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200 shadow-sm'}`}>
-          <div className="flex items-center gap-2 mb-1">
-            <div className={`p-1.5 rounded-full ${stats.monthProfit >= 0 ? 'bg-emerald-500/15' : 'bg-red-500/15'}`}>
-              <FiTrendingUp className={`text-sm ${stats.monthProfit >= 0 ? 'text-emerald-400' : 'text-red-400'}`} />
-            </div>
-            <span className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>This Month's Profit</span>
-          </div>
-          <p className={`text-lg font-bold ${stats.monthProfit >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-            Rs. {stats.monthProfit?.toLocaleString() || 0}
-          </p>
-          <p className={`text-xs ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>After expenses</p>
-        </div>
-      </div>
+              {showTodayExpenses && <ExpenseDetails title="Today's Expenses" expenses={todayExpenseDetails} darkMode={darkMode} onClose={() => setShowTodayExpenses(false)} />}
+              {showWeekExpenses && <ExpenseDetails title="This Week's Expenses" expenses={weekExpenseDetails} darkMode={darkMode} onClose={() => setShowWeekExpenses(false)} />}
+              {showMonthExpenses && <ExpenseDetails title="This Month's Expenses" expenses={monthExpenseDetails} darkMode={darkMode} onClose={() => setShowMonthExpenses(false)} />}
 
-      {/* Discount Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <div className={`rounded-xl p-4 border ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200 shadow-sm'}`}>
-          <div className="flex items-center gap-2 mb-1">
-            <div className="p-1.5 rounded-full bg-purple-500/15">
-              <FiGift className="text-sm text-purple-400" />
-            </div>
-            <span className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Today's Discount</span>
-          </div>
-          <p className={`text-lg font-bold ${darkMode ? 'text-white' : 'text-gray-900'}`}>Rs. {stats.todayDiscount?.toLocaleString() || 0}</p>
-          <p className={`text-xs ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>Given today</p>
-        </div>
-        
-        <div className={`rounded-xl p-4 border ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200 shadow-sm'}`}>
-          <div className="flex items-center gap-2 mb-1">
-            <div className="p-1.5 rounded-full bg-purple-500/15">
-              <FiGift className="text-sm text-purple-400" />
-            </div>
-            <span className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>This Week's Discount</span>
-          </div>
-          <p className={`text-lg font-bold ${darkMode ? 'text-white' : 'text-gray-900'}`}>Rs. {stats.weekDiscount?.toLocaleString() || 0}</p>
-          <p className={`text-xs ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>Given this week</p>
-        </div>
-        
-        <div className={`rounded-xl p-4 border ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200 shadow-sm'}`}>
-          <div className="flex items-center gap-2 mb-1">
-            <div className="p-1.5 rounded-full bg-purple-500/15">
-              <FiGift className="text-sm text-purple-400" />
-            </div>
-            <span className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>This Month's Discount</span>
-          </div>
-          <p className={`text-lg font-bold ${darkMode ? 'text-white' : 'text-gray-900'}`}>Rs. {stats.monthDiscount?.toLocaleString() || 0}</p>
-          <p className={`text-xs ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>Given this month</p>
+              {/* Profit Cards */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className={`rounded-xl p-4 border ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200 shadow-sm'}`}>
+                  <div className="flex items-center gap-2 mb-1">
+                    <div className={`p-1.5 rounded-full ${stats.todayProfit >= 0 ? 'bg-emerald-500/15' : 'bg-red-500/15'}`}>
+                      <FiTrendingUp className={`text-sm ${stats.todayProfit >= 0 ? 'text-emerald-400' : 'text-red-400'}`} />
+                    </div>
+                    <span className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Today's Profit</span>
+                  </div>
+                  <p className={`text-lg font-bold ${stats.todayProfit >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                    Rs. {stats.todayProfit?.toLocaleString() || 0}
+                  </p>
+                  <p className={`text-xs ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>After expenses</p>
+                </div>
+                
+                <div className={`rounded-xl p-4 border ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200 shadow-sm'}`}>
+                  <div className="flex items-center gap-2 mb-1">
+                    <div className={`p-1.5 rounded-full ${stats.weekProfit >= 0 ? 'bg-emerald-500/15' : 'bg-red-500/15'}`}>
+                      <FiTrendingUp className={`text-sm ${stats.weekProfit >= 0 ? 'text-emerald-400' : 'text-red-400'}`} />
+                    </div>
+                    <span className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>This Week's Profit</span>
+                  </div>
+                  <p className={`text-lg font-bold ${stats.weekProfit >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                    Rs. {stats.weekProfit?.toLocaleString() || 0}
+                  </p>
+                  <p className={`text-xs ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>After expenses</p>
+                </div>
+                
+                <div className={`rounded-xl p-4 border ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200 shadow-sm'}`}>
+                  <div className="flex items-center gap-2 mb-1">
+                    <div className={`p-1.5 rounded-full ${stats.monthProfit >= 0 ? 'bg-emerald-500/15' : 'bg-red-500/15'}`}>
+                      <FiTrendingUp className={`text-sm ${stats.monthProfit >= 0 ? 'text-emerald-400' : 'text-red-400'}`} />
+                    </div>
+                    <span className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>This Month's Profit</span>
+                  </div>
+                  <p className={`text-lg font-bold ${stats.monthProfit >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                    Rs. {stats.monthProfit?.toLocaleString() || 0}
+                  </p>
+                  <p className={`text-xs ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>After expenses</p>
+                </div>
+              </div>
+
+              {/* Discount Cards */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className={`rounded-xl p-4 border ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200 shadow-sm'}`}>
+                  <div className="flex items-center gap-2 mb-1">
+                    <div className="p-1.5 rounded-full bg-purple-500/15">
+                      <FiGift className="text-sm text-purple-400" />
+                    </div>
+                    <span className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Today's Discount</span>
+                  </div>
+                  <p className={`text-lg font-bold ${darkMode ? 'text-white' : 'text-gray-900'}`}>Rs. {stats.todayDiscount?.toLocaleString() || 0}</p>
+                  <p className={`text-xs ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>Given today</p>
+                </div>
+                
+                <div className={`rounded-xl p-4 border ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200 shadow-sm'}`}>
+                  <div className="flex items-center gap-2 mb-1">
+                    <div className="p-1.5 rounded-full bg-purple-500/15">
+                      <FiGift className="text-sm text-purple-400" />
+                    </div>
+                    <span className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>This Week's Discount</span>
+                  </div>
+                  <p className={`text-lg font-bold ${darkMode ? 'text-white' : 'text-gray-900'}`}>Rs. {stats.weekDiscount?.toLocaleString() || 0}</p>
+                  <p className={`text-xs ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>Given this week</p>
+                </div>
+                
+                <div className={`rounded-xl p-4 border ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200 shadow-sm'}`}>
+                  <div className="flex items-center gap-2 mb-1">
+                    <div className="p-1.5 rounded-full bg-purple-500/15">
+                      <FiGift className="text-sm text-purple-400" />
+                    </div>
+                    <span className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>This Month's Discount</span>
+                  </div>
+                  <p className={`text-lg font-bold ${darkMode ? 'text-white' : 'text-gray-900'}`}>Rs. {stats.monthDiscount?.toLocaleString() || 0}</p>
+                  <p className={`text-xs ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>Given this month</p>
+                </div>
+              </div>
+            </>
+          )}
         </div>
       </div>
 

@@ -131,9 +131,10 @@ const Sidebar = ({ activeMenu, setActiveMenu, isOpen, setIsOpen, darkMode }) => 
     return () => window.removeEventListener('resize', handleResize);
   }, [isOpen, setIsOpen]);
 
+  // ✅ Logo check with smaller size
   useEffect(() => {
     const img = new Image();
-    img.src = '/logo.jpg';
+    img.src = '/change.png';
     img.onload = () => setLogoExists(true);
     img.onerror = () => setLogoExists(false);
   }, []);
@@ -218,13 +219,17 @@ const Sidebar = ({ activeMenu, setActiveMenu, isOpen, setIsOpen, darkMode }) => 
         ${isMobile && isOpen ? 'left-0' : isMobile && !isOpen ? '-left-72' : ''}
         border-r ${sidebarBorder}
       `}>
-        {/* Logo Section */}
-        <div className={`pt-6 pb-4 px-6 border-b ${dividerColor} flex justify-center ${!isOpen ? 'lg:px-2' : ''}`}>
-          <div className={`flex items-center justify-center overflow-hidden transition-all duration-300 ${isOpen ? 'w-56 h-32 rounded-xl' : 'w-12 h-12 rounded-full'}`}>
+        {/* ✅ Logo Section - Full Width */}
+        <div className={`pt-4 pb-3 border-b ${dividerColor} flex justify-center`}>
+          <div className={`flex items-center justify-center overflow-hidden transition-all duration-300 ${isOpen ? 'w-full h-28' : 'w-12 h-12 rounded-full mx-auto'}`}>
             {logoExists ? (
-              <img src="/logo.jpg" alt="Noorani Logo" className="w-full h-full object-cover" />
+              <img 
+                src="/change.png" 
+                alt="Fusix Logo" 
+                className="w-full h-full object-cover" 
+              />
             ) : (
-              <span className={`text-4xl ${darkMode ? 'text-white' : 'text-gray-900'}`}>❄️</span>
+              <span className={`text-3xl ${darkMode ? 'text-white' : 'text-gray-900'}`}>❄️</span>
             )}
           </div>
         </div>

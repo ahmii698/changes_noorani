@@ -19,7 +19,7 @@ import {
   FiFacebook, FiInstagram, FiGift, FiArchive
 } from 'react-icons/fi';
 import api, { saveCart } from '../../services/api';
-import logo from '/logo.jpg';
+import logo from '/fusix.jpg';
 
 // Icon list for dropdown
 const iconOptions = [
@@ -603,7 +603,7 @@ const BillingInvoice = ({ customerDetails, darkMode, onPaymentSuccess, restoredD
       <!DOCTYPE html>
       <html>
         <head>
-          <title>Noorani Car AC - Invoice</title>
+          <title>FusixTech - Invoice</title>
           <meta charset="UTF-8">
           <style>
             * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -769,17 +769,6 @@ const BillingInvoice = ({ customerDetails, darkMode, onPaymentSuccess, restoredD
               padding-top: 6px;
               min-width: 120px;
             }
-            .footer { 
-              padding: 12px 15px; 
-              background: #f8f9fa; 
-              border-top: 1px solid #e5e7eb; 
-              font-size: 11px; 
-              color: #4b5563; 
-              text-align: center;
-            }
-            .footer .address { margin-bottom: 3px; }
-            .footer .social { margin-top: 4px; }
-            .footer .social span { display: inline-block; margin: 0 6px; }
             .print-actions { 
               text-align: center; 
               margin-top: 20px; 
@@ -811,10 +800,10 @@ const BillingInvoice = ({ customerDetails, darkMode, onPaymentSuccess, restoredD
         <body>
           <div class="invoice-container">
             <div class="header">
-              <img src="${logo}" alt="Noorani Car AC Logo" class="header-logo" />
+              <img src="${logo}" alt="FusixTech Logo" class="header-logo" />
               <div class="header-text">
-                <div class="shop-name">NOORANI CAR A/C & AUTOS</div>
-                <div class="subtitle">Professional Auto Care Service</div>
+                <div class="shop-name">FUSIXTECH</div>
+                <div class="subtitle">NO1 Software House</div>
               </div>
             </div>
             
@@ -889,19 +878,6 @@ const BillingInvoice = ({ customerDetails, darkMode, onPaymentSuccess, restoredD
             <div class="signature">
               <p>Customer Signature: _________________</p>
               <p>Authorized Signature: _________________</p>
-            </div>
-            
-            <div class="footer">
-              <div class="address">
-                Shop # 02, Hospital, Gulshan Luxury Apartments, Near Al Mustafa St, Gulshan 13-B Block 13 B Gulshan-e-Iqbal, Karachi
-              </div>
-              <div style="margin:3px 0;">
-                📞 0337 3267363
-              </div>
-              <div class="social">
-                <span>📘 Facebook: Noorani.Car.AC</span>
-                <span>📷 Instagram: nooranicarac</span>
-              </div>
             </div>
           </div>
           <div class="print-actions">
@@ -1059,12 +1035,12 @@ const BillingInvoice = ({ customerDetails, darkMode, onPaymentSuccess, restoredD
         <div className="flex items-center gap-3">
           <img 
             src={logo} 
-            alt="Noorani Car AC Logo" 
+            alt="FusixTech Logo" 
             className="w-14 h-14 rounded-full object-cover border-2 border-amber-400 shadow-lg flex-shrink-0"
           />
           <div className="flex-1 text-center">
-            <h1 className={`text-xl font-bold ${darkMode ? 'text-white' : 'text-gray-900'}`}>NOORANI CAR A/C & AUTOS</h1>
-            <p className={`text-xs font-medium ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Professional Auto Care Service</p>
+            <h1 className={`text-xl font-bold ${darkMode ? 'text-white' : 'text-gray-900'}`}>FUSIXTECH</h1>
+            <p className={`text-xs font-medium ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>NO1 Software House</p>
           </div>
         </div>
       </div>

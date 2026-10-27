@@ -15,7 +15,7 @@ import {
   FiRefreshCw
 } from 'react-icons/fi';
 import api from '../services/api';
-import logo from '/logo.jpg';
+import logo from '/fusix.jpg';
 
 // ✅ FIXED: Convert date to a JS Date object.
 const toPakistanTime = (dateString) => {
@@ -759,7 +759,7 @@ const Records = ({ darkMode }) => {
       <!DOCTYPE html>
       <html>
         <head>
-          <title>Noorani Car AC - Invoice ${selectedInvoice.invoiceNo}</title>
+          <title>FusixTech - Invoice ${selectedInvoice.invoiceNo}</title>
           <meta charset="UTF-8">
           <style>
             * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -913,17 +913,6 @@ const Records = ({ darkMode }) => {
               color: #2563eb; 
               font-weight: bold; 
             }
-            .footer { 
-              padding: 12px 15px; 
-              background: #f8f9fa; 
-              border-top: 1px solid #e5e7eb; 
-              font-size: 11px; 
-              color: #4b5563; 
-              text-align: center;
-            }
-            .footer .address { margin-bottom: 3px; }
-            .footer .social { margin-top: 4px; }
-            .footer .social span { display: inline-block; margin: 0 6px; }
             .print-actions { 
               text-align: center; 
               margin-top: 20px; 
@@ -955,10 +944,10 @@ const Records = ({ darkMode }) => {
         <body>
           <div class="invoice-container">
             <div class="header">
-              <img src="${logo}" alt="Noorani Car AC Logo" class="header-logo" />
+              <img src="${logo}" alt="FusixTech Logo" class="header-logo" />
               <div class="header-text">
-                <div class="shop-name">NOORANI CAR A/C & AUTOS</div>
-                <div class="subtitle">Professional Auto Care Service</div>
+                <div class="shop-name">FUSIXTECH</div>
+                <div class="subtitle">NO1 Software House</div>
               </div>
             </div>
             
@@ -1026,19 +1015,6 @@ const Records = ({ darkMode }) => {
               <div class="payment-row total-row">
                 <span class="total-label">TOTAL</span>
                 <span class="total-amount">Rs. ${selectedInvoice.total.toLocaleString()}</span>
-              </div>
-            </div>
-            
-            <div class="footer">
-              <div class="address">
-                Shop # 02, Hospital, Gulshan Luxury Apartments, Near Al Mustafa St, Gulshan 13-B Block 13 B Gulshan-e-Iqbal, Karachi
-              </div>
-              <div style="margin:3px 0;">
-                📞 0337 3267363
-              </div>
-              <div class="social">
-                <span>📘 Facebook: https://www.facebook.com/Noorani.Car.AC/</span>
-                <span>📷 Instagram: https://www.instagram.com/nooranicarac/</span>
               </div>
             </div>
           </div>

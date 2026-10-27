@@ -1,6 +1,6 @@
 // src/components/Dashboard.jsx
 
-import React, { useState, useEffect, useCallback, useMemo, lazy, Suspense } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef, lazy, Suspense } from 'react';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { 
@@ -9,7 +9,7 @@ import {
   FiTrendingUp, FiShoppingCart, FiCheckCircle, 
   FiAlertCircle, FiClock, FiArrowRight, FiLoader, FiUsers,
   FiCreditCard, FiCalendar, FiGift, FiChevronDown, FiChevronUp, FiFile,
-  FiBattery, FiArchive, FiMoreVertical
+  FiBattery, FiArchive, FiMoreVertical, FiBell
 } from 'react-icons/fi';
 import { 
   LineChart, Line, BarChart, Bar, AreaChart, Area,
@@ -207,6 +207,12 @@ const Dashboard = () => {
   const [expenses, setExpenses] = useState([]);
   const [invoices, setInvoices] = useState([]);
   const [services, setServices] = useState([]);
+  // ✅ NEW: Employee salary payments (expense ki shakal mein)
+  const [salaryPayments, setSalaryPayments] = useState([]);
+  // ✅ NEW: Cash se kharide hue inventory ka kharcha
+  const [inventoryCashExpenses, setInventoryCashExpenses] = useState([]);
+  // ✅ NEW: Vendor ko jo paisa actually diya gaya (udhaar wala baqi hissa count nahi hota)
+  const [vendorPaymentExpenses, setVendorPaymentExpenses] = useState([]);
 
   useEffect(() => {
     const userData = localStorage.getItem('user');
@@ -226,7 +232,16 @@ const Dashboard = () => {
   }, []);
 
   const productsArray = useMemo(() => Array.isArray(products) ? products : [], [products]);
-  const expensesArray = useMemo(() => Array.isArray(expenses) ? expenses : [], [expenses]);
+  // ✅ CHANGED: normal expenses + salary payments dono mila ke
+  const expensesArray = useMemo(
+    () => [
+      ...(Array.isArray(expenses) ? expenses : []),
+      ...salaryPayments,
+      ...inventoryCashExpenses,
+      ...vendorPaymentExpenses
+    ],
+    [expenses, salaryPayments, inventoryCashExpenses, vendorPaymentExpenses]
+  );
   const invoicesArray = useMemo(() => Array.isArray(invoices) ? invoices : [], [invoices]);
   const servicesArray = useMemo(() => Array.isArray(services) ? services : [], [services]);
 
@@ -415,15 +430,22 @@ const Dashboard = () => {
 
   const COLORS = useMemo(() => ['#fbbf24', '#ef4444', '#22c55e', '#3b82f6', '#a855f7', '#06b6d4', '#f97316', '#ec4899', '#14b8a6', '#94a3b8'], []);
 
-  const fetchAllData = useCallback(async () => {
+  // ✅ CHANGED: /employees bhi fetch hota hai aur salary payments expense ki shakal mein convert hoti hain
+  // silent = true => loader nahi dikhega (background refresh)
+  const fetchAllData = useCallback(async (silent = false) => {
     const abortController = new AbortController();
-    setLoading(true);
+    if (!silent) setLoading(true);
     try {
-      const [productsRes, expensesRes, invoicesRes, servicesRes] = await Promise.all([
+      const [productsRes, expensesRes, invoicesRes, servicesRes, employeesRes, allProductsRes, vendorsRes] = await Promise.all([
         api.get('/products', { signal: abortController.signal }),
         api.get('/expenses', { signal: abortController.signal }),
         api.get('/invoices', { signal: abortController.signal }),
-        api.get('/services', { signal: abortController.signal })
+        api.get('/services', { signal: abortController.signal }),
+        // employees fail ho jaye to baqi dashboard phir bhi chale
+        api.get('/employees', { signal: abortController.signal }).catch(() => null),
+        // hidden products bhi chahiye (kharcha to hua tha), sirf expense hisaab ke liye
+        api.get('/products', { params: { show_hidden: 'true' }, signal: abortController.signal }).catch(() => null),
+        api.get('/credit/vendors', { signal: abortController.signal }).catch(() => null)
       ]);
       
       let productsData = [];
@@ -434,11 +456,100 @@ const Dashboard = () => {
       } else {
         productsData = [];
       }
+
+      // ✅ Employee salary payments ko expenses ki shakal mein convert karo
+      let employeesList = [];
+      if (Array.isArray(employeesRes?.data?.data)) {
+        employeesList = employeesRes.data.data;
+      } else if (Array.isArray(employeesRes?.data)) {
+        employeesList = employeesRes.data;
+      }
+      const salaryList = employeesList.flatMap(emp =>
+        (emp.payments || []).map(p => ({
+          id: `salary-${p.id}`,
+          amount: p.amount,
+          date: p.payment_date || p.created_at,
+          title: `Salary - ${emp.name}`,
+          category: 'Salary'
+        }))
+      );
       
+      // ✅ CASH INVENTORY: jo products vendor se link nahi hain wo cash se kharide gaye
+      // Khareeda hua stock = abhi ka stock + ab tak bika hua stock (invoices se)
+      const parseProductsRes = (res) => {
+        if (res?.data?.success && Array.isArray(res.data.data)) return res.data.data;
+        if (Array.isArray(res?.data)) return res.data;
+        if (Array.isArray(res?.data?.data)) return res.data.data;
+        return [];
+      };
+      const allProductsData = allProductsRes ? parseProductsRes(allProductsRes) : productsData;
+      const invoicesData = Array.isArray(invoicesRes.data) ? invoicesRes.data : [];
+
+      const soldByName = {};
+      invoicesData.forEach(inv => {
+        (inv.items || []).forEach(item => {
+          const key = (item.service_name || '').toLowerCase().trim();
+          if (!key) return;
+          soldByName[key] = (soldByName[key] || 0) + (parseInt(item.quantity || 1) || 0);
+        });
+      });
+
+      const inventoryCashList = allProductsData
+        .filter(p => !(p.credit_vendor || p.vendor_name))
+        .map(p => {
+          const key = (p.name || '').toLowerCase().trim();
+          const purchasedQty = (parseInt(p.quantity) || 0) + (soldByName[key] || 0);
+          return {
+            id: `inventory-${p.id}`,
+            amount: (parseFloat(p.purchase_price) || 0) * purchasedQty,
+            date: p.date_added || p.created_at,
+            title: `Inventory (Cash) - ${p.name}`,
+            category: 'Inventory (Cash)'
+          };
+        })
+        .filter(e => e.amount > 0);
+
+      // ✅ VENDOR CREDIT: sirf wahi paisa expense hai jo vendor ko de diya gaya
+      let vendorRecords = [];
+      if (Array.isArray(vendorsRes?.data?.data)) {
+        vendorRecords = vendorsRes.data.data;
+      } else if (Array.isArray(vendorsRes?.data)) {
+        vendorRecords = vendorsRes.data;
+      }
+
+      const vendorPaymentList = vendorRecords.flatMap(v => {
+        const payments = Array.isArray(v.payments) ? v.payments : [];
+        const paymentsSum = payments.reduce((s, p) => s + (parseFloat(p.amount) || 0), 0);
+
+        const items = payments.map(p => ({
+          id: `vendor-payment-${p.id}`,
+          amount: parseFloat(p.amount) || 0,
+          date: p.date || p.payment_date || p.created_at,
+          title: `Vendor Payment - ${v.vendor_name}`,
+          category: 'Vendor Payment'
+        }));
+
+        // Vendor add karte waqt jo paisa foran diya, agar wo payments table mein nahi to yahan count hoga
+        const initialPaid = (parseFloat(v.paid_amount) || 0) - paymentsSum;
+        if (initialPaid > 0.5) {
+          items.push({
+            id: `vendor-initial-${v.id}`,
+            amount: initialPaid,
+            date: v.created_at,
+            title: `Vendor Payment - ${v.vendor_name}`,
+            category: 'Vendor Payment'
+          });
+        }
+        return items;
+      });
+
       setProducts(productsData);
       setExpenses(Array.isArray(expensesRes.data) ? expensesRes.data : []);
       setInvoices(Array.isArray(invoicesRes.data) ? invoicesRes.data : []);
       setServices(Array.isArray(servicesRes.data) ? servicesRes.data : []);
+      setSalaryPayments(salaryList);
+      setInventoryCashExpenses(inventoryCashList);
+      setVendorPaymentExpenses(vendorPaymentList);
       
     } catch (err) {
       if (err.name !== 'AbortError') {
@@ -448,6 +559,9 @@ const Dashboard = () => {
         setExpenses([]);
         setInvoices([]);
         setServices([]);
+        setSalaryPayments([]);
+        setInventoryCashExpenses([]);
+        setVendorPaymentExpenses([]);
       }
     } finally {
       setLoading(false);
@@ -461,6 +575,17 @@ const Dashboard = () => {
       if (cleanup && typeof cleanup === 'function') cleanup();
     };
   }, [fetchAllData]);
+
+  // ✅ NEW: Dashboard par wapas aane par data refresh (silent, loader nahi dikhega)
+  // Pehli baar load par skip hota hai kyunke upar wala effect pehle hi fetch kar raha hai
+  const isFirstMenuRender = useRef(true);
+  useEffect(() => {
+    if (isFirstMenuRender.current) {
+      isFirstMenuRender.current = false;
+      return;
+    }
+    if (activeMenu === 'all-data') fetchAllData(true);
+  }, [activeMenu, fetchAllData]);
 
   useEffect(() => {
     if (darkMode) {

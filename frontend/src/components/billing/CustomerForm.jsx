@@ -4,28 +4,44 @@ import React, { useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
 import { 
   FiUser, FiPhone, FiCalendar, FiClock, FiTool, FiPackage, 
-  FiCheckCircle, FiAlertCircle, FiX, FiArrowRight, FiLoader, FiMail
+  FiCheckCircle, FiAlertCircle, FiX, FiArrowRight, FiLoader, FiMail, FiLock
 } from 'react-icons/fi';
 import api from '../../services/api';
+
+// 🔒 LOCKED DATE & TIME HELPERS - hamesha system ki local date/time
+const pad2 = (n) => String(n).padStart(2, '0');
+
+// yyyy-mm-dd (LOCAL date - UTC nahi, taake raat 12 ke baad date galat na aaye)
+const getLocalDateISO = (d = new Date()) =>
+  `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+
+// HH:mm:ss (24 hour)
+const getLocalTime24 = (d = new Date()) =>
+  `${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`;
+
+// mm/dd/yyyy (display)
+const getLocalDateDisplay = (d = new Date()) =>
+  `${pad2(d.getMonth() + 1)}/${pad2(d.getDate())}/${d.getFullYear()}`;
+
+// hh:mm:ss AM/PM (display)
+const getLocalTimeDisplay = (d = new Date()) =>
+  d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
 
 const CustomerForm = ({ onCustomerSubmit, initialData, darkMode }) => {
   const [customerDetails, setCustomerDetails] = useState(initialData || {
     name: '',
     phone: '',
     email: '',
-    date: new Date().toISOString().split('T')[0]
+    date: getLocalDateISO()
   });
-  
-  // ✅ Invoice Date & Time states
-  const [invoiceDate, setInvoiceDate] = useState(() => {
-    const today = new Date();
-    return today.toISOString().split('T')[0];
-  });
-  
-  const [invoiceTime, setInvoiceTime] = useState(() => {
-    const now = new Date();
-    return now.toTimeString().slice(0, 5);
-  });
+
+  // 🔒 Live clock - auto update, user change nahi kar sakta
+  const [now, setNow] = useState(() => new Date());
+
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
   
   const [customerHistory, setCustomerHistory] = useState([]);
   const [showHistory, setShowHistory] = useState(false);
@@ -48,24 +64,6 @@ const CustomerForm = ({ onCustomerSubmit, initialData, darkMode }) => {
       setIsAdmin(false);
     }
   }, []);
-
-  // ✅ FORCE UPDATE - Always set current date when component mounts
-  useEffect(() => {
-    const today = new Date();
-    const currentDate = today.toISOString().split('T')[0];
-    setInvoiceDate(currentDate);
-    console.log('📅 Current date set to:', currentDate);
-  }, []);
-
-  // ✅ Update invoiceDate when initialData changes (for restored data)
-  useEffect(() => {
-    if (initialData?.date) {
-      const datePart = initialData.date.split('T')[0];
-      if (datePart) {
-        setInvoiceDate(datePart);
-      }
-    }
-  }, [initialData]);
 
   // Search customer history when phone number changes
   useEffect(() => {
@@ -126,19 +124,15 @@ const CustomerForm = ({ onCustomerSubmit, initialData, darkMode }) => {
     searchCustomerHistory();
   }, [customerDetails.phone]);
 
-  // ✅ Handle submit with Date & Time
+  // ✅ Handle submit - date & time submit ke waqt system se fresh li jati hai
   const handleSubmit = (e) => {
     e.preventDefault();
     
-    const dateTimeStr = `${invoiceDate} ${invoiceTime}:00`;
+    const submitNow = new Date();
+    const lockedDate = getLocalDateISO(submitNow);
+    const lockedTime = getLocalTime24(submitNow);
+    const dateTimeStr = `${lockedDate} ${lockedTime}`;
     const customerName = customerDetails.name?.trim() || 'Walk-in';
-    
-    console.log('📅 Invoice DateTime:', {
-      date: invoiceDate,
-      time: invoiceTime,
-      full: dateTimeStr,
-      name: customerName
-    });
     
     onCustomerSubmit({
       name: customerName,
@@ -156,6 +150,11 @@ const CustomerForm = ({ onCustomerSubmit, initialData, darkMode }) => {
     }
   };
 
+  // 🔒 Locked input style
+  const lockedInputClass = `w-full px-3 py-3 rounded-lg border text-base font-medium outline-none cursor-not-allowed select-none ${
+    darkMode ? 'bg-gray-800/60 border-gray-700 text-gray-300' : 'bg-gray-100 border-gray-300 text-gray-700'
+  }`;
+
   return (
     <div className={`${darkMode ? 'bg-gray-900' : 'bg-white'} rounded-xl border ${darkMode ? 'border-gray-800' : 'border-gray-200 shadow-sm'}`}>
       {/* Header - Amber Theme */}
@@ -170,12 +169,17 @@ const CustomerForm = ({ onCustomerSubmit, initialData, darkMode }) => {
         <div className="text-right">
           <p className={`text-xs font-semibold ${darkMode ? 'text-gray-300' : 'text-gray-500'} flex items-center gap-1 justify-end`}>
             <FiCalendar className="text-xs" /> Date
+            <FiLock className="text-xs text-amber-400" />
           </p>
+          {/* 🔒 Locked date (editable nahi) */}
           <input
-            type="date"
-            value={invoiceDate}
-            onChange={(e) => setInvoiceDate(e.target.value)}
-            className="px-3 py-1.5 rounded-lg text-sm font-medium border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-400 w-40"
+            type="text"
+            value={getLocalDateDisplay(now)}
+            readOnly
+            disabled
+            tabIndex={-1}
+            title="Date automatic hai - change nahi ho sakti"
+            className="px-3 py-1.5 rounded-lg text-sm font-medium border border-gray-300 dark:border-gray-600 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 focus:outline-none w-40 cursor-not-allowed select-none"
           />
         </div>
       </div>
@@ -249,32 +253,35 @@ const CustomerForm = ({ onCustomerSubmit, initialData, darkMode }) => {
             </p>
           </div>
 
-          {/* ✅ Invoice Date & Time */}
+          {/* 🔒 Invoice Date & Time - LOCKED (auto system clock) */}
           <div>
             <label className={`block text-sm font-bold mb-2 flex items-center gap-2 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>
               <FiClock className="text-lg text-amber-400" /> 
               Invoice Date & Time
+              <FiLock className="text-sm text-amber-400" />
             </label>
             <div className="grid grid-cols-2 gap-3">
               <input
-                type="date"
-                value={invoiceDate}
-                onChange={(e) => setInvoiceDate(e.target.value)}
-                className={`px-3 py-3 rounded-lg border text-base font-medium focus:ring-2 focus:ring-amber-400 outline-none transition ${
-                  darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-gray-50 border-gray-300 text-gray-900'
-                }`}
+                type="text"
+                value={getLocalDateDisplay(now)}
+                readOnly
+                disabled
+                tabIndex={-1}
+                title="Date automatic hai - change nahi ho sakti"
+                className={lockedInputClass}
               />
               <input
-                type="time"
-                value={invoiceTime}
-                onChange={(e) => setInvoiceTime(e.target.value)}
-                className={`px-3 py-3 rounded-lg border text-base font-medium focus:ring-2 focus:ring-amber-400 outline-none transition ${
-                  darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-gray-50 border-gray-300 text-gray-900'
-                }`}
+                type="text"
+                value={getLocalTimeDisplay(now)}
+                readOnly
+                disabled
+                tabIndex={-1}
+                title="Time automatic hai - change nahi ho sakta"
+                className={lockedInputClass}
               />
             </div>
             <p className={`text-xs font-medium mt-1.5 ${darkMode ? 'text-gray-400' : 'text-gray-400'} flex items-center gap-1.5`}>
-              <FiClock className="text-sm" /> This date & time will be used for the invoice
+              <FiLock className="text-sm" /> Date & time automatic hain (locked) - invoice isi waqt par banega
             </p>
           </div>
         </div>
@@ -286,7 +293,7 @@ const CustomerForm = ({ onCustomerSubmit, initialData, darkMode }) => {
               <h4 className={`font-bold flex items-center gap-2 text-base ${darkMode ? 'text-amber-400' : 'text-amber-700'}`}>
                 <FiClock className="text-base" /> Previous Visits ({customerHistory.length})
               </h4>
-              <button onClick={() => setShowHistory(false)} className={`text-sm font-semibold ${darkMode ? 'text-gray-400 hover:text-gray-300' : 'text-gray-500 hover:text-gray-700'} flex items-center gap-1`}>
+              <button type="button" onClick={() => setShowHistory(false)} className={`text-sm font-semibold ${darkMode ? 'text-gray-400 hover:text-gray-300' : 'text-gray-500 hover:text-gray-700'} flex items-center gap-1`}>
                 <FiX className="text-sm" /> Hide
               </button>
             </div>
@@ -352,13 +359,7 @@ const CustomerForm = ({ onCustomerSubmit, initialData, darkMode }) => {
           </button>
         </div>
         
-        {/* Note - Amber Theme */}
-        <div className={`mt-4 p-4 rounded-lg text-sm ${darkMode ? 'bg-gray-800 text-gray-300' : 'bg-gray-100 text-gray-600'}`}>
-          <p className="flex items-center gap-2.5 font-medium">
-            <FiClock className="text-xl text-amber-400" />
-            <strong>Note:</strong> All fields are optional. If you provide an email address, we'll automatically send a service reminder after 6 months!
-          </p>
-        </div>
+    
       </form>
     </div>
   );

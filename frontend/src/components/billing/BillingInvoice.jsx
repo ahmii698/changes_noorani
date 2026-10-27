@@ -125,6 +125,25 @@ const formatDateForAPI = (dateStr) => {
   return dateStr;
 };
 
+// 🔒 LOCKED DATE & TIME HELPERS - hamesha system ki local date/time use hoti hai
+const pad2 = (n) => String(n).padStart(2, '0');
+
+// yyyy-mm-dd (LOCAL date, UTC nahi - taake raat 12 ke baad date galat na aaye)
+const getLocalDateISO = (d = new Date()) =>
+  `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+
+// HH:mm:ss (24 hour, API ke liye)
+const getLocalTime24 = (d = new Date()) =>
+  `${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`;
+
+// mm/dd/yyyy (display ke liye)
+const getLocalDateDisplay = (d = new Date()) =>
+  `${pad2(d.getMonth() + 1)}/${pad2(d.getDate())}/${d.getFullYear()}`;
+
+// hh:mm AM/PM (display ke liye)
+const getLocalTimeDisplay = (d = new Date()) =>
+  d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
+
 const loadImageAsBase64 = (src) => {
   return new Promise((resolve, reject) => {
     const img = new Image();
@@ -185,6 +204,9 @@ const BillingInvoice = ({ customerDetails, darkMode, onPaymentSuccess, restoredD
   
   // Draft Bill states
   const [isSavingDraft, setIsSavingDraft] = useState(false);
+
+  // 🔒 Live clock - date/time system se auto aata hai, user change nahi kar sakta
+  const [now, setNow] = useState(() => new Date());
   
   const isProcessingRef = useRef(false);
   const paymentExecutedRef = useRef(false);
@@ -192,8 +214,14 @@ const BillingInvoice = ({ customerDetails, darkMode, onPaymentSuccess, restoredD
   const userRole = getUserRole();
   const isAdmin = userRole === 'admin';
 
-  // Get current date
-  const currentDate = new Date().toISOString().split('T')[0];
+  // 🔒 Current date (LOCAL) - customerDetails.date ko ignore kiya jata hai
+  const currentDate = getLocalDateISO(now);
+
+  // 🔒 Har second clock update
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   // Check for restored data and set cart
   useEffect(() => {
@@ -569,12 +597,10 @@ const BillingInvoice = ({ customerDetails, darkMode, onPaymentSuccess, restoredD
       return;
     }
     
-    const invoiceDate = customerDetails.date ? new Date(customerDetails.date) : new Date();
-    const formattedDate = invoiceDate.toLocaleDateString('en-US', { 
-      month: '2-digit', 
-      day: '2-digit', 
-      year: 'numeric' 
-    });
+    // 🔒 Print par bhi hamesha abhi ki system date/time
+    const printNow = new Date();
+    const formattedDate = getLocalDateDisplay(printNow);
+    const formattedTime = getLocalTimeDisplay(printNow);
     const invoiceNo = `INV-${Date.now()}`;
     
     const cartItemsHtml = cart.map((item, idx) => `
@@ -814,7 +840,7 @@ const BillingInvoice = ({ customerDetails, darkMode, onPaymentSuccess, restoredD
               <div class="info-row"><span class="info-label">Email:</span><span class="info-value">${customerDetails.email || 'N/A'}</span></div>
               <div class="invoice-row">
                 <span><strong>Invoice #:</strong> ${invoiceNo}</span>
-                <span><strong>Date:</strong> ${formattedDate}</span>
+                <span><strong>Date:</strong> ${formattedDate} &nbsp; <strong>Time:</strong> ${formattedTime}</span>
               </div>
             </div>
             
@@ -921,6 +947,11 @@ const BillingInvoice = ({ customerDetails, darkMode, onPaymentSuccess, restoredD
     
     const cartSnapshot = [...cart];
     const invoiceNo = `INV-${Date.now()}`;
+
+    // 🔒 Payment ke waqt ki exact system date & time (user ki di hui date ignore)
+    const paymentMoment = new Date();
+    const lockedInvoiceDate = getLocalDateISO(paymentMoment);
+    const lockedInvoiceTime = getLocalTime24(paymentMoment);
     
     const roundedSubtotal = roundToTwo(subtotal);
     const roundedDiscount = roundToTwo(discountAmount);
@@ -959,7 +990,8 @@ const BillingInvoice = ({ customerDetails, darkMode, onPaymentSuccess, restoredD
         remaining_amount: roundToTwo(exactRemainingAmount),
         payment_method: paymentMethodDisplay,
         status: finalStatus,
-        invoice_date: customerDetails?.date || currentDate,
+        invoice_date: `${lockedInvoiceDate} ${lockedInvoiceTime}`, // 🔒 locked - system date + time (YYYY-MM-DD HH:mm:ss)
+        invoice_time: lockedInvoiceTime,   // 🔒 locked - system time (HH:mm:ss)
         items: cartSnapshot.map(item => ({
           service_name: item.name,
           service_category: 'Product',
@@ -1041,6 +1073,25 @@ const BillingInvoice = ({ customerDetails, darkMode, onPaymentSuccess, restoredD
           <div className="flex-1 text-center">
             <h1 className={`text-xl font-bold ${darkMode ? 'text-white' : 'text-gray-900'}`}>FUSIXTECH</h1>
             <p className={`text-xs font-medium ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>NO1 Software House</p>
+          </div>
+
+          {/* 🔒 Locked Date & Time (auto system clock, edit nahi hota) */}
+          <div
+            className={`flex-shrink-0 px-3 py-1.5 rounded-lg border text-right select-none ${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-gray-100 border-gray-300'}`}
+            title="Date & time automatic hain - change nahi ho sakte"
+          >
+            <div className="flex items-center justify-end gap-1.5">
+              <FiLock className="text-amber-400" size={11} />
+              <span className={`text-xs font-bold ${darkMode ? 'text-white' : 'text-gray-900'}`}>
+                {getLocalDateDisplay(now)}
+              </span>
+            </div>
+            <div className="flex items-center justify-end gap-1.5 mt-0.5">
+              <FiClock className="text-amber-400" size={11} />
+              <span className={`text-xs font-bold ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+                {getLocalTimeDisplay(now)}
+              </span>
+            </div>
           </div>
         </div>
       </div>

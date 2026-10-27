@@ -17,6 +17,19 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Salary System Start
+    |--------------------------------------------------------------------------
+    |
+    | Employee salary months are never counted before this date, no matter how
+    | old the employee's join date is. Old employees (2019, 2025, etc.) start
+    | from this month; new employees follow their own join date.
+    |
+    */
+
+    'salary_system_start' => '2026-11-01',
+
+    /*
+    |--------------------------------------------------------------------------
     | Application Environment
     |--------------------------------------------------------------------------
     |
@@ -60,12 +73,12 @@ return [
     |--------------------------------------------------------------------------
     |
     | Here you may specify the default timezone for your application, which
-    | will be used by the PHP date and date-time functions. The timezone
-    | is set to "UTC" by default as it is suitable for most use cases.
+    | will be used by the PHP date and date-time functions. It is set to
+    | Pakistan time (Karachi) for this application.
     |
     */
 
-    'timezone' => 'UTC',
+    'timezone' => 'Asia/Karachi',
 
     /*
     |--------------------------------------------------------------------------

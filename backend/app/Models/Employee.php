@@ -20,7 +20,6 @@ class Employee extends Model
         'status',
         'created_by',
         'due_date',
-        // ❌ current_cycle_start removed — no longer used in the new month-based system
     ];
 
     protected $casts = [
@@ -49,43 +48,78 @@ class Employee extends Model
     }
 
     // =========================================================================
-    // ✅ NEW: MONTH-BASED SALARY SYSTEM
+    // ✅ MONTH-BASED SALARY SYSTEM
     // =========================================================================
 
     /**
-     * ✅ NEW: Get list of every salary month from join_date to the current month.
-     * Returns an array of 'Y-m' strings, e.g. ['2026-06', '2026-07', '2026-08']
-     * This is the full set of months an employee OWES salary for.
+     * ✅ NEW: Pehla salary cycle month (us mahine ka pehla din, Carbon).
+     *
+     * - join_date aur salary_date dono dekhta hai:
+     *     Join 17 Sep, salary_date 15 → 15 Sep guzar chuki, pehla cycle = Oct
+     *     Join 10 Sep, salary_date 15 → pehla cycle = Sep
+     * - Kabhi bhi system start month (config app.salary_system_start) se pehle
+     *   ka mahina count nahi hota. Purane employees (2019, 2025 wagaira) ka
+     *   hisaab system start se shuru hoga.
+     */
+    public function getFirstCycleMonth(): Carbon
+    {
+        $floor = Carbon::parse(config('app.salary_system_start', '2026-11-01'))->startOfMonth();
+
+        if (!$this->join_date) {
+            return now()->startOfMonth()->lt($floor) ? $floor->copy() : now()->startOfMonth();
+        }
+
+        $join = $this->join_date->copy();
+        $start = $join->copy()->startOfMonth();
+
+        if ($this->salary_date) {
+            $effectiveDay = min($this->salary_date, $join->daysInMonth);
+
+            // Join ke mahine ki salary date guzar chuki thi → agle mahine se shuru
+            if ($join->day > $effectiveDay) {
+                $start = $start->addMonthNoOverflow();
+            }
+        }
+
+        return $start->lt($floor) ? $floor->copy() : $start;
+    }
+
+    /**
+     * ✅ UPDATED: Pehle cycle se lekar current month tak har salary month.
+     * Returns 'Y-m' strings, e.g. ['2026-11', '2026-12'].
+     * Kam az kam pehla cycle hamesha shamil hota hai.
      */
     public function getMonthsSinceJoinList(): array
     {
-        if (!$this->join_date) {
-            return [now()->format('Y-m')];
+        $start = $this->getFirstCycleMonth();
+        $end = now()->startOfMonth();
+
+        // Naya employee → kam az kam 1 mahina pending dikhao
+        if ($end->lt($start)) {
+            $end = $start->copy();
         }
 
         $months = [];
-        $cursor = $this->join_date->copy()->startOfMonth();
-        $end = now()->startOfMonth();
+        $cursor = $start->copy();
 
         while ($cursor->lte($end)) {
             $months[] = $cursor->format('Y-m');
-            $cursor->addMonth();
+            $cursor->addMonthNoOverflow();
         }
 
         return $months;
     }
 
     /**
-     * ✅ NEW: Full month-by-month breakdown for the History view.
-     * Every month from join_date to now shows up — even months with
-     * NO payment at all (they show as Pending with paid = 0).
+     * Full month-by-month breakdown for the History view.
+     * Pehle cycle se ab tak har mahina dikhta hai — payment na ho tab bhi (Pending).
      */
     public function getMonthlyBreakdown()
     {
         $months = $this->getMonthsSinceJoinList();
         $currentMonth = now()->format('Y-m');
 
-        // ✅ Get all payments grouped by for_month in one query (efficient)
+        // Saari payments for_month ke hisaab se ek query mein
         $paidByMonth = $this->payments()
             ->whereNotNull('for_month')
             ->selectRaw('for_month, SUM(amount) as total')
@@ -120,9 +154,8 @@ class Employee extends Model
     }
 
     /**
-     * ✅ NEW: List of months that still have an outstanding balance
-     * (used to populate the "which month are you paying?" dropdown).
-     * Oldest unpaid month first, so Ahmii pays in order.
+     * Wo mahine jinka balance abhi baqi hai ("which month are you paying?" dropdown).
+     * Sab se purana unpaid mahina pehle.
      */
     public function getUnpaidMonths()
     {
@@ -133,8 +166,7 @@ class Employee extends Model
     }
 
     // =========================================================================
-    // ✅ UPDATED: Balance now = total owed across ALL months since join,
-    // minus total paid across all time. No more "current cycle" concept.
+    // Balance = pehle cycle se ab tak ki total salary - total paid
     // =========================================================================
     public function updateBalance()
     {
@@ -200,7 +232,7 @@ class Employee extends Model
         return 'Rs. ' . number_format($this->balance_amount, 0);
     }
 
-    // ✅ Get payment percentage (against total due since join, not just one month)
+    // ✅ Get payment percentage (total due ke against, pehle cycle se)
     public function getPaymentPercentageAttribute()
     {
         $monthsSinceJoin = $this->getMonthsSinceJoinList();
@@ -257,7 +289,7 @@ class Employee extends Model
         return $this->join_date->format('d/m/Y');
     }
 
-    // ✅ Get months since joined (count)
+    // ✅ Get months counted (count)
     public function getMonthsSinceJoinedAttribute()
     {
         return count($this->getMonthsSinceJoinList());

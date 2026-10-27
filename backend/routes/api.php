@@ -18,6 +18,8 @@ use App\Http\Controllers\SavedCartController;
 use App\Http\Controllers\EstimateController;
 // ✅ LEAVE CONTROLLER - Add this import
 use App\Http\Controllers\LeaveController;
+// ✅ EMPLOYEE LOAN CONTROLLER - NEW
+use App\Http\Controllers\EmployeeLoanController;
 
 /*
 |--------------------------------------------------------------------------
@@ -143,6 +145,21 @@ Route::prefix('employees')->group(function () {
 Route::prefix('employee-payments')->group(function () {
     Route::post('/', [EmployeeController::class, 'makePayment']);
     Route::delete('/{id}', [EmployeeController::class, 'deletePayment']);
+});
+
+// ==================== ✅ EMPLOYEE LOAN ROUTES (NEW) ====================
+Route::prefix('employee-loans')->group(function () {
+    // Salary table ke liye: har employee ka loan summary
+    Route::get('/summary', [EmployeeLoanController::class, 'summary']);
+
+    // Loan view: ek employee ki poori loan history + totals
+    Route::get('/employee/{employeeId}', [EmployeeLoanController::class, 'showByEmployee']);
+
+    // Loan dena ya repayment lena (type = loan | repayment)
+    Route::post('/', [EmployeeLoanController::class, 'store']);
+
+    // Loan / repayment entry delete
+    Route::delete('/{id}', [EmployeeLoanController::class, 'destroy']);
 });
 
 // ==================== ✅ ESTIMATES ROUTES ====================

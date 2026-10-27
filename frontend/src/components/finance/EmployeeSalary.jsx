@@ -8,6 +8,7 @@ import {
 } from 'react-icons/fi';
 import toast from 'react-hot-toast';
 import api from '../../services/api';
+import EmployeeLoanModal from './EmployeeLoanModal'; // ✅ NEW: loan modal
 import './EmployeeSalary.css';
 
 // ✅ Helper function to format date in Pakistan Time (Karachi)
@@ -102,6 +103,14 @@ const formatJoinDate = (dateString) => {
   }
 };
 
+// ✅ NEW: Format plain "YYYY-MM-DD" date (loan dates) -> "DD/MM/YYYY" without timezone shifts
+const formatPlainDate = (d) => {
+  if (!d) return '-';
+  const [y, m, day] = String(d).substring(0, 10).split('-');
+  if (!y || !m || !day) return '-';
+  return `${day}/${m}/${y}`;
+};
+
 const EmployeeSalary = ({ darkMode }) => {
   const [employees, setEmployees] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -114,7 +123,11 @@ const EmployeeSalary = ({ darkMode }) => {
   const [isPayModalOpen, setIsPayModalOpen] = useState(false);
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isLoanModalOpen, setIsLoanModalOpen] = useState(false); // ✅ NEW
   const [selectedEmployee, setSelectedEmployee] = useState(null);
+
+  // ✅ NEW: loan summary per employee  { [employee_id]: { total_loan, remaining, last_loan_date, last_repayment_date, ... } }
+  const [loanSummary, setLoanSummary] = useState({});
   
   // Form states
   const [formData, setFormData] = useState({
@@ -161,9 +174,26 @@ const EmployeeSalary = ({ darkMode }) => {
     }
   }, []);
 
+  // ✅ NEW: Fetch loan summary for all employees (table columns)
+  const fetchLoanSummary = useCallback(async () => {
+    try {
+      const response = await api.get('/employee-loans/summary');
+      if (response.data.success) {
+        const map = {};
+        (response.data.data || []).forEach(l => {
+          map[l.employee_id] = l;
+        });
+        setLoanSummary(map);
+      }
+    } catch (error) {
+      console.error('Error fetching loan summary:', error);
+    }
+  }, []);
+
   useEffect(() => {
     fetchEmployees();
-  }, [fetchEmployees]);
+    fetchLoanSummary();
+  }, [fetchEmployees, fetchLoanSummary]);
 
   // ✅ Fetch single employee with fresh data
   const fetchSingleEmployee = useCallback(async (id) => {
@@ -346,6 +376,7 @@ const EmployeeSalary = ({ darkMode }) => {
       if (response.data.success) {
         toast.success('Employee deleted successfully!');
         await fetchEmployees();
+        await fetchLoanSummary();
       }
     } catch (error) {
       toast.error(error.response?.data?.message || 'Failed to delete employee');
@@ -410,6 +441,12 @@ const EmployeeSalary = ({ darkMode }) => {
 
     const history = await fetchMonthlyHistory(employee.id);
     setMonthlyBreakdown(history);
+  };
+
+  // ✅ NEW: Open the Loan modal
+  const openLoanModal = (employee) => {
+    setSelectedEmployee(employee);
+    setIsLoanModalOpen(true);
   };
 
   // Get status badge
@@ -506,6 +543,10 @@ const EmployeeSalary = ({ darkMode }) => {
                 <th className="employee-salary-text-right">Balance</th>
                 <th>Salary Date</th>
                 <th>Join Date</th>
+                {/* ✅ NEW: Loan columns */}
+                <th className="employee-salary-text-right">Loan Taken</th>
+                <th>Loan Date</th>
+                <th>Last Repaid</th>
                 <th>Status</th>
                 <th>Actions</th>
               </tr>
@@ -513,7 +554,7 @@ const EmployeeSalary = ({ darkMode }) => {
          <tbody className={darkMode ? 'dark' : ''}>
               {currentEmployees.length === 0 ? (
                 <tr>
-                  <td colSpan="8" className="employee-salary-empty">
+                  <td colSpan="11" className="employee-salary-empty">
                     <FiInbox className="employee-salary-empty-icon" />
                     <p>No employees found</p>
                     <p className="employee-salary-empty-sub">Click "Add Employee" to create your first record</p>
@@ -523,6 +564,7 @@ const EmployeeSalary = ({ darkMode }) => {
                 currentEmployees.map(employee => {
                   const isDue = isSalaryDue(employee.salary_date);
                   const canPay = employee.balance_amount > 0;
+                  const loan = loanSummary[employee.id]; // ✅ NEW
                   
                   return (
                     <tr key={employee.id} className={darkMode ? 'dark' : ''}>
@@ -556,6 +598,35 @@ const EmployeeSalary = ({ darkMode }) => {
                           {formatJoinDate(employee.join_date)}
                         </span>
                       </td>
+
+                      {/* ✅ NEW: Loan Taken (total) + remaining */}
+                      <td className="employee-salary-text-right employee-salary-loan-cell">
+                        {loan && loan.total_loan > 0 ? (
+                          <>
+                            <span className="font-bold">Rs.{formatCurrency(loan.total_loan)}</span>
+                            {loan.remaining > 0 && (
+                              <small>Remaining: Rs.{formatCurrency(loan.remaining)}</small>
+                            )}
+                          </>
+                        ) : (
+                          <span className="employee-salary-loan-muted">-</span>
+                        )}
+                      </td>
+
+                      {/* ✅ NEW: Loan Date (last time loan was given) */}
+                      <td>
+                        <span className="font-bold">
+                          {formatPlainDate(loan?.last_loan_date)}
+                        </span>
+                      </td>
+
+                      {/* ✅ NEW: Last Repaid (last time employee paid back) */}
+                      <td>
+                        <span className="font-bold">
+                          {formatPlainDate(loan?.last_repayment_date)}
+                        </span>
+                      </td>
+
                       <td>
                         <span className={getStatusBadge(employee.status)}>
                           {employee.status}
@@ -608,6 +679,15 @@ const EmployeeSalary = ({ darkMode }) => {
                               Pay Now
                             </button>
                           )}
+
+                          {/* ✅ NEW: Loan — opens loan view */}
+                          <button
+                            onClick={() => openLoanModal(employee)}
+                            className="employee-salary-btn-loan"
+                            title="Employee Loan"
+                          >
+                            Loan
+                          </button>
                         </div>
                       </td>
                     </tr>
@@ -1119,6 +1199,16 @@ const EmployeeSalary = ({ darkMode }) => {
             </form>
           </div>
         </div>
+      )}
+
+      {/* ✅ NEW: Employee Loan Modal */}
+      {isLoanModalOpen && selectedEmployee && (
+        <EmployeeLoanModal
+          employee={selectedEmployee}
+          darkMode={darkMode}
+          onClose={() => setIsLoanModalOpen(false)}
+          onChanged={fetchLoanSummary}
+        />
       )}
     </div>
   );

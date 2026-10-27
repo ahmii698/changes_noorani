@@ -99,6 +99,10 @@ class SavedCartController extends Controller
 
     /**
      * Restore discarded bill
+     *
+     * ✅ FIXED: Status ab 'completed' NAHI hota.
+     * Bill sirf cart data return karta hai aur 'pending' hi rehta hai,
+     * is liye draft list mein tab tak rahega jab tak user khud delete na kare.
      */
     public function restore($id)
     {
@@ -113,10 +117,7 @@ class SavedCartController extends Controller
             ], 404);
         }
 
-        $cart->update([
-            'status' => 'completed',
-            'updated_at' => now()
-        ]);
+        // ❌ Pehle yahan status 'completed' kar diya jata tha - hata diya gaya
 
         return response()->json([
             'success' => true,

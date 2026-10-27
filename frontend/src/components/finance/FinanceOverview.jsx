@@ -21,6 +21,99 @@ const debounce = (func, delay) => {
   };
 };
 
+// ✅ NEW: API response se array nikalne ka helper (success wrapper ho ya na ho)
+const parseListResponse = (res) => {
+  if (res?.data?.success && Array.isArray(res.data.data)) return res.data.data;
+  if (Array.isArray(res?.data)) return res.data;
+  if (Array.isArray(res?.data?.data)) return res.data.data;
+  return [];
+};
+
+// ✅ NEW: Salary + Cash Inventory + Vendor Payments ko expense ki shakal mein convert karo
+// (bilkul wahi logic jo Dashboard.jsx mein hai, taake dono jagah same numbers aayen)
+const fetchExtraExpenses = async (invoicesList, productsList, signal) => {
+  const [employeesRes, allProductsRes, vendorsRes] = await Promise.all([
+    api.get('/employees', { signal }).catch(() => null),
+    // hidden products bhi chahiye (kharcha to hua tha)
+    api.get('/products', { params: { show_hidden: 'true' }, signal }).catch(() => null),
+    api.get('/credit/vendors', { signal }).catch(() => null)
+  ]);
+
+  // 1) Employee salary payments
+  const employeesList = parseListResponse(employeesRes);
+  const salaryList = employeesList.flatMap(emp =>
+    (emp.payments || []).map(p => ({
+      id: `salary-${p.id}`,
+      amount: parseFloat(p.amount) || 0,
+      date: p.payment_date || p.created_at,
+      description: `Salary - ${emp.name}`,
+      title: `Salary - ${emp.name}`,
+      category: 'Salary'
+    }))
+  );
+
+  // 2) Cash inventory: jo products vendor se link nahi hain wo cash se kharide gaye
+  //    Khareeda hua stock = abhi ka stock + ab tak bika hua stock (invoices se)
+  const allProductsData = allProductsRes ? parseListResponse(allProductsRes) : productsList;
+
+  const soldByName = {};
+  (invoicesList || []).forEach(inv => {
+    (inv.items || []).forEach(item => {
+      const key = (item.service_name || '').toLowerCase().trim();
+      if (!key) return;
+      soldByName[key] = (soldByName[key] || 0) + (parseInt(item.quantity || 1) || 0);
+    });
+  });
+
+  const inventoryCashList = allProductsData
+    .filter(p => !(p.credit_vendor || p.vendor_name))
+    .map(p => {
+      const key = (p.name || '').toLowerCase().trim();
+      const purchasedQty = (parseInt(p.quantity) || 0) + (soldByName[key] || 0);
+      return {
+        id: `inventory-${p.id}`,
+        amount: (parseFloat(p.purchase_price) || 0) * purchasedQty,
+        date: p.date_added || p.created_at,
+        description: `Inventory (Cash) - ${p.name}`,
+        title: `Inventory (Cash) - ${p.name}`,
+        category: 'Inventory (Cash)'
+      };
+    })
+    .filter(e => e.amount > 0);
+
+  // 3) Vendor credit: sirf wahi paisa expense hai jo vendor ko de diya gaya
+  const vendorRecords = parseListResponse(vendorsRes);
+  const vendorPaymentList = vendorRecords.flatMap(v => {
+    const payments = Array.isArray(v.payments) ? v.payments : [];
+    const paymentsSum = payments.reduce((s, p) => s + (parseFloat(p.amount) || 0), 0);
+
+    const items = payments.map(p => ({
+      id: `vendor-payment-${p.id}`,
+      amount: parseFloat(p.amount) || 0,
+      date: p.date || p.payment_date || p.created_at,
+      description: `Vendor Payment - ${v.vendor_name}`,
+      title: `Vendor Payment - ${v.vendor_name}`,
+      category: 'Vendor Payment'
+    }));
+
+    // Vendor add karte waqt jo paisa foran diya, agar wo payments table mein nahi to yahan count hoga
+    const initialPaid = (parseFloat(v.paid_amount) || 0) - paymentsSum;
+    if (initialPaid > 0.5) {
+      items.push({
+        id: `vendor-initial-${v.id}`,
+        amount: initialPaid,
+        date: v.created_at,
+        description: `Vendor Payment - ${v.vendor_name}`,
+        title: `Vendor Payment - ${v.vendor_name}`,
+        category: 'Vendor Payment'
+      });
+    }
+    return items;
+  });
+
+  return [...salaryList, ...inventoryCashList, ...vendorPaymentList];
+};
+
 // ✅ Helper: Get date range for filter (with custom date support)
 const getDateRange = (filter, customDate = null) => {
   const now = new Date();
@@ -79,7 +172,7 @@ const filterExpensesByDate = (expenses, filter, customDate = null) => {
   if (!range) return expenses;
   
   return expenses.filter(exp => {
-    if (!exp.expense_date && !exp.date) return false;
+    if (!exp.expense_date && !exp.date && !exp.created_at) return false;
     const expDate = new Date(exp.expense_date || exp.date || exp.created_at);
     return expDate >= range.start && expDate <= range.end;
   });
@@ -396,7 +489,7 @@ const FinanceOverview = ({ darkMode }) => {
       expenseTotal += amount;
       expenseList.push({
         id: exp.id,
-        description: exp.description,
+        description: exp.description || exp.title,
         amount: amount,
         date: exp.expense_date || exp.date || exp.created_at,
         category: exp.category
@@ -415,11 +508,9 @@ const FinanceOverview = ({ darkMode }) => {
   const fetchProducts = useCallback(async (signal) => {
     try {
       const response = await api.get('/products', { signal });
-      if (response.data && Array.isArray(response.data)) {
-        setProducts(response.data);
-        return response.data;
-      }
-      return [];
+      const list = parseListResponse(response);
+      setProducts(list);
+      return list;
     } catch (err) {
       if (err.name !== 'AbortError') {
         console.error('Error fetching products:', err);
@@ -431,11 +522,9 @@ const FinanceOverview = ({ darkMode }) => {
   const fetchExpenses = useCallback(async (signal) => {
     try {
       const response = await api.get('/expenses', { signal });
-      if (response.data && Array.isArray(response.data)) {
-        setExpenses(response.data);
-        return response.data;
-      }
-      return [];
+      const list = parseListResponse(response);
+      setExpenses(list);
+      return list;
     } catch (err) {
       if (err.name !== 'AbortError') {
         console.error('Error fetching expenses:', err);
@@ -447,11 +536,9 @@ const FinanceOverview = ({ darkMode }) => {
   const fetchInvoices = useCallback(async (signal) => {
     try {
       const response = await api.get('/invoices', { signal });
-      if (response.data && Array.isArray(response.data)) {
-        setInvoices(response.data);
-        return response.data;
-      }
-      return [];
+      const list = parseListResponse(response);
+      setInvoices(list);
+      return list;
     } catch (err) {
       if (err.name !== 'AbortError') {
         console.error('Error fetching invoices:', err);
@@ -466,11 +553,15 @@ const FinanceOverview = ({ darkMode }) => {
     setError(null);
     
     try {
-      const [productsList, expensesList, invoicesList] = await Promise.all([
+      const [productsList, regularExpenses, invoicesList] = await Promise.all([
         fetchProducts(abortController.signal),
         fetchExpenses(abortController.signal),
         fetchInvoices(abortController.signal)
       ]);
+
+      // ✅ NEW: Salary + Cash Inventory + Vendor Payments bhi expenses mein shamil
+      const extraExpenses = await fetchExtraExpenses(invoicesList, productsList, abortController.signal);
+      const expensesList = [...regularExpenses, ...extraExpenses];
       
       const productsMap = new Map();
       productsList.forEach(p => {
@@ -580,13 +671,15 @@ const FinanceOverview = ({ darkMode }) => {
       let monthExp = 0, monthExpCount = 0, monthExpList = [];
       
       expensesList.forEach(exp => {
-        const expDate = new Date(exp.expense_date || exp.date || exp.created_at);
+        const rawDate = exp.expense_date || exp.date || exp.created_at;
+        if (!rawDate) return;
+        const expDate = new Date(rawDate);
         const amount = parseFloat(exp.amount) || 0;
         const expenseItem = {
           id: exp.id,
-          description: exp.description,
+          description: exp.description || exp.title,
           amount: amount,
-          date: exp.expense_date || exp.date || exp.created_at,
+          date: rawDate,
           category: exp.category
         };
         
@@ -925,7 +1018,8 @@ const FinanceOverview = ({ darkMode }) => {
                 <div className={`p-1.5 rounded-full ${filteredStats.profit >= 0 ? 'bg-emerald-500/15' : 'bg-red-500/15'}`}>
                   <FiTrendingUp className={`text-sm ${filteredStats.profit >= 0 ? 'text-emerald-400' : 'text-red-400'}`} />
                 </div>
-                <span className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>{getFilterLabel()} Profit</span>
+                {/* ✅ FIXED: Label changed to Net Profit */}
+                <span className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>{getFilterLabel()} Net Profit</span>
               </div>
               <p className={`text-lg font-bold ${filteredStats.profit >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
                 Rs. {filteredStats.profit.toLocaleString()}

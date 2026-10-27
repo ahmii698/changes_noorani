@@ -1025,3 +1025,129 @@
     flex-wrap: wrap;
   }
 }
+
+
+
+/* ===== EmployeeSalary.css ke bilkul END mein paste karo ===== */
+
+/* ==================== LOAN ==================== */
+.employee-salary-btn-loan {
+  padding: 0.2rem 0.6rem;
+  background: #8b5cf6;
+  color: white;
+  border: none;
+  border-radius: 0.375rem;
+  font-size: 0.65rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.employee-salary-btn-loan:hover {
+  background: #7c3aed;
+}
+
+.employee-salary-loan-cell small {
+  display: block;
+  font-size: 0.65rem;
+  font-weight: 600;
+  color: #dc2626;
+}
+
+.employee-salary-table tbody.dark .employee-salary-loan-cell small {
+  color: #f87171;
+}
+
+.employee-salary-loan-muted {
+  color: #9ca3af;
+  font-weight: 600;
+}
+
+.employee-salary-loan-amount-out {
+  color: #dc2626;
+  font-weight: 700;
+}
+
+.employee-salary-modal.dark .employee-salary-loan-amount-out {
+  color: #f87171;
+}
+
+.employee-salary-loan-summary {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.employee-salary-loan-form {
+  padding: 0.75rem;
+  border: 1px solid #e5e7eb;
+  border-radius: 0.75rem;
+}
+
+.employee-salary-modal.dark .employee-salary-loan-form {
+  border-color: #374151;
+}
+
+.employee-salary-loan-toggle {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.employee-salary-loan-toggle-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  padding: 0.45rem 0.5rem;
+  border: 1px solid #d1d5db;
+  border-radius: 0.5rem;
+  background: transparent;
+  color: #6b7280;
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.employee-salary-loan-toggle-btn.active-loan {
+  background: #f59e0b;
+  border-color: #f59e0b;
+  color: #1f2937;
+}
+
+.employee-salary-loan-toggle-btn.active-repay {
+  background: #22c55e;
+  border-color: #22c55e;
+  color: white;
+}
+
+.employee-salary-loan-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+}
+
+.employee-salary-loan-save {
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  border: none;
+  border-radius: 0.5rem;
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.employee-salary-loan-save:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+@media (max-width: 640px) {
+  .employee-salary-loan-row {
+    grid-template-columns: 1fr;
+  }
+}

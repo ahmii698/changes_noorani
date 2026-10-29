@@ -80,6 +80,12 @@ const Credit = ({ darkMode }) => {
   const editSubmitRef = useRef(null);
   const paySubmitRef = useRef(null);
 
+  // 🔒 Style for locked (read-only) fields in Edit Vendor modal
+  const lockedInputStyle = {
+    backgroundColor: darkMode ? '#374151' : '#f3f4f6',
+    cursor: 'not-allowed'
+  };
+
   // ✅ FIXED: Group vendors by name with proper payments merging & SORTING (NEWEST FIRST)
   const groupVendorsByName = (vendorsList) => {
     const grouped = {};
@@ -979,23 +985,63 @@ const Credit = ({ darkMode }) => {
               </button>
             </div>
             <form onSubmit={handleEditSubmit} className="credit-modal-body">
+              {/* 🔒 Vendor Name - LOCKED */}
               <div className="credit-form-group">
                 <label className={`credit-form-label ${darkMode ? 'dark' : ''}`}>Vendor Name *</label>
-                <input type="text" name="name" required defaultValue={selectedVendor?.name || ''} className={`credit-form-input ${darkMode ? 'dark' : ''}`} />
+                <input 
+                  type="text" 
+                  name="name" 
+                  required 
+                  defaultValue={selectedVendor?.name || ''} 
+                  className={`credit-form-input ${darkMode ? 'dark' : ''}`} 
+                  readOnly 
+                  style={lockedInputStyle}
+                />
               </div>
+
+              {/* 🔒 Products - LOCKED */}
               <div className="credit-form-group">
                 <label className={`credit-form-label ${darkMode ? 'dark' : ''}`}>Products</label>
-                <input type="text" name="products" required defaultValue={selectedVendor?.products || ''} className={`credit-form-input ${darkMode ? 'dark' : ''}`} />
+                <input 
+                  type="text" 
+                  name="products" 
+                  required 
+                  defaultValue={selectedVendor?.products || ''} 
+                  className={`credit-form-input ${darkMode ? 'dark' : ''}`} 
+                  readOnly 
+                  style={lockedInputStyle}
+                />
               </div>
+
+              {/* 🔒 Stock Quantity - LOCKED */}
               <div className="credit-form-group">
                 <label className={`credit-form-label ${darkMode ? 'dark' : ''}`}>Stock Quantity</label>
-                <input type="number" name="stockQuantity" min="0" defaultValue={selectedVendor?.stockQuantity || 0} className={`credit-form-input ${darkMode ? 'dark' : ''}`} />
+                <input 
+                  type="number" 
+                  name="stockQuantity" 
+                  min="0" 
+                  defaultValue={selectedVendor?.stockQuantity || 0} 
+                  className={`credit-form-input ${darkMode ? 'dark' : ''}`} 
+                  readOnly 
+                  style={lockedInputStyle}
+                />
               </div>
+
+              {/* 🔒 Invoice Number - LOCKED */}
               <div className="credit-form-group">
                 <label className={`credit-form-label ${darkMode ? 'dark' : ''}`}>Invoice Number *</label>
-                <input type="text" name="invoiceNumber" required defaultValue={selectedVendor?.invoiceNumber || ''} className={`credit-form-input ${darkMode ? 'dark' : ''}`} />
+                <input 
+                  type="text" 
+                  name="invoiceNumber" 
+                  required 
+                  defaultValue={selectedVendor?.invoiceNumber || ''} 
+                  className={`credit-form-input ${darkMode ? 'dark' : ''}`} 
+                  readOnly 
+                  style={lockedInputStyle}
+                />
               </div>
               
+              {/* 🔒 Total Amount - LOCKED */}
               <div className="credit-form-group">
                 <label className={`credit-form-label ${darkMode ? 'dark' : ''}`}>Total Amount (Rs.)</label>
                 <input 
@@ -1007,7 +1053,7 @@ const Credit = ({ darkMode }) => {
                   defaultValue={selectedVendor?.totalAmount || 0} 
                   className={`credit-form-input ${darkMode ? 'dark' : ''}`} 
                   readOnly 
-                  style={{ backgroundColor: darkMode ? '#374151' : '#f3f4f6', cursor: 'not-allowed' }}
+                  style={lockedInputStyle}
                 />
                 <p className={`text-xs mt-1 font-medium ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
                   Total amount from all orders (cannot be changed)
@@ -1021,7 +1067,7 @@ const Credit = ({ darkMode }) => {
                   value={selectedVendor?.paidAmount || 0} 
                   className={`credit-form-input ${darkMode ? 'dark' : ''}`} 
                   readOnly 
-                  style={{ backgroundColor: darkMode ? '#374151' : '#f3f4f6', cursor: 'not-allowed' }}
+                  style={lockedInputStyle}
                 />
                 <p className={`text-xs mt-1 font-bold ${darkMode ? 'text-green-400' : 'text-green-600'}`}>
                   Total paid so far: Rs. {(selectedVendor?.paidAmount || 0).toLocaleString()} | 

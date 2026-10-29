@@ -166,6 +166,32 @@ function App() {
           }
         />
 
+        {/* ✅ NEW: Inventory History Route */}
+        <Route
+          path="/inventory-history"
+          element={
+            <ProtectedRoute>
+              <Dashboard
+                darkMode={darkMode}
+                toggleDarkMode={toggleDarkMode}
+              />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* ✅ NEW: Cash in Hand Route */}
+        <Route
+          path="/cash-in-hand"
+          element={
+            <ProtectedRoute>
+              <Dashboard
+                darkMode={darkMode}
+                toggleDarkMode={toggleDarkMode}
+              />
+            </ProtectedRoute>
+          }
+        />
+
         <Route
           path="/records"
           element={

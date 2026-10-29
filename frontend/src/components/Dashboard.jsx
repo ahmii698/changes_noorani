@@ -1,5 +1,3 @@
-// src/components/Dashboard.jsx
-
 import React, { useState, useEffect, useCallback, useMemo, useRef, lazy, Suspense } from 'react';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
@@ -9,7 +7,7 @@ import {
   FiTrendingUp, FiShoppingCart, FiCheckCircle, 
   FiAlertCircle, FiClock, FiArrowRight, FiLoader, FiUsers,
   FiCreditCard, FiCalendar, FiGift, FiChevronDown, FiChevronUp, FiFile,
-  FiBattery, FiArchive, FiMoreVertical, FiBell
+  FiBattery, FiArchive, FiMoreVertical, FiBell, FiBriefcase, FiRotateCcw
 } from 'react-icons/fi';
 import { 
   LineChart, Line, BarChart, Bar, AreaChart, Area,
@@ -19,8 +17,9 @@ import {
 import Sidebar from './Sidebar';
 import api from '../services/api';
 
-// Lazy load heavy components
 const Inventory = lazy(() => import('./Inventory'));
+const InventoryHistory = lazy(() => import('./InventoryHistory'));
+const CashInHand = lazy(() => import('./CashInHand'));
 const FinanceOverview = lazy(() => import('./finance/FinanceOverview'));
 const FinanceExpenses = lazy(() => import('./finance/FinanceExpenses'));
 const FinanceCharts = lazy(() => import('./finance/FinanceCharts'));
@@ -35,10 +34,38 @@ const DiscardedBillsPage = lazy(() => import('./billing/DiscardedBillsPage'));
 const EstimatedBill = lazy(() => import('./EstimatedBill'));
 const BatteryPage = lazy(() => import('./BatteryPage'));
 const EstimateRecords = lazy(() => import('./EstimateRecords'));
-// ✅ LEAVE APPLICATION - Add this import
 const LeaveApplication = lazy(() => import('./leave/LeaveApplication'));
 
-// Loading fallback component
+// Shuru me hath me jitna cash tha. Abhi 0 hai.
+const OPENING_CASH = 0;
+
+// /cash-in-hand API se manual cash ka total nikalta hai (Inventory.jsx wala same logic)
+const extractManualCash = (res) => {
+  if (!res) return 0;
+  const body = res.data || {};
+  const d = body.data ?? body;
+
+  const keys = ['total', 'balance', 'current_balance', 'cash_in_hand', 'total_cash', 'current_cash'];
+  for (const src of [d, body]) {
+    if (src && typeof src === 'object' && !Array.isArray(src)) {
+      for (const k of keys) {
+        if (src[k] !== undefined && src[k] !== null && !isNaN(parseFloat(src[k]))) {
+          return parseFloat(src[k]);
+        }
+      }
+    }
+  }
+
+  const list = Array.isArray(d)
+    ? d
+    : (body.history || body.entries || d?.history || d?.entries || []);
+  if (Array.isArray(list) && list.length > 0) {
+    const latest = list.reduce((a, b) => (Number(b.id) > Number(a.id) ? b : a));
+    return parseFloat(latest.balance_after) || 0;
+  }
+  return 0;
+};
+
 const LoadingFallback = ({ darkMode }) => (
   <div className={`flex items-center justify-center h-96 ${darkMode ? 'bg-gray-900' : 'bg-gray-100'}`}>
     <div className="text-center">
@@ -48,12 +75,12 @@ const LoadingFallback = ({ darkMode }) => (
   </div>
 );
 
-// ==================== Sparkline mini chart ====================
 const Sparkline = ({ data, color }) => (
   <div className="h-10 mt-3 -mx-1">
     <ResponsiveContainer width="100%" height="100%">
       <AreaChart data={data} margin={{ top: 2, right: 0, left: 0, bottom: 0 }}>
-        <YAxis domain={[0, 'dataMax']} hide />
+        {/* Negative profit bhi dikhane ke liye auto domain */}
+        <YAxis domain={['auto', 'auto']} hide />
         <Area
           type="monotone"
           dataKey="value"
@@ -68,11 +95,10 @@ const Sparkline = ({ data, color }) => (
   </div>
 );
 
-// ==================== Stats Card - FIXED: Same height and aligned lines ====================
 const StatsCard = React.memo(({ 
   title, value, icon: Icon, iconBg, iconColor, 
   trend, subtitle, sparkData, sparkColor, 
-  progressPercent, progressLabel, darkMode 
+  progressPercent, progressLabel, darkMode, negative
 }) => (
   <div className={`rounded-2xl p-5 border flex flex-col ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200 shadow-sm'}`} style={{ minHeight: '165px' }}>
     <div className="flex items-center gap-2.5 mb-2">
@@ -82,10 +108,8 @@ const StatsCard = React.memo(({
       <span className={`text-sm font-bold ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>{title}</span>
     </div>
     
-    {/* ✅ Value - Same position for all cards */}
-    <p className={`text-2xl font-extrabold ${darkMode ? 'text-white' : 'text-gray-900'}`}>{value}</p>
+    <p className={`text-2xl font-extrabold ${negative ? 'text-red-400' : darkMode ? 'text-white' : 'text-gray-900'}`}>{value}</p>
 
-    {/* ✅ Fixed height container for trend/subtitle - ALL CARDS ALIGNED */}
     <div className="h-7 flex items-center mt-0.5">
       {trend !== null && trend !== undefined && (
         <p className={`text-sm flex items-center gap-1 font-bold ${trend >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
@@ -110,7 +134,9 @@ const StatsCard = React.memo(({
   </div>
 ));
 
-// Helper: Get date range for filter
+const getInvoiceDiscount = (inv) => parseFloat(inv?.discount) || 0;
+const getInvoiceGross = (inv) => (parseFloat(inv?.total_amount) || 0) + getInvoiceDiscount(inv);
+
 const getDateRange = (filter, customDate = null) => {
   const now = new Date();
   const start = new Date();
@@ -207,12 +233,10 @@ const Dashboard = () => {
   const [expenses, setExpenses] = useState([]);
   const [invoices, setInvoices] = useState([]);
   const [services, setServices] = useState([]);
-  // ✅ NEW: Employee salary payments (expense ki shakal mein)
   const [salaryPayments, setSalaryPayments] = useState([]);
-  // ✅ NEW: Cash se kharide hue inventory ka kharcha
   const [inventoryCashExpenses, setInventoryCashExpenses] = useState([]);
-  // ✅ NEW: Vendor ko jo paisa actually diya gaya (udhaar wala baqi hissa count nahi hota)
   const [vendorPaymentExpenses, setVendorPaymentExpenses] = useState([]);
+  const [manualCashTotal, setManualCashTotal] = useState(0);
 
   useEffect(() => {
     const userData = localStorage.getItem('user');
@@ -232,16 +256,27 @@ const Dashboard = () => {
   }, []);
 
   const productsArray = useMemo(() => Array.isArray(products) ? products : [], [products]);
-  // ✅ CHANGED: normal expenses + salary payments dono mila ke
+
+  // Dashboard ke Expenses: sirf normal expenses + salary.
+  // Inventory ki cost aur vendor payments yahan NAHI ginti.
   const expensesArray = useMemo(
     () => [
       ...(Array.isArray(expenses) ? expenses : []),
-      ...salaryPayments,
+      ...salaryPayments
+    ],
+    [expenses, salaryPayments]
+  );
+
+  // Cash in Hand ke liye cash nikalne wali sari cheezein (expenses + cash inventory + vendor payments)
+  const cashOutflowArray = useMemo(
+    () => [
+      ...expensesArray,
       ...inventoryCashExpenses,
       ...vendorPaymentExpenses
     ],
-    [expenses, salaryPayments, inventoryCashExpenses, vendorPaymentExpenses]
+    [expensesArray, inventoryCashExpenses, vendorPaymentExpenses]
   );
+
   const invoicesArray = useMemo(() => Array.isArray(invoices) ? invoices : [], [invoices]);
   const servicesArray = useMemo(() => Array.isArray(services) ? services : [], [services]);
 
@@ -264,7 +299,7 @@ const Dashboard = () => {
   }, [productsArray]);
 
   const totalSales = useMemo(() => 
-    filteredInvoices.reduce((sum, inv) => sum + (parseFloat(inv.total_amount) || 0), 0),
+    filteredInvoices.reduce((sum, inv) => sum + getInvoiceGross(inv), 0),
     [filteredInvoices]
   );
 
@@ -274,10 +309,11 @@ const Dashboard = () => {
   );
 
   const totalDiscount = useMemo(() => 
-    filteredInvoices.reduce((sum, inv) => sum + (parseFloat(inv.discount) || 0), 0),
+    filteredInvoices.reduce((sum, inv) => sum + getInvoiceDiscount(inv), 0),
     [filteredInvoices]
   );
 
+  // NET PROFIT = invoices ka profit - expenses (salary samet)
   const totalProfitCalc = useMemo(() => {
     let profit = 0;
     for (const inv of filteredInvoices) {
@@ -292,14 +328,44 @@ const Dashboard = () => {
           }
         }
       }
+      profit -= getInvoiceDiscount(inv);
     }
-    return profit;
-  }, [filteredInvoices, activeProducts]);
+    return profit - totalExpensesSum;
+  }, [filteredInvoices, activeProducts, totalExpensesSum]);
 
   const profitMargin = useMemo(() => 
     totalSales > 0 ? (totalProfitCalc / totalSales) * 100 : 0,
     [totalSales, totalProfitCalc]
   );
+
+  // CASH IN HAND (all-time, time filter se independent)
+  // Manual cash (Cash in Hand page se add kiya hua) + sale ka poora paisa jama hota hai.
+  // Cash se liya hua maal (inventory) aur vendor ko di hui payments minus hoti hain.
+  // Normal expenses / salary yahan NAHI katte.
+  const cashInHand = useMemo(() => {
+    const received = invoicesArray.reduce(
+      (sum, inv) => sum + (parseFloat(inv.total_amount) || 0),
+      0
+    );
+
+    const inventorySpent = inventoryCashExpenses.reduce(
+      (sum, e) => sum + (parseFloat(e.amount) || 0),
+      0
+    );
+
+    const vendorPaid = vendorPaymentExpenses.reduce(
+      (sum, e) => sum + (parseFloat(e.amount) || 0),
+      0
+    );
+
+    return {
+      received,
+      inventorySpent,
+      vendorPaid,
+      manual: manualCashTotal,
+      cash: OPENING_CASH + manualCashTotal + received - inventorySpent - vendorPaid
+    };
+  }, [invoicesArray, inventoryCashExpenses, vendorPaymentExpenses, manualCashTotal]);
 
   const totalProductsCount = useMemo(() => activeProducts.length, [activeProducts]);
   const totalStock = useMemo(() => 
@@ -334,8 +400,9 @@ const Dashboard = () => {
         const date = new Date(inv.invoice_date);
         const month = date.toLocaleString('default', { month: 'short' });
         if (monthly[month]) {
-          monthly[month].sales += parseFloat(inv.total_amount) || 0;
-          monthly[month].discount += parseFloat(inv.discount) || 0;
+          const invDiscount = getInvoiceDiscount(inv);
+          monthly[month].sales += getInvoiceGross(inv);
+          monthly[month].discount += invDiscount;
           
           if (inv.items && inv.items.length > 0) {
             inv.items.forEach(item => {
@@ -347,6 +414,7 @@ const Dashboard = () => {
               }
             });
           }
+          monthly[month].profit -= invDiscount;
         }
       }
     });
@@ -364,17 +432,17 @@ const Dashboard = () => {
     return monthOrder.map(month => ({
       month,
       sales: monthly[month]?.sales || 0,
-      profit: monthly[month]?.profit || 0,
+      // Net profit = invoice profit - expenses
+      profit: (monthly[month]?.profit || 0) - (monthly[month]?.expenses || 0),
       expenses: monthly[month]?.expenses || 0,
       discount: monthly[month]?.discount || 0
     }));
   }, [filteredInvoices, filteredExpenses, activeProducts]);
 
-  // NEW: sirf shuru aur aakhir ke khali months hatao (beech waale jaise Jul dikhte rahenge, taake pata chale us month sale nahi hui)
   const trimmedMonthlyData = useMemo(() => {
-    const hasData = (m) => m.sales > 0 || m.profit > 0 || m.expenses > 0 || m.discount > 0;
+    const hasData = (m) => m.sales > 0 || m.profit !== 0 || m.expenses > 0 || m.discount > 0;
     const firstIdx = monthlyData.findIndex(hasData);
-    if (firstIdx === -1) return monthlyData; // koi data nahi, sab months dikhao
+    if (firstIdx === -1) return monthlyData;
     let lastIdx = monthlyData.length - 1;
     while (lastIdx > firstIdx && !hasData(monthlyData[lastIdx])) lastIdx--;
     return monthlyData.slice(firstIdx, lastIdx + 1);
@@ -430,22 +498,19 @@ const Dashboard = () => {
 
   const COLORS = useMemo(() => ['#fbbf24', '#ef4444', '#22c55e', '#3b82f6', '#a855f7', '#06b6d4', '#f97316', '#ec4899', '#14b8a6', '#94a3b8'], []);
 
-  // ✅ CHANGED: /employees bhi fetch hota hai aur salary payments expense ki shakal mein convert hoti hain
-  // silent = true => loader nahi dikhega (background refresh)
   const fetchAllData = useCallback(async (silent = false) => {
     const abortController = new AbortController();
     if (!silent) setLoading(true);
     try {
-      const [productsRes, expensesRes, invoicesRes, servicesRes, employeesRes, allProductsRes, vendorsRes] = await Promise.all([
+      const [productsRes, expensesRes, invoicesRes, servicesRes, employeesRes, allProductsRes, vendorsRes, manualCashRes] = await Promise.all([
         api.get('/products', { signal: abortController.signal }),
         api.get('/expenses', { signal: abortController.signal }),
         api.get('/invoices', { signal: abortController.signal }),
         api.get('/services', { signal: abortController.signal }),
-        // employees fail ho jaye to baqi dashboard phir bhi chale
         api.get('/employees', { signal: abortController.signal }).catch(() => null),
-        // hidden products bhi chahiye (kharcha to hua tha), sirf expense hisaab ke liye
         api.get('/products', { params: { show_hidden: 'true' }, signal: abortController.signal }).catch(() => null),
-        api.get('/credit/vendors', { signal: abortController.signal }).catch(() => null)
+        api.get('/credit/vendors', { signal: abortController.signal }).catch(() => null),
+        api.get('/cash-in-hand', { signal: abortController.signal }).catch(() => null)
       ]);
       
       let productsData = [];
@@ -457,7 +522,6 @@ const Dashboard = () => {
         productsData = [];
       }
 
-      // ✅ Employee salary payments ko expenses ki shakal mein convert karo
       let employeesList = [];
       if (Array.isArray(employeesRes?.data?.data)) {
         employeesList = employeesRes.data.data;
@@ -474,8 +538,6 @@ const Dashboard = () => {
         }))
       );
       
-      // ✅ CASH INVENTORY: jo products vendor se link nahi hain wo cash se kharide gaye
-      // Khareeda hua stock = abhi ka stock + ab tak bika hua stock (invoices se)
       const parseProductsRes = (res) => {
         if (res?.data?.success && Array.isArray(res.data.data)) return res.data.data;
         if (Array.isArray(res?.data)) return res.data;
@@ -509,7 +571,6 @@ const Dashboard = () => {
         })
         .filter(e => e.amount > 0);
 
-      // ✅ VENDOR CREDIT: sirf wahi paisa expense hai jo vendor ko de diya gaya
       let vendorRecords = [];
       if (Array.isArray(vendorsRes?.data?.data)) {
         vendorRecords = vendorsRes.data.data;
@@ -529,7 +590,6 @@ const Dashboard = () => {
           category: 'Vendor Payment'
         }));
 
-        // Vendor add karte waqt jo paisa foran diya, agar wo payments table mein nahi to yahan count hoga
         const initialPaid = (parseFloat(v.paid_amount) || 0) - paymentsSum;
         if (initialPaid > 0.5) {
           items.push({
@@ -550,6 +610,7 @@ const Dashboard = () => {
       setSalaryPayments(salaryList);
       setInventoryCashExpenses(inventoryCashList);
       setVendorPaymentExpenses(vendorPaymentList);
+      setManualCashTotal(extractManualCash(manualCashRes));
       
     } catch (err) {
       if (err.name !== 'AbortError') {
@@ -562,6 +623,7 @@ const Dashboard = () => {
         setSalaryPayments([]);
         setInventoryCashExpenses([]);
         setVendorPaymentExpenses([]);
+        setManualCashTotal(0);
       }
     } finally {
       setLoading(false);
@@ -576,8 +638,6 @@ const Dashboard = () => {
     };
   }, [fetchAllData]);
 
-  // ✅ NEW: Dashboard par wapas aane par data refresh (silent, loader nahi dikhega)
-  // Pehli baar load par skip hota hai kyunke upar wala effect pehle hi fetch kar raha hai
   const isFirstMenuRender = useRef(true);
   useEffect(() => {
     if (isFirstMenuRender.current) {
@@ -673,6 +733,8 @@ const Dashboard = () => {
     const titles = {
       'all-data': 'Business Overview',
       inventory: 'Inventory Management',
+      'inventory-history': 'Inventory History',
+      'cash-in-hand': 'Cash in Hand',
       'finance-overview': 'Finance Dashboard',
       'finance-expenses': 'Expenses Management',
       'finance-charts': 'Financial Charts & Analytics',
@@ -696,6 +758,8 @@ const Dashboard = () => {
     const descriptions = {
       'all-data': 'Everything at a glance – Sales, Expenses, Products, Invoices',
       inventory: 'Manage products, track purchases and sales',
+      'inventory-history': 'Track which items came on cash or credit, purchased or sold',
+      'cash-in-hand': 'Add or withdraw cash and view the full history',
       'finance-overview': 'View daily, weekly and monthly financial overview',
       'finance-expenses': 'Add, edit and manage all expenses',
       'finance-charts': 'Visualize financial data with interactive charts',
@@ -719,6 +783,8 @@ const Dashboard = () => {
     const icons = {
       'all-data': <FiBarChart2 className="text-2xl" />,
       inventory: <FiPackage className="text-2xl" />,
+      'inventory-history': <FiRotateCcw className="text-2xl" />,
+      'cash-in-hand': <FiBriefcase className="text-2xl" />,
       'finance-overview': <FiDollarSign className="text-2xl" />,
       'finance-expenses': <FiFileText className="text-2xl" />,
       'finance-charts': <FiBarChart2 className="text-2xl" />,
@@ -886,7 +952,6 @@ const Dashboard = () => {
         />
         
         <div className="flex-1 flex flex-col overflow-hidden">
-          {/* Header */}
           <div className={`${darkMode ? 'bg-gray-950 border-gray-800' : 'bg-white border-gray-200'} px-5 py-3 flex justify-between items-center border-b`}>
             <div className="flex items-center gap-3">
               <button
@@ -927,13 +992,10 @@ const Dashboard = () => {
             </div>
           </div>
 
-          {/* Content - FULL WIDTH */}
           <div className={`flex-1 overflow-y-auto p-4 ${darkMode ? 'bg-gray-950' : 'bg-gray-100'}`}>
             
-            {/* ALL DATA VIEW - Admin only */}
             {activeMenu === 'all-data' && userRole !== 'employee' && (
               <div className="space-y-4">
-                {/* FILTER BUTTONS */}
                 <div className={`flex flex-wrap items-center gap-1.5 p-3 rounded-xl border ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200 shadow-sm'}`}>
                   <span className={`text-sm font-bold mr-1 ${darkMode ? 'text-gray-400' : 'text-gray-700'}`}>Filter:</span>
                   {[
@@ -977,8 +1039,7 @@ const Dashboard = () => {
                   )}
                 </div>
 
-                {/* STATS CARDS - Full width, no gaps */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
                   <StatsCard 
                     title="Total Sales" 
                     value={`Rs. ${totalSales.toLocaleString()}`} 
@@ -999,7 +1060,8 @@ const Dashboard = () => {
                     iconColor="text-emerald-400"
                     trend={null}
                     sparkData={profitSpark}
-                    sparkColor="#22c55e"
+                    sparkColor={totalProfitCalc < 0 ? '#ef4444' : '#22c55e'}
+                    negative={totalProfitCalc < 0}
                     darkMode={darkMode} 
                   />
                   <StatsCard 
@@ -1034,9 +1096,19 @@ const Dashboard = () => {
                     sparkColor="#f97316"
                     darkMode={darkMode} 
                   />
+                  <StatsCard 
+                    title="Cash in Hand" 
+                    value={`Rs. ${cashInHand.cash.toLocaleString()}`} 
+                    subtitle={`Manual: ${cashInHand.manual.toLocaleString()} | Sales: ${cashInHand.received.toLocaleString()} | Purchases: ${(cashInHand.inventorySpent + cashInHand.vendorPaid).toLocaleString()}`}
+                    icon={FiCreditCard} 
+                    iconBg="bg-teal-500/15" 
+                    iconColor="text-teal-400"
+                    trend={null}
+                    negative={cashInHand.cash < 0}
+                    darkMode={darkMode} 
+                  />
                 </div>
 
-                {/* CHARTS - Full width */}
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
                   <div className={`lg:col-span-2 rounded-xl p-4 border flex flex-col ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200 shadow-sm'}`} style={{ height: '430px' }}>
                     <div className="flex justify-between items-center mb-3 flex-shrink-0">
@@ -1121,7 +1193,6 @@ const Dashboard = () => {
                   )}
                 </div>
 
-                {/* Recent Invoices */}
                 <div className={`rounded-xl overflow-hidden border ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200 shadow-sm'}`}>
                   <div className="px-4 py-2.5 flex justify-between items-center">
                     <h3 className={`font-extrabold flex items-center gap-2 text-base ${darkMode ? 'text-white' : 'text-gray-800'}`}>
@@ -1173,7 +1244,6 @@ const Dashboard = () => {
                   </div>
                 </div>
 
-                {/* Low Stock Alerts */}
                 <div className={`rounded-xl overflow-hidden border ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200 shadow-sm'}`}>
                   <div 
                     className={`px-4 py-2.5 flex justify-between items-center cursor-pointer hover:opacity-80 transition`}
@@ -1244,7 +1314,6 @@ const Dashboard = () => {
                   )}
                 </div>
 
-                {/* Quick Actions */}
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                   <button onClick={() => setActiveMenu('billing')} className="w-full py-2.5 bg-amber-400 text-gray-900 rounded-xl font-extrabold hover:bg-amber-300 transition shadow-md flex items-center justify-center gap-2 text-base">
                     <FiFileText className="text-lg" /> New Bill
@@ -1265,10 +1334,17 @@ const Dashboard = () => {
               </div>
             )}
 
-            {/* Other Components with Suspense */}
             <Suspense fallback={<LoadingFallback darkMode={darkMode} />}>
               {activeMenu === 'inventory' && (
                 <Inventory products={productsArray} darkMode={darkMode} onAddProduct={handleAddProduct} onUpdateProduct={handleUpdateProduct} />
+              )}
+
+              {activeMenu === 'inventory-history' && userRole === 'admin' && (
+                <InventoryHistory darkMode={darkMode} />
+              )}
+
+              {activeMenu === 'cash-in-hand' && userRole === 'admin' && (
+                <CashInHand darkMode={darkMode} />
               )}
               
               {activeMenu === 'finance-overview' && userRole !== 'employee' && (
@@ -1330,7 +1406,6 @@ const Dashboard = () => {
                 <DiscardedBillsPage darkMode={darkMode} />
               )}
 
-              {/* ✅ LEAVE APPLICATION - Add this */}
               {activeMenu === 'leave' && (
                 <LeaveApplication darkMode={darkMode} />
               )}

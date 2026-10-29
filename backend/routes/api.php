@@ -20,6 +20,8 @@ use App\Http\Controllers\EstimateController;
 use App\Http\Controllers\LeaveController;
 // ✅ EMPLOYEE LOAN CONTROLLER - NEW
 use App\Http\Controllers\EmployeeLoanController;
+// ✅ CASH IN HAND CONTROLLER - NEW
+use App\Http\Controllers\CashInHandController;
 
 /*
 |--------------------------------------------------------------------------
@@ -257,6 +259,13 @@ Route::middleware(['auth:sanctum'])->group(function () {
         Route::delete('/clear-all', [SavedCartController::class, 'clearAll']);
     });
     
+    // ==================== ✅ CASH IN HAND ROUTES (Admin only - controller checks role) ====================
+    Route::prefix('cash-in-hand')->group(function () {
+        Route::get('/', [CashInHandController::class, 'index']);
+        Route::post('/', [CashInHandController::class, 'store']);
+        Route::delete('/{id}', [CashInHandController::class, 'destroy']);
+    });
+
     // Additional Stats Routes
     Route::get('/sales/stats', function() {
         return response()->json([

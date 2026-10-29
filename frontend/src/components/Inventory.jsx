@@ -9,7 +9,8 @@ import {
   FiShoppingCart, FiBarChart2, FiCheckCircle, FiAlertCircle,
   FiLoader, FiUser, FiTrash2, FiEye, FiEyeOff,
   FiCalendar, FiArrowUp, FiArrowDown,
-  FiChevronLeft, FiChevronRight
+  FiChevronLeft, FiChevronRight,
+  FiBriefcase, FiCreditCard, FiBox
 } from 'react-icons/fi';
 import api from '../services/api';
 
@@ -127,7 +128,6 @@ const normalizeChanges = (changes) => {
   }));
 };
 
-// Changed lowStockThreshold default to empty string
 const emptyFormData = {
   name: '',
   purchasePrice: '',
@@ -149,9 +149,8 @@ const modalInputCls = (darkMode) =>
 const ProductRow = React.memo(({ product, darkMode, editingCell, onStartEdit, onSaveEdit, onKeyPress, onEditProduct, onDeleteProduct, onToggleHide, onViewHistory, formatPrice, isAdmin }) => {
   const isEditing = (field) => editingCell.productId === product.id && editingCell.field === field;
   const isHidden = product.is_hidden === 1 || product.is_hidden === true;
-  
-  // Use null check instead of defaulting to 5
-  const threshold = product.low_stock_threshold; 
+
+  const threshold = product.low_stock_threshold;
   const hasThreshold = threshold !== null && threshold !== undefined;
 
   const invoiceNo = product.credit_vendor?.invoice_number || '-';
@@ -328,6 +327,11 @@ const Inventory = ({ darkMode }) => {
   const [editingCell, setEditingCell] = useState({ productId: null, field: null, value: '' });
 
   const [vendorsList, setVendorsList] = useState([]);
+  const [vendorPayable, setVendorPayable] = useState(0);
+  const [vendorLaterPayments, setVendorLaterPayments] = useState(0);
+  const [vendorInitialPaid, setVendorInitialPaid] = useState(0);
+  const [invoices, setInvoices] = useState([]);
+  const [manualCashTotal, setManualCashTotal] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showVendorDropdown, setShowVendorDropdown] = useState(false);
 
@@ -412,6 +416,74 @@ const Inventory = ({ darkMode }) => {
     const totalProfit = data.reduce((sum, p) => sum + (((p.selling_price || 0) - (p.purchase_price || 0)) * (p.quantity || 0)), 0);
     return { totalStock, totalPurchaseValue, totalSellingValue, totalProfit };
   }, [filteredProducts]);
+
+  const cashProductsCost = useMemo(() => {
+    const soldByName = {};
+    invoices.forEach(inv => {
+      (inv.items || []).forEach(item => {
+        const key = (item.service_name || '').toLowerCase().trim();
+        if (!key) return;
+        soldByName[key] = (soldByName[key] || 0) + (parseInt(item.quantity || 1) || 0);
+      });
+    });
+
+    return products
+      .filter(p => !(p.credit_vendor || p.vendor_name))
+      .reduce((sum, p) => {
+        const key = (p.name || '').toLowerCase().trim();
+        const purchasedQty = (parseInt(p.quantity) || 0) + (soldByName[key] || 0);
+        return sum + (parseFloat(p.purchase_price) || 0) * purchasedQty;
+      }, 0);
+  }, [products, invoices]);
+
+  const ownerCapitalInvested = cashProductsCost + vendorInitialPaid + vendorLaterPayments;
+
+  const inventoryCashFromSales = useMemo(() => {
+    const totalSale = invoices.reduce(
+      (sum, inv) => sum + (parseFloat(inv.total_amount) || 0),
+      0
+    );
+
+    const purchaseByName = {};
+    products.forEach(p => {
+      const key = (p.name || '').toLowerCase().trim();
+      if (key) purchaseByName[key] = parseFloat(p.purchase_price) || 0;
+    });
+
+    let totalProfit = 0;
+    invoices.forEach(inv => {
+      let itemsProfit = 0;
+      (inv.items || []).forEach(item => {
+        const qty = parseInt(item.quantity || 1) || 0;
+        const unitPrice = parseFloat(item.price ?? item.unit_price ?? item.selling_price) || 0;
+        const key = (item.service_name || '').toLowerCase().trim();
+
+        if (item.profit !== undefined && item.profit !== null && !isNaN(parseFloat(item.profit))) {
+          itemsProfit += parseFloat(item.profit);
+        } else {
+          const cost = parseFloat(item.purchase_price ?? item.cost_price ?? purchaseByName[key]) || 0;
+          itemsProfit += (unitPrice - cost) * qty;
+        }
+      });
+      const discount = parseFloat(inv.discount_amount ?? inv.discount) || 0;
+      totalProfit += itemsProfit - discount;
+    });
+
+    return totalSale - totalProfit - vendorLaterPayments;
+  }, [invoices, products, vendorLaterPayments]);
+
+  const inventoryCashInHand =
+    inventoryCashFromSales + manualCashTotal - cashProductsCost - vendorInitialPaid;
+
+  const ensureCash = useCallback((required) => {
+    if (required > inventoryCashInHand + 0.001) {
+      toast.error(`Cash in Hand mein sirf Rs. ${inventoryCashInHand.toLocaleString()} hain. Pehle apna Cash in Hand barhao, phir cash par maal lo (ya credit par lo).`);
+      return false;
+    }
+    return true;
+  }, [inventoryCashInHand]);
+
+  const ownerCapital = Math.max(0, ownerCapitalInvested - (inventoryCashFromSales + vendorLaterPayments));
 
   const calculateFilteredStats = useCallback((productsList, filter, customDateVal = null) => {
     const range = getDateRange(filter, customDateVal);
@@ -513,9 +585,83 @@ const Inventory = ({ darkMode }) => {
         ).values()
       ];
 
+      const totalPayable = rawData.reduce(
+        (sum, v) => sum + (parseFloat(v.balance_amount) || 0), 0
+      );
+      setVendorPayable(totalPayable);
+
+      let laterPayments = 0;
+      let initialPaid = 0;
+      rawData.forEach(v => {
+        const payments = Array.isArray(v.payments) ? v.payments : [];
+        const recordTime = new Date(v.created_at).getTime();
+        let laterForRecord = 0;
+        payments.forEach(p => {
+          const payTime = new Date(p.created_at || p.date || p.payment_date).getTime();
+          const note = String(p.note || '').toLowerCase();
+          const isInitial =
+            note.includes('initial') ||
+            (!isNaN(recordTime) && !isNaN(payTime) && Math.abs(payTime - recordTime) <= 5000);
+          if (!isInitial) laterForRecord += parseFloat(p.amount) || 0;
+        });
+        laterPayments += laterForRecord;
+        initialPaid += Math.max(0, (parseFloat(v.paid_amount) || 0) - laterForRecord);
+      });
+      setVendorLaterPayments(laterPayments);
+      setVendorInitialPaid(initialPaid);
+
       setVendorsList(uniqueNames);
     } catch (error) {
       console.error('Error fetching vendors list:', error);
+    }
+  }, []);
+
+  const fetchInvoices = useCallback(async () => {
+    try {
+      const response = await api.get('/invoices');
+      const data = Array.isArray(response.data)
+        ? response.data
+        : (Array.isArray(response.data?.data) ? response.data.data : []);
+      setInvoices(data);
+    } catch (error) {
+      console.error('Error fetching invoices:', error);
+    }
+  }, []);
+
+  const fetchManualCash = useCallback(async () => {
+    try {
+      const response = await api.get('/cash-in-hand');
+      const body = response.data || {};
+      const d = body.data ?? body;
+
+      let total = null;
+
+      const keys = ['total', 'balance', 'current_balance', 'cash_in_hand', 'total_cash', 'current_cash'];
+      for (const src of [d, body]) {
+        if (src && typeof src === 'object' && !Array.isArray(src)) {
+          for (const k of keys) {
+            if (src[k] !== undefined && src[k] !== null && !isNaN(parseFloat(src[k]))) {
+              total = parseFloat(src[k]);
+              break;
+            }
+          }
+        }
+        if (total !== null) break;
+      }
+
+      if (total === null) {
+        const list = Array.isArray(d)
+          ? d
+          : (body.history || body.entries || d?.history || d?.entries || []);
+        if (Array.isArray(list) && list.length > 0) {
+          const latest = list.reduce((a, b) => (Number(b.id) > Number(a.id) ? b : a));
+          total = parseFloat(latest.balance_after) || 0;
+        }
+      }
+
+      setManualCashTotal(total ?? 0);
+    } catch (error) {
+      console.error('Error fetching cash in hand:', error);
     }
   }, []);
 
@@ -586,7 +732,9 @@ const Inventory = ({ darkMode }) => {
   useEffect(() => {
     fetchProducts();
     fetchVendorsList();
-  }, [fetchProducts, fetchVendorsList]);
+    fetchInvoices();
+    fetchManualCash();
+  }, [fetchProducts, fetchVendorsList, fetchInvoices, fetchManualCash]);
 
   const exportToExcel = useCallback((data, filename) => {
     const exportData = data.map(p => ({
@@ -684,8 +832,7 @@ const Inventory = ({ darkMode }) => {
     const purchasePriceNum = parseFloat(formData.purchasePrice);
     const sellingPriceNum = parseFloat(formData.sellingPrice);
     const quantityNum = parseInt(formData.quantity);
-    
-    // Handle empty threshold - allow 0 or empty
+
     let thresholdNum = null;
     if (formData.lowStockThreshold !== '' && formData.lowStockThreshold !== null && formData.lowStockThreshold !== undefined) {
       const parsed = parseInt(formData.lowStockThreshold);
@@ -707,6 +854,17 @@ const Inventory = ({ darkMode }) => {
     if (formData.isCreditPurchase && (!formData.vendorName || !formData.invoiceNumber)) {
       toast.error('Vendor name aur invoice number zaroori hai credit purchase ke liye');
       return;
+    }
+
+    if (formData.isCreditPurchase) {
+      const initialPay = parseFloat(formData.paidAmount) || 0;
+      if (initialPay > purchasePriceNum * quantityNum) {
+        toast.error('Paid amount total amount se zyada nahi ho sakta');
+        return;
+      }
+      if (!ensureCash(initialPay)) return;
+    } else {
+      if (!ensureCash(purchasePriceNum * quantityNum)) return;
     }
 
     setIsSubmitting(true);
@@ -733,29 +891,25 @@ const Inventory = ({ darkMode }) => {
         const paidAmountNum = parseFloat(formData.paidAmount) || 0;
         const totalAmount = purchasePriceNum * quantityNum;
 
-        if (paidAmountNum > totalAmount) {
-          toast.error('Paid amount total amount se zyada nahi ho sakta. Product bin gaya, vendor link skip hui.');
-        } else {
-          try {
-            await api.post('/credit/vendors', {
-              vendor_name: formData.vendorName,
-              invoice_number: formData.invoiceNumber,
-              total_amount: totalAmount,
-              paid_amount: paidAmountNum,
-              stock_quantity: quantityNum,
-              product_ids: [{
-                product_id: newProduct.id,
-                product_name: formData.name,
-                quantity: quantityNum,
-                purchase_price: purchasePriceNum
-              }]
-            });
-            toast.success('Product add ho gaya aur vendor se link ho gaya!');
-            fetchVendorsList();
-          } catch (vendorError) {
-            console.error('Vendor link error:', vendorError);
-            toast.error(vendorError.response?.data?.message || 'Product ban gaya, lekin vendor link fail hua (invoice number unique honi chahiye)');
-          }
+        try {
+          await api.post('/credit/vendors', {
+            vendor_name: formData.vendorName,
+            invoice_number: formData.invoiceNumber,
+            total_amount: totalAmount,
+            paid_amount: paidAmountNum,
+            stock_quantity: quantityNum,
+            product_ids: [{
+              product_id: newProduct.id,
+              product_name: formData.name,
+              quantity: quantityNum,
+              purchase_price: purchasePriceNum
+            }]
+          });
+          toast.success('Product add ho gaya aur vendor se link ho gaya!');
+          fetchVendorsList();
+        } catch (vendorError) {
+          console.error('Vendor link error:', vendorError);
+          toast.error(vendorError.response?.data?.message || 'Product ban gaya, lekin vendor link fail hua (invoice number unique honi chahiye)');
         }
       } else {
         toast.success('Product added successfully!');
@@ -770,7 +924,7 @@ const Inventory = ({ darkMode }) => {
     } finally {
       setIsSubmitting(false);
     }
-  }, [formData, isAdmin, fetchProducts, fetchVendorsList, isSubmitting]);
+  }, [formData, isAdmin, fetchProducts, fetchVendorsList, isSubmitting, ensureCash]);
 
   const handleEditProduct = useCallback((product) => {
     setEditingProduct(product);
@@ -780,7 +934,6 @@ const Inventory = ({ darkMode }) => {
       purchasePrice: product.purchase_price,
       sellingPrice: product.selling_price,
       quantity: product.quantity,
-      // Allow empty if null/undefined
       lowStockThreshold: product.low_stock_threshold ?? ''
     });
     setIsModalOpen(true);
@@ -800,6 +953,13 @@ const Inventory = ({ darkMode }) => {
       if (isNaN(quantityNum) || quantityNum < 0) {
         toast.error('Please enter a valid positive number');
         return;
+      }
+
+      if (!(editingProduct.credit_vendor || editingProduct.vendor_name)) {
+        const extra =
+          (quantityNum - (parseInt(editingProduct.quantity) || 0)) *
+          (parseFloat(editingProduct.purchase_price) || 0);
+        if (extra > 0 && !ensureCash(extra)) return;
       }
 
       setIsSubmitting(true);
@@ -824,8 +984,7 @@ const Inventory = ({ darkMode }) => {
     const purchasePriceNum = parseFloat(formData.purchasePrice);
     const sellingPriceNum = parseFloat(formData.sellingPrice);
     const quantityNum = parseInt(formData.quantity);
-    
-    // Handle empty threshold
+
     let thresholdNum = null;
     if (formData.lowStockThreshold !== '' && formData.lowStockThreshold !== null && formData.lowStockThreshold !== undefined) {
       const parsed = parseInt(formData.lowStockThreshold);
@@ -842,6 +1001,13 @@ const Inventory = ({ darkMode }) => {
     if (purchasePriceNum < 0 || sellingPriceNum < 0 || quantityNum < 0 || (thresholdNum !== null && thresholdNum < 0)) {
       toast.error('Values cannot be negative');
       return;
+    }
+
+    if (!(editingProduct.credit_vendor || editingProduct.vendor_name)) {
+      const extra =
+        purchasePriceNum * quantityNum -
+        (parseFloat(editingProduct.purchase_price) || 0) * (parseInt(editingProduct.quantity) || 0);
+      if (extra > 0 && !ensureCash(extra)) return;
     }
 
     setIsSubmitting(true);
@@ -862,7 +1028,7 @@ const Inventory = ({ darkMode }) => {
     } finally {
       setIsSubmitting(false);
     }
-  }, [formData, editingProduct, handleUpdateProduct, isAdmin, isSubmitting]);
+  }, [formData, editingProduct, handleUpdateProduct, isAdmin, isSubmitting, ensureCash]);
 
   const startInlineEdit = useCallback(({ productId, field, value }) => {
     setEditingCell({ productId, field, value });
@@ -892,7 +1058,6 @@ const Inventory = ({ darkMode }) => {
         return;
       }
     } else if (field === 'quantity' || field === 'lowStockThreshold') {
-      // Handle empty string for lowStockThreshold
       if (editingCell.value === '' && field === 'lowStockThreshold') {
         newValue = null;
       } else {
@@ -907,6 +1072,21 @@ const Inventory = ({ darkMode }) => {
       newValue = parseFloat(editingCell.value);
       if (isNaN(newValue) || newValue < 0) {
         toast.error('Please enter a valid positive number');
+        resetCell();
+        return;
+      }
+    }
+
+    if (
+      !(productToUpdate.credit_vendor || productToUpdate.vendor_name) &&
+      (field === 'quantity' || field === 'purchasePrice')
+    ) {
+      const oldQty = parseInt(productToUpdate.quantity) || 0;
+      const oldPrice = parseFloat(productToUpdate.purchase_price) || 0;
+      const newQty = field === 'quantity' ? newValue : oldQty;
+      const newPrice = field === 'purchasePrice' ? newValue : oldPrice;
+      const extra = newQty * newPrice - oldQty * oldPrice;
+      if (extra > 0 && !ensureCash(extra)) {
         resetCell();
         return;
       }
@@ -944,7 +1124,7 @@ const Inventory = ({ darkMode }) => {
       toast.error('Failed to update product');
     }
     resetCell();
-  }, [editingCell, products, fetchProducts, isAdmin]);
+  }, [editingCell, products, fetchProducts, isAdmin, ensureCash]);
 
   const handleKeyPress = useCallback((e, productId, field) => {
     if (e.key === 'Enter') {
@@ -1109,19 +1289,22 @@ const Inventory = ({ darkMode }) => {
       {isAdmin && (
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           {[
-            { icon: FiShoppingCart, tint: 'bg-blue-500/15', color: 'text-blue-400', title: 'Purchase', value: filteredStats.totalPurchase, sub: 'purchases' },
-            { icon: FiDollarSign, tint: 'bg-amber-500/15', color: 'text-amber-400', title: 'Selling', value: filteredStats.totalSelling, sub: 'sales' },
-            { icon: FiTrendingUp, tint: 'bg-emerald-500/15', color: 'text-emerald-400', title: 'Profit', value: filteredStats.totalProfit, sub: 'profit' }
+            { icon: FiShoppingCart, tint: 'bg-blue-500/15', color: 'text-blue-400', label: `${getStatsLabelText()} Purchase`, value: filteredStats.totalPurchase, sub: `${getStatsLabelText().toLowerCase()} purchases` },
+            { icon: FiDollarSign, tint: 'bg-amber-500/15', color: 'text-amber-400', label: `${getStatsLabelText()} Selling`, value: filteredStats.totalSelling, sub: `${getStatsLabelText().toLowerCase()} sales` },
+            { icon: FiTrendingUp, tint: 'bg-emerald-500/15', color: 'text-emerald-400', label: `${getStatsLabelText()} Profit`, value: filteredStats.totalProfit, sub: `${getStatsLabelText().toLowerCase()} profit` },
+            { icon: FiBriefcase, tint: 'bg-purple-500/15', color: 'text-purple-400', label: 'Owner Capital', value: ownerCapital, sub: 'apni cash se liya hua maal' },
+            { icon: FiCreditCard, tint: 'bg-red-500/15', color: 'text-red-400', label: 'Vendor Pay', value: vendorPayable, sub: 'vendors ko dena baqi' },
+            { icon: FiBox, tint: 'bg-cyan-500/15', color: 'text-cyan-400', label: 'Inventory Cash in Hand', value: inventoryCashInHand, sub: 'sale ki cost wapas + manual cash - purchases' }
           ].map(s => (
-            <div key={s.title} className={`rounded-xl p-4 border ${card}`}>
+            <div key={s.label} className={`rounded-xl p-4 border ${card}`}>
               <div className="flex items-center gap-2 mb-1">
                 <div className={`p-1.5 rounded-full ${s.tint}`}>
                   <s.icon className={`text-sm ${s.color}`} />
                 </div>
-                <span className={`text-xs font-bold ${mutedCls}`}>{getStatsLabelText()} {s.title}</span>
+                <span className={`text-xs font-bold ${mutedCls}`}>{s.label}</span>
               </div>
               <p className={`text-lg font-bold ${darkMode ? 'text-white' : 'text-gray-900'}`}>Rs. {s.value.toLocaleString()}</p>
-              <p className="text-xs font-bold text-gray-500">{getStatsLabelText().toLowerCase()} {s.sub}</p>
+              <p className="text-xs font-bold text-gray-500">{s.sub}</p>
             </div>
           ))}
         </div>

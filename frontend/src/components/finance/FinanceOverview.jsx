@@ -1,5 +1,3 @@
-// src/components/finance/FinanceOverview.jsx
-
 import React, { useState, useEffect, useCallback, useMemo, lazy, Suspense } from 'react';
 import { FiCalendar, FiTrendingUp, FiDollarSign, FiPackage, FiBarChart2, FiChevronDown, FiChevronUp, FiDownload, FiFileText, FiLoader, FiClock, FiTrendingDown, FiChevronLeft, FiChevronRight, FiPercent, FiGift } from 'react-icons/fi';
 import * as XLSX from 'xlsx';
@@ -8,20 +6,9 @@ import 'jspdf-autotable';
 import toast from 'react-hot-toast';
 import api from '../../services/api';
 
-// Lazy load heavy components
 const StatsCards = lazy(() => import('./StatsCards'));
 const UpcomingPayments = lazy(() => import('./UpcomingPayments'));
 
-// Debounce function
-const debounce = (func, delay) => {
-  let timeoutId;
-  return (...args) => {
-    clearTimeout(timeoutId);
-    timeoutId = setTimeout(() => func(...args), delay);
-  };
-};
-
-// ✅ NEW: API response se array nikalne ka helper (success wrapper ho ya na ho)
 const parseListResponse = (res) => {
   if (res?.data?.success && Array.isArray(res.data.data)) return res.data.data;
   if (Array.isArray(res?.data)) return res.data;
@@ -29,19 +16,13 @@ const parseListResponse = (res) => {
   return [];
 };
 
-// ✅ NEW: Salary + Cash Inventory + Vendor Payments ko expense ki shakal mein convert karo
-// (bilkul wahi logic jo Dashboard.jsx mein hai, taake dono jagah same numbers aayen)
-const fetchExtraExpenses = async (invoicesList, productsList, signal) => {
-  const [employeesRes, allProductsRes, vendorsRes] = await Promise.all([
-    api.get('/employees', { signal }).catch(() => null),
-    // hidden products bhi chahiye (kharcha to hua tha)
-    api.get('/products', { params: { show_hidden: 'true' }, signal }).catch(() => null),
-    api.get('/credit/vendors', { signal }).catch(() => null)
-  ]);
+// Dashboard ki tarah: normal expenses ke saath sirf Salary count hoti hai.
+// Inventory (Cash) aur Vendor Payment expenses mein NAHI ginte.
+const fetchSalaryExpenses = async (signal) => {
+  const employeesRes = await api.get('/employees', { signal }).catch(() => null);
 
-  // 1) Employee salary payments
   const employeesList = parseListResponse(employeesRes);
-  const salaryList = employeesList.flatMap(emp =>
+  return employeesList.flatMap(emp =>
     (emp.payments || []).map(p => ({
       id: `salary-${p.id}`,
       amount: parseFloat(p.amount) || 0,
@@ -51,74 +32,12 @@ const fetchExtraExpenses = async (invoicesList, productsList, signal) => {
       category: 'Salary'
     }))
   );
-
-  // 2) Cash inventory: jo products vendor se link nahi hain wo cash se kharide gaye
-  //    Khareeda hua stock = abhi ka stock + ab tak bika hua stock (invoices se)
-  const allProductsData = allProductsRes ? parseListResponse(allProductsRes) : productsList;
-
-  const soldByName = {};
-  (invoicesList || []).forEach(inv => {
-    (inv.items || []).forEach(item => {
-      const key = (item.service_name || '').toLowerCase().trim();
-      if (!key) return;
-      soldByName[key] = (soldByName[key] || 0) + (parseInt(item.quantity || 1) || 0);
-    });
-  });
-
-  const inventoryCashList = allProductsData
-    .filter(p => !(p.credit_vendor || p.vendor_name))
-    .map(p => {
-      const key = (p.name || '').toLowerCase().trim();
-      const purchasedQty = (parseInt(p.quantity) || 0) + (soldByName[key] || 0);
-      return {
-        id: `inventory-${p.id}`,
-        amount: (parseFloat(p.purchase_price) || 0) * purchasedQty,
-        date: p.date_added || p.created_at,
-        description: `Inventory (Cash) - ${p.name}`,
-        title: `Inventory (Cash) - ${p.name}`,
-        category: 'Inventory (Cash)'
-      };
-    })
-    .filter(e => e.amount > 0);
-
-  // 3) Vendor credit: sirf wahi paisa expense hai jo vendor ko de diya gaya
-  const vendorRecords = parseListResponse(vendorsRes);
-  const vendorPaymentList = vendorRecords.flatMap(v => {
-    const payments = Array.isArray(v.payments) ? v.payments : [];
-    const paymentsSum = payments.reduce((s, p) => s + (parseFloat(p.amount) || 0), 0);
-
-    const items = payments.map(p => ({
-      id: `vendor-payment-${p.id}`,
-      amount: parseFloat(p.amount) || 0,
-      date: p.date || p.payment_date || p.created_at,
-      description: `Vendor Payment - ${v.vendor_name}`,
-      title: `Vendor Payment - ${v.vendor_name}`,
-      category: 'Vendor Payment'
-    }));
-
-    // Vendor add karte waqt jo paisa foran diya, agar wo payments table mein nahi to yahan count hoga
-    const initialPaid = (parseFloat(v.paid_amount) || 0) - paymentsSum;
-    if (initialPaid > 0.5) {
-      items.push({
-        id: `vendor-initial-${v.id}`,
-        amount: initialPaid,
-        date: v.created_at,
-        description: `Vendor Payment - ${v.vendor_name}`,
-        title: `Vendor Payment - ${v.vendor_name}`,
-        category: 'Vendor Payment'
-      });
-    }
-    return items;
-  });
-
-  return [...salaryList, ...inventoryCashList, ...vendorPaymentList];
 };
 
-// ✅ Helper: Get date range for filter (with custom date support)
 const getDateRange = (filter, customDate = null) => {
   const now = new Date();
   const start = new Date();
-  
+
   if (filter === 'custom' && customDate) {
     const date = new Date(customDate);
     start.setFullYear(date.getFullYear(), date.getMonth(), date.getDate());
@@ -127,7 +46,7 @@ const getDateRange = (filter, customDate = null) => {
     end.setHours(23, 59, 59, 999);
     return { start, end };
   }
-  
+
   switch (filter) {
     case 'today':
       start.setHours(0, 0, 0, 0);
@@ -152,12 +71,11 @@ const getDateRange = (filter, customDate = null) => {
   return { start, end: now };
 };
 
-// ✅ Helper: Filter invoices by date range
 const filterInvoicesByDate = (invoices, filter, customDate = null) => {
   if (filter === 'all' || !invoices || invoices.length === 0) return invoices;
   const range = getDateRange(filter, customDate);
   if (!range) return invoices;
-  
+
   return invoices.filter(inv => {
     if (!inv.invoice_date) return false;
     const invDate = new Date(inv.invoice_date);
@@ -165,12 +83,11 @@ const filterInvoicesByDate = (invoices, filter, customDate = null) => {
   });
 };
 
-// ✅ Helper: Filter expenses by date range
 const filterExpensesByDate = (expenses, filter, customDate = null) => {
   if (filter === 'all' || !expenses || expenses.length === 0) return expenses;
   const range = getDateRange(filter, customDate);
   if (!range) return expenses;
-  
+
   return expenses.filter(exp => {
     if (!exp.expense_date && !exp.date && !exp.created_at) return false;
     const expDate = new Date(exp.expense_date || exp.date || exp.created_at);
@@ -178,8 +95,73 @@ const filterExpensesByDate = (expenses, filter, customDate = null) => {
   });
 };
 
-// Memoized Invoice Details Component
+const buildInvoiceDetail = (inv, productsMap) => {
+  const invDiscount = parseFloat(inv.discount) || 0;
+  const invTotal = (parseFloat(inv.total_amount) || 0) + invDiscount;
+  let invProfit = 0;
+  let itemCount = 0;
+
+  if (inv.items && inv.items.length > 0) {
+    inv.items.forEach(item => {
+      const itemQty = parseInt(item.quantity) || 0;
+      const itemPrice = parseFloat(item.price) || 0;
+      itemCount += itemQty;
+
+      let itemProfit = 0;
+      let purchasePrice = 0;
+
+      const product = productsMap.get(item.service_name);
+
+      if (product) {
+        purchasePrice = parseFloat(product.purchase_price) || 0;
+        itemProfit = (itemPrice - purchasePrice) * itemQty;
+      } else {
+        itemProfit = itemPrice * itemQty;
+        purchasePrice = 0;
+      }
+
+      invProfit += itemProfit;
+      item.purchasePrice = purchasePrice;
+      item.isProduct = !!product;
+      item.unitProfit = itemQty > 0 ? itemProfit / itemQty : 0;
+    });
+  }
+
+  invProfit -= invDiscount;
+
+  return {
+    invoiceNo: inv.invoice_no,
+    customer: inv.customer_name,
+    date: inv.invoice_date,
+    total: invTotal,
+    profit: invProfit,
+    discount: invDiscount,
+    items: inv.items || [],
+    itemCount
+  };
+};
+
+const summarizeDetails = (details) => details.reduce(
+  (acc, d) => ({
+    total: acc.total + d.total,
+    items: acc.items + d.itemCount,
+    profit: acc.profit + d.profit,
+    discount: acc.discount + d.discount
+  }),
+  { total: 0, items: 0, profit: 0, discount: 0 }
+);
+
 const InvoiceDetails = React.memo(({ title, data, darkMode, onClose }) => {
+  const allItems = useMemo(() => {
+    const items = [];
+    (data?.details || []).forEach(inv => {
+      inv.items.forEach(item => {
+        items.push({ ...item, inv });
+      });
+    });
+    return items;
+  }, [data?.details]);
+
   if (!data?.details || data.details.length === 0) {
     return (
       <div className={`mt-4 p-4 rounded-xl ${darkMode ? 'bg-gray-800' : 'bg-gray-100'} text-center`}>
@@ -187,17 +169,7 @@ const InvoiceDetails = React.memo(({ title, data, darkMode, onClose }) => {
       </div>
     );
   }
-  
-  const allItems = useMemo(() => {
-    const items = [];
-    data.details.forEach(inv => {
-      inv.items.forEach(item => {
-        items.push({ ...item, inv });
-      });
-    });
-    return items;
-  }, [data.details]);
-  
+
   return (
     <div className="mt-4 space-y-3">
       <div className="flex justify-between items-center">
@@ -239,15 +211,22 @@ const InvoiceDetails = React.memo(({ title, data, darkMode, onClose }) => {
                   Rs. {(item.unitProfit * item.quantity).toLocaleString()}
                 </td>
                 <td className="px-3 py-2 text-xs">{item.inv.customer}</td>
-               </tr>
+              </tr>
             ))}
           </tbody>
           <tfoot className={darkMode ? 'bg-gray-800' : 'bg-gray-100'}>
+            {data.discount > 0 && (
+              <tr>
+                <td colSpan="6" className="px-3 py-2 text-right font-bold">Discount:</td>
+                <td className="px-3 py-2 text-right font-bold text-purple-400">- Rs. {data.discount.toLocaleString()}</td>
+                <td></td>
+              </tr>
+            )}
             <tr>
               <td colSpan="6" className="px-3 py-2 text-right font-bold">Total:</td>
               <td className="px-3 py-2 text-right font-bold text-green-500">Rs. {data.profit.toLocaleString()}</td>
               <td></td>
-             </tr>
+            </tr>
           </tfoot>
         </table>
       </div>
@@ -255,8 +234,12 @@ const InvoiceDetails = React.memo(({ title, data, darkMode, onClose }) => {
   );
 });
 
-// Memoized Expense Details Component
 const ExpenseDetails = React.memo(({ title, expenses, darkMode, onClose }) => {
+  const totalAmount = useMemo(() =>
+    (expenses || []).reduce((sum, exp) => sum + (exp.amount || 0), 0),
+    [expenses]
+  );
+
   if (!expenses || expenses.length === 0) {
     return (
       <div className={`mt-4 p-4 rounded-xl ${darkMode ? 'bg-gray-800' : 'bg-gray-100'} text-center`}>
@@ -264,12 +247,7 @@ const ExpenseDetails = React.memo(({ title, expenses, darkMode, onClose }) => {
       </div>
     );
   }
-  
-  const totalAmount = useMemo(() => 
-    expenses.reduce((sum, exp) => sum + (exp.amount || 0), 0), 
-    [expenses]
-  );
-  
+
   return (
     <div className="mt-4 space-y-3">
       <div className="flex justify-between items-center">
@@ -284,7 +262,7 @@ const ExpenseDetails = React.memo(({ title, expenses, darkMode, onClose }) => {
               <th className="px-3 py-2 text-left">Category</th>
               <th className="px-3 py-2 text-left">Date</th>
               <th className="px-3 py-2 text-right">Amount</th>
-             </tr>
+            </tr>
           </thead>
           <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
             {expenses.map((exp, idx) => (
@@ -297,14 +275,14 @@ const ExpenseDetails = React.memo(({ title, expenses, darkMode, onClose }) => {
                 </td>
                 <td className="px-3 py-2 text-sm">{new Date(exp.date || exp.expense_date).toLocaleDateString()}</td>
                 <td className="px-3 py-2 text-right font-semibold text-red-500">Rs. {exp.amount.toLocaleString()}</td>
-               </tr>
+              </tr>
             ))}
           </tbody>
           <tfoot className={darkMode ? 'bg-gray-800' : 'bg-gray-100'}>
             <tr>
               <td colSpan="3" className="px-3 py-2 text-right font-bold">Total:</td>
               <td className="px-3 py-2 text-right font-bold text-red-500">Rs. {totalAmount.toLocaleString()}</td>
-             </tr>
+            </tr>
           </tfoot>
         </table>
       </div>
@@ -313,11 +291,10 @@ const ExpenseDetails = React.memo(({ title, expenses, darkMode, onClose }) => {
 });
 
 const FinanceOverview = ({ darkMode }) => {
-  // ✅ Filter states
   const [timeFilter, setTimeFilter] = useState('all');
   const [customDate, setCustomDate] = useState('');
   const [showCustomDate, setShowCustomDate] = useState(false);
-  
+
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [showYearlyReport, setShowYearlyReport] = useState(true);
   const [showTodayDetails, setShowTodayDetails] = useState(false);
@@ -329,36 +306,34 @@ const FinanceOverview = ({ darkMode }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // ✅ Collapse/expand state for the stats card rows (like Low Stock Alerts)
   const [showAllStats, setShowAllStats] = useState(false);
-  
-  // Pagination state for yearly report
+
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(10);
-  
+
   const [products, setProducts] = useState([]);
   const [expenses, setExpenses] = useState([]);
   const [invoices, setInvoices] = useState([]);
-  
-  // ✅ Dynamic data states - updated based on filter
+
   const [filteredSalesData, setFilteredSalesData] = useState({ total: 0, items: 0, count: 0, profit: 0, discount: 0, details: [] });
   const [filteredExpenseData, setFilteredExpenseData] = useState([]);
   const [filteredStats, setFilteredStats] = useState({
     expenses: 0,
     expenseCount: 0,
+    salesProfit: 0,
     profit: 0,
     discount: 0
   });
-  
+
   const [todaySales, setTodaySales] = useState({ total: 0, items: 0, count: 0, profit: 0, discount: 0, details: [] });
   const [weeklySales, setWeeklySales] = useState({ total: 0, items: 0, count: 0, profit: 0, discount: 0, details: [] });
   const [monthlySales, setMonthlySales] = useState({ total: 0, items: 0, count: 0, profit: 0, discount: 0, details: [] });
   const [selectedYearData, setSelectedYearData] = useState({ total: 0, items: 0, count: 0, profit: 0, discount: 0, details: [] });
-  
+
   const [todayExpenseDetails, setTodayExpenseDetails] = useState([]);
   const [weekExpenseDetails, setWeekExpenseDetails] = useState([]);
   const [monthExpenseDetails, setMonthExpenseDetails] = useState([]);
-  
+
   const [stats, setStats] = useState({
     todayExpenses: 0,
     todayExpenseCount: 0,
@@ -374,7 +349,6 @@ const FinanceOverview = ({ darkMode }) => {
     monthDiscount: 0
   });
 
-  // ✅ Get filter label
   const getFilterLabel = useCallback(() => {
     const labels = {
       all: 'All Time',
@@ -387,7 +361,6 @@ const FinanceOverview = ({ darkMode }) => {
     return labels[timeFilter] || 'All Time';
   }, [timeFilter, customDate]);
 
-  // ✅ Handle custom date change
   const handleCustomDateChange = (e) => {
     const date = e.target.value;
     setCustomDate(date);
@@ -397,19 +370,16 @@ const FinanceOverview = ({ darkMode }) => {
     }
   };
 
-  // ✅ Toggle custom date picker
   const toggleCustomDate = () => {
     setShowCustomDate(!showCustomDate);
   };
 
-  // ✅ Clear custom date
   const clearCustomDate = () => {
     setCustomDate('');
     setTimeFilter('all');
     setShowCustomDate(false);
   };
 
-  // Memoized helper functions
   const getStartOfWeek = useCallback(() => {
     const today = new Date();
     const day = today.getDay();
@@ -427,84 +397,35 @@ const FinanceOverview = ({ darkMode }) => {
     return date;
   }, []);
 
-  // ✅ Calculate filtered data based on time filter
   const calculateFilteredData = useCallback((invoicesList, expensesList, productsMap) => {
     const filteredInvoices = filterInvoicesByDate(invoicesList, timeFilter, customDate || null);
     const filteredExpenses = filterExpensesByDate(expensesList, timeFilter, customDate || null);
-    
-    let total = 0, items = 0, profit = 0, discount = 0, details = [];
-    
-    filteredInvoices.forEach(inv => {
-      let invTotal = parseFloat(inv.total_amount) || 0;
-      let invProfit = 0;
-      let itemCount = 0;
-      let invDiscount = parseFloat(inv.discount) || 0;
-      
-      if (inv.items && inv.items.length > 0) {
-        inv.items.forEach(item => {
-          const itemQty = parseInt(item.quantity) || 0;
-          const itemPrice = parseFloat(item.price) || 0;
-          itemCount += itemQty;
-          
-          let itemProfit = 0;
-          let purchasePrice = 0;
-          
-          const product = productsMap.get(item.service_name);
-          
-          if (product) {
-            purchasePrice = parseFloat(product.purchase_price) || 0;
-            itemProfit = (itemPrice - purchasePrice) * itemQty;
-          } else {
-            itemProfit = itemPrice * itemQty;
-            purchasePrice = 0;
-          }
-          
-          invProfit += itemProfit;
-          item.purchasePrice = purchasePrice;
-          item.isProduct = !!product;
-          item.unitProfit = itemQty > 0 ? itemProfit / itemQty : 0;
-        });
-      }
-      
-      total += invTotal;
-      items += itemCount;
-      profit += invProfit;
-      discount += invDiscount;
-      details.push({
-        invoiceNo: inv.invoice_no,
-        customer: inv.customer_name,
-        date: inv.invoice_date,
-        total: invTotal,
-        profit: invProfit,
-        discount: invDiscount,
-        items: inv.items || [],
-        itemCount: itemCount
-      });
-    });
-    
+
+    const details = filteredInvoices.map(inv => buildInvoiceDetail(inv, productsMap));
+    const summary = summarizeDetails(details);
+
     let expenseTotal = 0;
-    let expenseList = [];
+    const expenseList = [];
     filteredExpenses.forEach(exp => {
       const amount = parseFloat(exp.amount) || 0;
       expenseTotal += amount;
       expenseList.push({
         id: exp.id,
         description: exp.description || exp.title,
-        amount: amount,
+        amount,
         date: exp.expense_date || exp.date || exp.created_at,
         category: exp.category
       });
     });
-    
+
     return {
-      sales: { total, items, count: details.length, profit, discount, details },
+      sales: { ...summary, count: details.length, details },
       expenses: expenseList,
-      expenseTotal: expenseTotal,
+      expenseTotal,
       expenseCount: expenseList.length
     };
   }, [timeFilter, customDate]);
 
-  // Fetch functions with abort controller
   const fetchProducts = useCallback(async (signal) => {
     try {
       const response = await api.get('/products', { signal });
@@ -551,125 +472,76 @@ const FinanceOverview = ({ darkMode }) => {
     const abortController = new AbortController();
     setLoading(true);
     setError(null);
-    
+
     try {
-      const [productsList, regularExpenses, invoicesList] = await Promise.all([
+      const [productsList, regularExpenses, invoicesList, salaryExpenses] = await Promise.all([
         fetchProducts(abortController.signal),
         fetchExpenses(abortController.signal),
-        fetchInvoices(abortController.signal)
+        fetchInvoices(abortController.signal),
+        fetchSalaryExpenses(abortController.signal)
       ]);
 
-      // ✅ NEW: Salary + Cash Inventory + Vendor Payments bhi expenses mein shamil
-      const extraExpenses = await fetchExtraExpenses(invoicesList, productsList, abortController.signal);
-      const expensesList = [...regularExpenses, ...extraExpenses];
-      
+      // Dashboard ki tarah: sirf normal expenses + salary
+      const expensesList = [...regularExpenses, ...salaryExpenses];
+
       const productsMap = new Map();
       productsList.forEach(p => {
         productsMap.set(p.name, p);
       });
-      
-      // ✅ Calculate filtered data based on selected filter
+
       const filtered = calculateFilteredData(invoicesList, expensesList, productsMap);
       setFilteredSalesData(filtered.sales);
       setFilteredExpenseData(filtered.expenses);
       setFilteredStats({
         expenses: filtered.expenseTotal,
         expenseCount: filtered.expenseCount,
+        // Sales ka profit (discount pehle hi minus ho chuka hai)
+        salesProfit: filtered.sales.profit,
+        // Net profit = sales profit - expenses
         profit: filtered.sales.profit - filtered.expenseTotal,
         discount: filtered.sales.discount
       });
-      
-      // Also calculate today, week, month for individual cards
+
       const todayStr = new Date().toDateString();
       const weekStart = getStartOfWeek();
       const monthStart = getStartOfMonth();
-      
-      let todayTotal = 0, todayItems = 0, todayProfit = 0, todayDiscount = 0, todayDetails = [];
-      let weekTotal = 0, weekItems = 0, weekProfit = 0, weekDiscount = 0, weekDetails = [];
-      let monthTotal = 0, monthItems = 0, monthProfit = 0, monthDiscount = 0, monthDetails = [];
-      
+
+      const todayDetails = [];
+      const weekDetails = [];
+      const monthDetails = [];
+
       invoicesList.forEach(inv => {
         if (!inv.invoice_date) return;
-        
+
         const invDate = new Date(inv.invoice_date);
-        const invDateStr = invDate.toDateString();
-        const isToday = invDateStr === todayStr;
+        const isToday = invDate.toDateString() === todayStr;
         const isThisWeek = invDate >= weekStart;
         const isThisMonth = invDate >= monthStart;
-        
-        let invTotal = parseFloat(inv.total_amount) || 0;
-        let invProfit = 0;
-        let itemCount = 0;
-        let invDiscount = parseFloat(inv.discount) || 0;
-        
-        if (inv.items && inv.items.length > 0) {
-          inv.items.forEach(item => {
-            const itemQty = parseInt(item.quantity) || 0;
-            const itemPrice = parseFloat(item.price) || 0;
-            itemCount += itemQty;
-            
-            let itemProfit = 0;
-            let purchasePrice = 0;
-            
-            const product = productsMap.get(item.service_name);
-            
-            if (product) {
-              purchasePrice = parseFloat(product.purchase_price) || 0;
-              itemProfit = (itemPrice - purchasePrice) * itemQty;
-            } else {
-              itemProfit = itemPrice * itemQty;
-              purchasePrice = 0;
-            }
-            
-            invProfit += itemProfit;
-            item.purchasePrice = purchasePrice;
-            item.isProduct = !!product;
-            item.unitProfit = itemQty > 0 ? itemProfit / itemQty : 0;
-          });
-        }
-        
-        const detailItem = {
-          invoiceNo: inv.invoice_no,
-          customer: inv.customer_name,
-          date: inv.invoice_date,
-          total: invTotal,
-          profit: invProfit,
-          discount: invDiscount,
-          items: inv.items || [],
-          itemCount: itemCount
-        };
-        
-        if (isToday) {
-          todayTotal += invTotal;
-          todayItems += itemCount;
-          todayProfit += invProfit;
-          todayDiscount += invDiscount;
-          todayDetails.push(detailItem);
-        }
-        if (isThisWeek) {
-          weekTotal += invTotal;
-          weekItems += itemCount;
-          weekProfit += invProfit;
-          weekDiscount += invDiscount;
-          weekDetails.push(detailItem);
-        }
-        if (isThisMonth) {
-          monthTotal += invTotal;
-          monthItems += itemCount;
-          monthProfit += invProfit;
-          monthDiscount += invDiscount;
-          monthDetails.push(detailItem);
-        }
+
+        if (!isToday && !isThisWeek && !isThisMonth) return;
+
+        const detailItem = buildInvoiceDetail(inv, productsMap);
+
+        if (isToday) todayDetails.push(detailItem);
+        if (isThisWeek) weekDetails.push(detailItem);
+        if (isThisMonth) monthDetails.push(detailItem);
       });
-      
-      setTodaySales({ total: todayTotal, items: todayItems, count: todayDetails.length, profit: todayProfit, discount: todayDiscount, details: todayDetails });
-      setWeeklySales({ total: weekTotal, items: weekItems, count: weekDetails.length, profit: weekProfit, discount: weekDiscount, details: weekDetails });
-      setMonthlySales({ total: monthTotal, items: monthItems, count: monthDetails.length, profit: monthProfit, discount: monthDiscount, details: monthDetails });
-      
-      let todayExp = 0, todayExpCount = 0, todayExpList = [];
-      let weekExp = 0, weekExpCount = 0, weekExpList = [];
-      let monthExp = 0, monthExpCount = 0, monthExpList = [];
-      
+
+      const todaySummary = summarizeDetails(todayDetails);
+      const weekSummary = summarizeDetails(weekDetails);
+      const monthSummary = summarizeDetails(monthDetails);
+
+      setTodaySales({ ...todaySummary, count: todayDetails.length, details: todayDetails });
+      setWeeklySales({ ...weekSummary, count: weekDetails.length, details: weekDetails });
+      setMonthlySales({ ...monthSummary, count: monthDetails.length, details: monthDetails });
+
+      let todayExp = 0, todayExpCount = 0;
+      let weekExp = 0, weekExpCount = 0;
+      let monthExp = 0, monthExpCount = 0;
+      const todayExpList = [];
+      const weekExpList = [];
+      const monthExpList = [];
+
       expensesList.forEach(exp => {
         const rawDate = exp.expense_date || exp.date || exp.created_at;
         if (!rawDate) return;
@@ -678,11 +550,11 @@ const FinanceOverview = ({ darkMode }) => {
         const expenseItem = {
           id: exp.id,
           description: exp.description || exp.title,
-          amount: amount,
+          amount,
           date: rawDate,
           category: exp.category
         };
-        
+
         if (expDate.toDateString() === todayStr) {
           todayExp += amount;
           todayExpCount++;
@@ -699,15 +571,11 @@ const FinanceOverview = ({ darkMode }) => {
           monthExpList.push(expenseItem);
         }
       });
-      
+
       setTodayExpenseDetails(todayExpList);
       setWeekExpenseDetails(weekExpList);
       setMonthExpenseDetails(monthExpList);
-      
-      const todayNetProfit = todayProfit - todayExp;
-      const weekNetProfit = weekProfit - weekExp;
-      const monthNetProfit = monthProfit - monthExp;
-      
+
       setStats({
         todayExpenses: todayExp,
         todayExpenseCount: todayExpCount,
@@ -715,73 +583,26 @@ const FinanceOverview = ({ darkMode }) => {
         weekExpenseCount: weekExpCount,
         monthExpenses: monthExp,
         monthExpenseCount: monthExpCount,
-        todayProfit: todayNetProfit,
-        weekProfit: weekNetProfit,
-        monthProfit: monthNetProfit,
-        todayDiscount: todayDiscount,
-        weekDiscount: weekDiscount,
-        monthDiscount: monthDiscount
+        // Net profit = sales profit (discount ke baad) - expenses
+        todayProfit: todaySummary.profit - todayExp,
+        weekProfit: weekSummary.profit - weekExp,
+        monthProfit: monthSummary.profit - monthExp,
+        todayDiscount: todaySummary.discount,
+        weekDiscount: weekSummary.discount,
+        monthDiscount: monthSummary.discount
       });
-      
-      const year = selectedYear;
+
       const yearInvoices = invoicesList.filter(inv => {
         if (!inv.invoice_date) return false;
-        return new Date(inv.invoice_date).getFullYear() === year;
+        return new Date(inv.invoice_date).getFullYear() === selectedYear;
       });
-      
-      let yearlyTotal = 0, yearlyItems = 0, yearlyProfit = 0, yearlyDiscount = 0, yearlyDetails = [];
-      
-      yearInvoices.forEach(inv => {
-        let invTotal = parseFloat(inv.total_amount) || 0;
-        let invProfit = 0;
-        let itemCount = 0;
-        let invDiscount = parseFloat(inv.discount) || 0;
-        
-        if (inv.items && inv.items.length > 0) {
-          inv.items.forEach(item => {
-            const itemQty = parseInt(item.quantity) || 0;
-            const itemPrice = parseFloat(item.price) || 0;
-            itemCount += itemQty;
-            
-            let itemProfit = 0;
-            let purchasePrice = 0;
-            
-            const product = productsMap.get(item.service_name);
-            
-            if (product) {
-              purchasePrice = parseFloat(product.purchase_price) || 0;
-              itemProfit = (itemPrice - purchasePrice) * itemQty;
-            } else {
-              itemProfit = itemPrice * itemQty;
-              purchasePrice = 0;
-            }
-            
-            invProfit += itemProfit;
-            item.purchasePrice = purchasePrice;
-            item.isProduct = !!product;
-            item.unitProfit = itemQty > 0 ? itemProfit / itemQty : 0;
-          });
-        }
-        
-        yearlyTotal += invTotal;
-        yearlyItems += itemCount;
-        yearlyProfit += invProfit;
-        yearlyDiscount += invDiscount;
-        yearlyDetails.push({
-          invoiceNo: inv.invoice_no,
-          customer: inv.customer_name,
-          date: inv.invoice_date,
-          total: invTotal,
-          profit: invProfit,
-          discount: invDiscount,
-          items: inv.items || [],
-          itemCount: itemCount
-        });
-      });
-      
-      setSelectedYearData({ total: yearlyTotal, items: yearlyItems, count: yearInvoices.length, profit: yearlyProfit, discount: yearlyDiscount, details: yearlyDetails });
+
+      const yearlyDetails = yearInvoices.map(inv => buildInvoiceDetail(inv, productsMap));
+      const yearlySummary = summarizeDetails(yearlyDetails);
+
+      setSelectedYearData({ ...yearlySummary, count: yearInvoices.length, details: yearlyDetails });
       setCurrentPage(1);
-      
+
     } catch (err) {
       if (err.name !== 'AbortError') {
         console.error('Error loading data:', err);
@@ -790,7 +611,7 @@ const FinanceOverview = ({ darkMode }) => {
     } finally {
       setLoading(false);
     }
-    
+
     return () => abortController.abort();
   }, [selectedYear, fetchProducts, fetchExpenses, fetchInvoices, getStartOfWeek, getStartOfMonth, calculateFilteredData, timeFilter, customDate]);
 
@@ -815,7 +636,7 @@ const FinanceOverview = ({ darkMode }) => {
   const totalPages = Math.ceil(totalItems / itemsPerPage);
   const indexOfLastItem = currentPage * itemsPerPage;
   const indexOfFirstItem = indexOfLastItem - itemsPerPage;
-  const currentItems = useMemo(() => 
+  const currentItems = useMemo(() =>
     flattenedItems.slice(indexOfFirstItem, indexOfLastItem),
     [flattenedItems, indexOfFirstItem, indexOfLastItem]
   );
@@ -841,7 +662,7 @@ const FinanceOverview = ({ darkMode }) => {
       toast.error('No data available for the selected year');
       return;
     }
-    
+
     const exportData = [];
     selectedYearData.details.forEach(inv => {
       inv.items.forEach(item => {
@@ -855,11 +676,12 @@ const FinanceOverview = ({ darkMode }) => {
           'Purchase Price': item.purchasePrice > 0 ? `Rs. ${item.purchasePrice.toLocaleString()}` : 'N/A',
           'Selling Price': `Rs. ${item.price.toLocaleString()}`,
           'Unit Profit': `Rs. ${item.unitProfit.toLocaleString()}`,
-          'Total Profit': `Rs. ${(item.unitProfit * item.quantity).toLocaleString()}`
+          'Total Profit': `Rs. ${(item.unitProfit * item.quantity).toLocaleString()}`,
+          'Invoice Discount': `Rs. ${inv.discount.toLocaleString()}`
         });
       });
     });
-    
+
     const ws = XLSX.utils.json_to_sheet(exportData);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, `Year_${selectedYear}_Report`);
@@ -872,7 +694,7 @@ const FinanceOverview = ({ darkMode }) => {
       toast.error('No data available for the selected year');
       return;
     }
-    
+
     const doc = new jsPDF('landscape');
     doc.text(`Sales Report for Year ${selectedYear}`, 14, 10);
     const tableData = [];
@@ -892,7 +714,7 @@ const FinanceOverview = ({ darkMode }) => {
         ]);
       });
     });
-    
+
     doc.autoTable({
       head: [['Invoice', 'Customer', 'Date', 'Item', 'Type', 'Qty', 'Purchase', 'Sell', 'Unit Profit', 'Total Profit']],
       body: tableData,
@@ -915,7 +737,6 @@ const FinanceOverview = ({ darkMode }) => {
 
   return (
     <div className={`space-y-4 ${darkMode ? 'text-white' : 'text-gray-900'}`}>
-      {/* ✅ FILTER BUTTONS */}
       <div className={`flex flex-wrap items-center gap-1.5 p-3 rounded-xl border ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200 shadow-sm'}`}>
         <span className={`text-xs font-medium mr-1 ${darkMode ? 'text-gray-400' : 'text-gray-700'}`}>Filter:</span>
         {[
@@ -929,10 +750,10 @@ const FinanceOverview = ({ darkMode }) => {
             key={f.key}
             onClick={() => { setTimeFilter(f.key); setShowCustomDate(false); }}
             className={`px-2.5 py-1 rounded-lg text-xs font-medium transition ${
-              timeFilter === f.key 
-                ? 'bg-amber-400 text-gray-900 shadow-md' 
-                : darkMode 
-                  ? 'bg-gray-800 text-gray-300 hover:bg-gray-700' 
+              timeFilter === f.key
+                ? 'bg-amber-400 text-gray-900 shadow-md'
+                : darkMode
+                  ? 'bg-gray-800 text-gray-300 hover:bg-gray-700'
                   : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
             }`}
           >
@@ -942,10 +763,10 @@ const FinanceOverview = ({ darkMode }) => {
         <button
           onClick={toggleCustomDate}
           className={`px-2.5 py-1 rounded-lg text-xs font-medium transition flex items-center gap-1 ${
-            timeFilter === 'custom' 
-              ? 'bg-amber-400 text-gray-900 shadow-md' 
-              : darkMode 
-                ? 'bg-gray-800 text-gray-300 hover:bg-gray-700' 
+            timeFilter === 'custom'
+              ? 'bg-amber-400 text-gray-900 shadow-md'
+              : darkMode
+                ? 'bg-gray-800 text-gray-300 hover:bg-gray-700'
                 : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
           }`}
         >
@@ -974,7 +795,6 @@ const FinanceOverview = ({ darkMode }) => {
         </span>
       </div>
 
-      {/* ✅ COLLAPSIBLE STATS SECTION - like Low Stock Alerts */}
       <div className={`rounded-xl border ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200 shadow-sm'}`}>
         <button
           onClick={() => setShowAllStats(!showAllStats)}
@@ -988,8 +808,8 @@ const FinanceOverview = ({ darkMode }) => {
         </button>
 
         <div className="p-4 pt-0 space-y-3">
-          {/* ✅ DYNAMIC FILTERED SALES CARD - always visible (row 1) */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            {/* 1. Sales */}
             <div className={`rounded-xl p-4 border ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200 shadow-sm'}`}>
               <div className="flex items-center gap-2 mb-1">
                 <div className="p-1.5 rounded-full bg-amber-500/15">
@@ -999,9 +819,23 @@ const FinanceOverview = ({ darkMode }) => {
               </div>
               <p className={`text-lg font-bold ${darkMode ? 'text-white' : 'text-gray-900'}`}>Rs. {filteredSalesData.total.toLocaleString()}</p>
               <p className={`text-xs ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>{filteredSalesData.items} items sold</p>
-              <p className={`text-xs text-emerald-400`}>Profit: Rs. {filteredSalesData.profit.toLocaleString()}</p>
             </div>
-            
+
+            {/* 2. Profit (sales ka profit, expenses se pehle) */}
+            <div className={`rounded-xl p-4 border ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200 shadow-sm'}`}>
+              <div className="flex items-center gap-2 mb-1">
+                <div className="p-1.5 rounded-full bg-emerald-500/15">
+                  <FiTrendingUp className="text-sm text-emerald-400" />
+                </div>
+                <span className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>{getFilterLabel()} Profit</span>
+              </div>
+              <p className={`text-lg font-bold ${filteredStats.salesProfit >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                Rs. {filteredStats.salesProfit.toLocaleString()}
+              </p>
+              <p className={`text-xs ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>Sales profit (after discount)</p>
+            </div>
+
+            {/* 3. Expenses */}
             <div className={`rounded-xl p-4 border ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200 shadow-sm'}`}>
               <div className="flex items-center gap-2 mb-1">
                 <div className="p-1.5 rounded-full bg-blue-500/15">
@@ -1012,23 +846,22 @@ const FinanceOverview = ({ darkMode }) => {
               <p className={`text-lg font-bold ${darkMode ? 'text-white' : 'text-gray-900'}`}>Rs. {filteredStats.expenses.toLocaleString()}</p>
               <p className={`text-xs ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>{filteredStats.expenseCount} transactions</p>
             </div>
-            
+
+            {/* 4. Net Profit = Profit - Expenses */}
             <div className={`rounded-xl p-4 border ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200 shadow-sm'}`}>
               <div className="flex items-center gap-2 mb-1">
                 <div className={`p-1.5 rounded-full ${filteredStats.profit >= 0 ? 'bg-emerald-500/15' : 'bg-red-500/15'}`}>
                   <FiTrendingUp className={`text-sm ${filteredStats.profit >= 0 ? 'text-emerald-400' : 'text-red-400'}`} />
                 </div>
-                {/* ✅ FIXED: Label changed to Net Profit */}
                 <span className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>{getFilterLabel()} Net Profit</span>
               </div>
               <p className={`text-lg font-bold ${filteredStats.profit >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
                 Rs. {filteredStats.profit.toLocaleString()}
               </p>
-              <p className={`text-xs ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>After expenses</p>
+              <p className={`text-xs ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>Profit - Expenses</p>
             </div>
           </div>
 
-          {/* Sales Cards - always visible (row 2) */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div className={`rounded-xl p-4 border cursor-pointer hover:scale-[1.02] transition ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200 shadow-sm'}`} onClick={() => setShowTodayDetails(!showTodayDetails)}>
               <div className="flex items-center gap-2 mb-1">
@@ -1042,7 +875,7 @@ const FinanceOverview = ({ darkMode }) => {
               <p className={`text-xs text-emerald-400`}>Profit: Rs. {todaySales.profit.toLocaleString()}</p>
               <p className={`text-xs mt-1 flex items-center gap-1 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}><FiClock className="text-xs" /> Click for details</p>
             </div>
-            
+
             <div className={`rounded-xl p-4 border cursor-pointer hover:scale-[1.02] transition ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200 shadow-sm'}`} onClick={() => setShowWeekDetails(!showWeekDetails)}>
               <div className="flex items-center gap-2 mb-1">
                 <div className="p-1.5 rounded-full bg-amber-500/15">
@@ -1055,7 +888,7 @@ const FinanceOverview = ({ darkMode }) => {
               <p className={`text-xs text-emerald-400`}>Profit: Rs. {weeklySales.profit.toLocaleString()}</p>
               <p className={`text-xs mt-1 flex items-center gap-1 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}><FiClock className="text-xs" /> Click for details</p>
             </div>
-            
+
             <div className={`rounded-xl p-4 border cursor-pointer hover:scale-[1.02] transition ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200 shadow-sm'}`} onClick={() => setShowMonthDetails(!showMonthDetails)}>
               <div className="flex items-center gap-2 mb-1">
                 <div className="p-1.5 rounded-full bg-amber-500/15">
@@ -1074,10 +907,8 @@ const FinanceOverview = ({ darkMode }) => {
           {showWeekDetails && <InvoiceDetails title="This Week's Sales" data={weeklySales} darkMode={darkMode} onClose={() => setShowWeekDetails(false)} />}
           {showMonthDetails && <InvoiceDetails title="This Month's Sales" data={monthlySales} darkMode={darkMode} onClose={() => setShowMonthDetails(false)} />}
 
-          {/* ✅ REST OF STAT ROWS - only visible when expanded */}
           {showAllStats && (
             <>
-              {/* Expense Cards */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div className={`rounded-xl p-4 border cursor-pointer hover:scale-[1.02] transition ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200 shadow-sm'}`} onClick={() => setShowTodayExpenses(!showTodayExpenses)}>
                   <div className="flex items-center gap-2 mb-1">
@@ -1090,7 +921,7 @@ const FinanceOverview = ({ darkMode }) => {
                   <p className={`text-xs ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>{stats.todayExpenseCount} transactions</p>
                   <p className={`text-xs mt-1 flex items-center gap-1 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}><FiClock className="text-xs" /> Click for details</p>
                 </div>
-                
+
                 <div className={`rounded-xl p-4 border cursor-pointer hover:scale-[1.02] transition ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200 shadow-sm'}`} onClick={() => setShowWeekExpenses(!showWeekExpenses)}>
                   <div className="flex items-center gap-2 mb-1">
                     <div className="p-1.5 rounded-full bg-blue-500/15">
@@ -1102,7 +933,7 @@ const FinanceOverview = ({ darkMode }) => {
                   <p className={`text-xs ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>{stats.weekExpenseCount} transactions</p>
                   <p className={`text-xs mt-1 flex items-center gap-1 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}><FiClock className="text-xs" /> Click for details</p>
                 </div>
-                
+
                 <div className={`rounded-xl p-4 border cursor-pointer hover:scale-[1.02] transition ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200 shadow-sm'}`} onClick={() => setShowMonthExpenses(!showMonthExpenses)}>
                   <div className="flex items-center gap-2 mb-1">
                     <div className="p-1.5 rounded-full bg-blue-500/15">
@@ -1120,49 +951,47 @@ const FinanceOverview = ({ darkMode }) => {
               {showWeekExpenses && <ExpenseDetails title="This Week's Expenses" expenses={weekExpenseDetails} darkMode={darkMode} onClose={() => setShowWeekExpenses(false)} />}
               {showMonthExpenses && <ExpenseDetails title="This Month's Expenses" expenses={monthExpenseDetails} darkMode={darkMode} onClose={() => setShowMonthExpenses(false)} />}
 
-              {/* Profit Cards */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div className={`rounded-xl p-4 border ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200 shadow-sm'}`}>
                   <div className="flex items-center gap-2 mb-1">
                     <div className={`p-1.5 rounded-full ${stats.todayProfit >= 0 ? 'bg-emerald-500/15' : 'bg-red-500/15'}`}>
                       <FiTrendingUp className={`text-sm ${stats.todayProfit >= 0 ? 'text-emerald-400' : 'text-red-400'}`} />
                     </div>
-                    <span className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Today's Profit</span>
+                    <span className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Today's Net Profit</span>
                   </div>
                   <p className={`text-lg font-bold ${stats.todayProfit >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
                     Rs. {stats.todayProfit?.toLocaleString() || 0}
                   </p>
-                  <p className={`text-xs ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>After expenses</p>
+                  <p className={`text-xs ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>Profit - Expenses</p>
                 </div>
-                
+
                 <div className={`rounded-xl p-4 border ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200 shadow-sm'}`}>
                   <div className="flex items-center gap-2 mb-1">
                     <div className={`p-1.5 rounded-full ${stats.weekProfit >= 0 ? 'bg-emerald-500/15' : 'bg-red-500/15'}`}>
                       <FiTrendingUp className={`text-sm ${stats.weekProfit >= 0 ? 'text-emerald-400' : 'text-red-400'}`} />
                     </div>
-                    <span className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>This Week's Profit</span>
+                    <span className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>This Week's Net Profit</span>
                   </div>
                   <p className={`text-lg font-bold ${stats.weekProfit >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
                     Rs. {stats.weekProfit?.toLocaleString() || 0}
                   </p>
-                  <p className={`text-xs ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>After expenses</p>
+                  <p className={`text-xs ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>Profit - Expenses</p>
                 </div>
-                
+
                 <div className={`rounded-xl p-4 border ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200 shadow-sm'}`}>
                   <div className="flex items-center gap-2 mb-1">
                     <div className={`p-1.5 rounded-full ${stats.monthProfit >= 0 ? 'bg-emerald-500/15' : 'bg-red-500/15'}`}>
                       <FiTrendingUp className={`text-sm ${stats.monthProfit >= 0 ? 'text-emerald-400' : 'text-red-400'}`} />
                     </div>
-                    <span className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>This Month's Profit</span>
+                    <span className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>This Month's Net Profit</span>
                   </div>
                   <p className={`text-lg font-bold ${stats.monthProfit >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
                     Rs. {stats.monthProfit?.toLocaleString() || 0}
                   </p>
-                  <p className={`text-xs ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>After expenses</p>
+                  <p className={`text-xs ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>Profit - Expenses</p>
                 </div>
               </div>
 
-              {/* Discount Cards */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div className={`rounded-xl p-4 border ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200 shadow-sm'}`}>
                   <div className="flex items-center gap-2 mb-1">
@@ -1174,7 +1003,7 @@ const FinanceOverview = ({ darkMode }) => {
                   <p className={`text-lg font-bold ${darkMode ? 'text-white' : 'text-gray-900'}`}>Rs. {stats.todayDiscount?.toLocaleString() || 0}</p>
                   <p className={`text-xs ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>Given today</p>
                 </div>
-                
+
                 <div className={`rounded-xl p-4 border ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200 shadow-sm'}`}>
                   <div className="flex items-center gap-2 mb-1">
                     <div className="p-1.5 rounded-full bg-purple-500/15">
@@ -1185,7 +1014,7 @@ const FinanceOverview = ({ darkMode }) => {
                   <p className={`text-lg font-bold ${darkMode ? 'text-white' : 'text-gray-900'}`}>Rs. {stats.weekDiscount?.toLocaleString() || 0}</p>
                   <p className={`text-xs ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>Given this week</p>
                 </div>
-                
+
                 <div className={`rounded-xl p-4 border ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200 shadow-sm'}`}>
                   <div className="flex items-center gap-2 mb-1">
                     <div className="p-1.5 rounded-full bg-purple-500/15">
@@ -1202,7 +1031,6 @@ const FinanceOverview = ({ darkMode }) => {
         </div>
       </div>
 
-      {/* Monthly Breakdown */}
       <div className={`rounded-xl border ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200 shadow-sm'}`}>
         <div className="px-4 py-3 border-b">
           <h3 className="font-semibold flex items-center gap-2 text-sm">
@@ -1212,10 +1040,16 @@ const FinanceOverview = ({ darkMode }) => {
             </span>
           </h3>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 p-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 p-4">
           <div className={`p-3 rounded-lg ${darkMode ? 'bg-gray-800' : 'bg-gray-100'}`}>
             <p className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Revenue</p>
             <p className="text-lg font-bold text-amber-400">Rs. {filteredSalesData.total.toLocaleString()}</p>
+          </div>
+          <div className={`p-3 rounded-lg ${darkMode ? 'bg-gray-800' : 'bg-gray-100'}`}>
+            <p className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Profit</p>
+            <p className={`text-lg font-bold ${filteredStats.salesProfit >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+              Rs. {filteredStats.salesProfit.toLocaleString()}
+            </p>
           </div>
           <div className={`p-3 rounded-lg ${darkMode ? 'bg-gray-800' : 'bg-gray-100'}`}>
             <p className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Expenses</p>
@@ -1234,7 +1068,6 @@ const FinanceOverview = ({ darkMode }) => {
         </div>
       </div>
 
-      {/* Yearly Report Section */}
       <div className={`rounded-xl border ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200 shadow-sm'}`}>
         <button onClick={() => setShowYearlyReport(!showYearlyReport)} className="w-full px-4 py-3 flex justify-between items-center hover:bg-amber-50 dark:hover:bg-amber-900/20 transition">
           <div className="flex items-center gap-2">
@@ -1243,7 +1076,7 @@ const FinanceOverview = ({ darkMode }) => {
           </div>
           {showYearlyReport ? <FiChevronUp className="text-gray-500" /> : <FiChevronDown className="text-gray-500" />}
         </button>
-        
+
         {showYearlyReport && (
           <div className="p-4 border-t border-gray-200 dark:border-gray-800">
             <div className="flex flex-wrap justify-between items-center gap-3 mb-4">
@@ -1317,6 +1150,12 @@ const FinanceOverview = ({ darkMode }) => {
                   )}
                 </tbody>
                 <tfoot className={darkMode ? 'bg-gray-800' : 'bg-gray-100'}>
+                  {selectedYearData.discount > 0 && (
+                    <tr>
+                      <td colSpan="9" className="px-3 py-2 text-right text-xs font-bold">Discount:</td>
+                      <td className="px-3 py-2 text-right text-xs font-bold text-purple-400">- Rs. {selectedYearData.discount.toLocaleString()}</td>
+                    </tr>
+                  )}
                   <tr>
                     <td colSpan="9" className="px-3 py-2 text-right text-xs font-bold">Total Profit:</td>
                     <td className="px-3 py-2 text-right text-xs font-bold text-emerald-400">Rs. {selectedYearData.profit.toLocaleString()}</td>
@@ -1325,7 +1164,6 @@ const FinanceOverview = ({ darkMode }) => {
               </table>
             </div>
 
-            {/* Pagination */}
             {totalPages > 1 && (
               <div className="flex justify-between items-center mt-4 pt-3 border-t border-gray-200 dark:border-gray-800">
                 <div className={`text-xs ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>

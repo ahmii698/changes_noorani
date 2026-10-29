@@ -5,7 +5,8 @@ import {
   FiPackage, FiDollarSign, FiFileText, FiBarChart2, 
   FiChevronDown, FiChevronUp, FiList, FiPieChart, 
   FiTrendingUp, FiHome, FiBell, FiUser, FiUsers, 
-  FiLogOut, FiCreditCard, FiClock, FiSettings, FiCalendar
+  FiLogOut, FiCreditCard, FiClock, FiSettings, FiCalendar,
+  FiBriefcase, FiRotateCcw
 } from 'react-icons/fi';
 import { HiMenu, HiX } from 'react-icons/hi';
 import { useNavigate } from 'react-router-dom';
@@ -21,10 +22,12 @@ const Sidebar = ({ activeMenu, setActiveMenu, isOpen, setIsOpen, darkMode }) => 
   const [isAdmin, setIsAdmin] = useState(false);
   const navigate = useNavigate();
 
-  // Admin menu items - ✅ LEAVE ADDED
+  // Admin menu items - ✅ LEAVE ADDED, ✅ CASH IN HAND ADDED, ✅ INVENTORY HISTORY ADDED (Cash in Hand ke uppar)
   const adminMenuItems = [
     { id: 'all-data', label: 'Dashboard', icon: FiHome, path: '/dashboard' },
     { id: 'inventory', label: 'Inventory', icon: FiPackage, path: '/inventory' },
+    { id: 'inventory-history', label: 'Inventory History', icon: FiRotateCcw, path: '/inventory-history' },
+    { id: 'cash-in-hand', label: 'Cash in Hand', icon: FiBriefcase, path: '/cash-in-hand' },
     { id: 'finance', label: 'Finance', icon: FiDollarSign, hasSubmenu: true },
     { id: 'billing', label: 'Billing', icon: FiFileText, path: '/billing' },
     { id: 'reminders', label: 'Reminders', icon: FiBell, path: '/reminders', badge: reminderCount },

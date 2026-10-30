@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   BrowserRouter as Router,
   Routes,
@@ -9,14 +9,54 @@ import { Toaster } from 'react-hot-toast';
 
 import Login from './components/Login';
 import Dashboard from './components/Dashboard';
-import EstimatedBill from './components/EstimatedBill';
-import BatteryPage from './components/BatteryPage';
-import EstimateRecords from './components/EstimateRecords';
+
+// Ye sab pages Dashboard ke andar render hote hain
+const DASHBOARD_PATHS = [
+  '/dashboard',
+  '/billing',
+  '/inventory',
+  '/inventory-history',
+  '/cash-in-hand',
+  '/records',
+  '/finance',
+  '/finance-expenses',
+  '/finance-charts',
+  '/finance-credit',
+  '/finance-reminders',
+  '/reminders',
+  '/users',
+  '/discarded',
+  '/estimate',
+  '/estimate-records',
+  '/battery',
+  '/leave',
+];
+
+// Token ab render ke waqt check hota hai, App ke render par nahi
+const ProtectedRoute = ({ children }) => {
+  const token = localStorage.getItem('token');
+  if (!token) {
+    return <Navigate to="/" replace />;
+  }
+  return children;
+};
+
+const PublicRoute = ({ children }) => {
+  const token = localStorage.getItem('token');
+  if (token) {
+    return <Navigate to="/dashboard" replace />;
+  }
+  return children;
+};
+
+const FallbackRedirect = () => {
+  const token = localStorage.getItem('token');
+  return <Navigate to={token ? '/dashboard' : '/'} replace />;
+};
 
 function App() {
-  const getDarkMode = () => {
+  const [darkMode, setDarkMode] = useState(() => {
     const saved = localStorage.getItem('darkMode');
-
     if (saved) {
       try {
         return JSON.parse(saved);
@@ -24,73 +64,15 @@ function App() {
         return false;
       }
     }
-
     return false;
-  };
-
-  const getUserFromStorage = () => {
-    const user = localStorage.getItem('user');
-
-    if (user) {
-      try {
-        return JSON.parse(user);
-      } catch {
-        return null;
-      }
-    }
-
-    return null;
-  };
-
-  const [darkMode, setDarkMode] = useState(getDarkMode);
-
-  const [isAuthenticated, setIsAuthenticated] = useState(() => {
-    return !!localStorage.getItem('token');
-  });
-
-  const [userRole, setUserRole] = useState(() => {
-    const user = getUserFromStorage();
-    return user?.role || null;
   });
 
   const toggleDarkMode = () => {
-    setDarkMode(!darkMode);
-    localStorage.setItem(
-      'darkMode',
-      JSON.stringify(!darkMode)
-    );
-  };
-
-  useEffect(() => {
-    const token = localStorage.getItem('token');
-    const user = getUserFromStorage();
-
-    console.log('====================');
-    console.log('APP MOUNTED');
-    console.log('TOKEN:', token);
-    console.log('USER:', user);
-    console.log('====================');
-
-    setIsAuthenticated(!!token);
-
-    if (user) {
-      setUserRole(user.role);
-    }
-  }, []);
-
-  const ProtectedRoute = ({ children }) => {
-    const token = localStorage.getItem('token');
-
-    console.log(
-      'ProtectedRoute Token:',
-      token
-    );
-
-    if (!token) {
-      return <Navigate to="/" replace />;
-    }
-
-    return children;
+    setDarkMode((prev) => {
+      const next = !prev;
+      localStorage.setItem('darkMode', JSON.stringify(next));
+      return next;
+    });
   };
 
   return (
@@ -100,276 +82,41 @@ function App() {
         toastOptions={{
           duration: 3000,
           style: {
-            background: darkMode
-              ? '#1f2937'
-              : '#fff',
-            color: darkMode
-              ? '#fff'
-              : '#333',
+            background: darkMode ? '#1f2937' : '#fff',
+            color: darkMode ? '#fff' : '#333',
           },
         }}
       />
 
       <Routes>
-
         {/* Login */}
         <Route
           path="/"
           element={
-            localStorage.getItem('token')
-              ? (
-                  <Navigate
-                    to="/dashboard"
-                    replace
-                  />
-                )
-              : (
-                  <Login />
-                )
+            <PublicRoute>
+              <Login />
+            </PublicRoute>
           }
         />
 
-        {/* ✅ ALL ROUTES GO THROUGH DASHBOARD */}
-        <Route
-          path="/dashboard"
-          element={
-            <ProtectedRoute>
-              <Dashboard
-                darkMode={darkMode}
-                toggleDarkMode={toggleDarkMode}
-              />
-            </ProtectedRoute>
-          }
-        />
-
-        <Route
-          path="/billing"
-          element={
-            <ProtectedRoute>
-              <Dashboard
-                darkMode={darkMode}
-                toggleDarkMode={toggleDarkMode}
-              />
-            </ProtectedRoute>
-          }
-        />
-
-        <Route
-          path="/inventory"
-          element={
-            <ProtectedRoute>
-              <Dashboard
-                darkMode={darkMode}
-                toggleDarkMode={toggleDarkMode}
-              />
-            </ProtectedRoute>
-          }
-        />
-
-        {/* ✅ NEW: Inventory History Route */}
-        <Route
-          path="/inventory-history"
-          element={
-            <ProtectedRoute>
-              <Dashboard
-                darkMode={darkMode}
-                toggleDarkMode={toggleDarkMode}
-              />
-            </ProtectedRoute>
-          }
-        />
-
-        {/* ✅ NEW: Cash in Hand Route */}
-        <Route
-          path="/cash-in-hand"
-          element={
-            <ProtectedRoute>
-              <Dashboard
-                darkMode={darkMode}
-                toggleDarkMode={toggleDarkMode}
-              />
-            </ProtectedRoute>
-          }
-        />
-
-        <Route
-          path="/records"
-          element={
-            <ProtectedRoute>
-              <Dashboard
-                darkMode={darkMode}
-                toggleDarkMode={toggleDarkMode}
-              />
-            </ProtectedRoute>
-          }
-        />
-
-        <Route
-          path="/finance"
-          element={
-            <ProtectedRoute>
-              <Dashboard
-                darkMode={darkMode}
-                toggleDarkMode={toggleDarkMode}
-              />
-            </ProtectedRoute>
-          }
-        />
-
-        <Route
-          path="/finance-expenses"
-          element={
-            <ProtectedRoute>
-              <Dashboard
-                darkMode={darkMode}
-                toggleDarkMode={toggleDarkMode}
-              />
-            </ProtectedRoute>
-          }
-        />
-
-        <Route
-          path="/finance-charts"
-          element={
-            <ProtectedRoute>
-              <Dashboard
-                darkMode={darkMode}
-                toggleDarkMode={toggleDarkMode}
-              />
-            </ProtectedRoute>
-          }
-        />
-
-        <Route
-          path="/finance-credit"
-          element={
-            <ProtectedRoute>
-              <Dashboard
-                darkMode={darkMode}
-                toggleDarkMode={toggleDarkMode}
-              />
-            </ProtectedRoute>
-          }
-        />
-
-        <Route
-          path="/finance-reminders"
-          element={
-            <ProtectedRoute>
-              <Dashboard
-                darkMode={darkMode}
-                toggleDarkMode={toggleDarkMode}
-              />
-            </ProtectedRoute>
-          }
-        />
-
-        <Route
-          path="/reminders"
-          element={
-            <ProtectedRoute>
-              <Dashboard
-                darkMode={darkMode}
-                toggleDarkMode={toggleDarkMode}
-              />
-            </ProtectedRoute>
-          }
-        />
-
-        <Route
-          path="/users"
-          element={
-            <ProtectedRoute>
-              <Dashboard
-                darkMode={darkMode}
-                toggleDarkMode={toggleDarkMode}
-              />
-            </ProtectedRoute>
-          }
-        />
-
-        <Route
-          path="/discarded"
-          element={
-            <ProtectedRoute>
-              <Dashboard
-                darkMode={darkMode}
-                toggleDarkMode={toggleDarkMode}
-              />
-            </ProtectedRoute>
-          }
-        />
-
-        <Route
-          path="/estimate"
-          element={
-            <ProtectedRoute>
-              <Dashboard
-                darkMode={darkMode}
-                toggleDarkMode={toggleDarkMode}
-              />
-            </ProtectedRoute>
-          }
-        />
-
-        {/* ✅ FIXED: Estimate Records - DASHBOARD KE ANDAR (baqi pages ki tarah) */}
-        <Route
-          path="/estimate-records"
-          element={
-            <ProtectedRoute>
-              <Dashboard
-                darkMode={darkMode}
-                toggleDarkMode={toggleDarkMode}
-              />
-            </ProtectedRoute>
-          }
-        />
-
-        <Route
-          path="/battery"
-          element={
-            <ProtectedRoute>
-              <Dashboard
-                darkMode={darkMode}
-                toggleDarkMode={toggleDarkMode}
-              />
-            </ProtectedRoute>
-          }
-        />
-
-        {/* ✅ NEW: Leave Application Route */}
-        <Route
-          path="/leave"
-          element={
-            <ProtectedRoute>
-              <Dashboard
-                darkMode={darkMode}
-                toggleDarkMode={toggleDarkMode}
-              />
-            </ProtectedRoute>
-          }
-        />
+        {/* Saare pages Dashboard ke through */}
+        {DASHBOARD_PATHS.map((path) => (
+          <Route
+            key={path}
+            path={path}
+            element={
+              <ProtectedRoute>
+                <Dashboard
+                  darkMode={darkMode}
+                  toggleDarkMode={toggleDarkMode}
+                />
+              </ProtectedRoute>
+            }
+          />
+        ))}
 
         {/* Fallback */}
-        <Route
-          path="*"
-          element={
-            localStorage.getItem('token')
-              ? (
-                  <Navigate
-                    to="/dashboard"
-                    replace
-                  />
-                )
-              : (
-                  <Navigate
-                    to="/"
-                    replace
-                  />
-                )
-          }
-        />
-
+        <Route path="*" element={<FallbackRedirect />} />
       </Routes>
     </Router>
   );

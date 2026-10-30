@@ -7,118 +7,54 @@ use Illuminate\Http\Request;
 
 class ServiceController extends Controller
 {
-    // Get all services
     public function index()
     {
-        try {
-            $services = Service::all();
-            return response()->json($services);
-        } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to fetch services: ' . $e->getMessage()
-            ], 500);
-        }
+        return response()->json(['data' => Service::orderBy('id', 'desc')->get()]);
     }
 
-    // ✅ ADD THIS METHOD - Get single service
     public function show($id)
     {
-        try {
-            $service = Service::findOrFail($id);
-            return response()->json($service);
-        } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Service not found'
-            ], 404);
-        }
+        return response()->json(['data' => Service::findOrFail($id)]);
     }
 
-    // Create new service
     public function store(Request $request)
     {
-        try {
-            $request->validate([
-                'name' => 'required|string|max:255',
-                'price' => 'required|numeric|min:0',
-                'category' => 'required|string|max:100',
-                'icon' => 'nullable|string|max:50'
-            ]);
+        $data = $request->validate([
+            'name'     => 'required|string|max:255',
+            'price'    => 'required|numeric|min:0',
+            'category' => 'required|string|max:255',
+            'icon'     => 'nullable|string|max:255',
+        ]);
 
-            $service = Service::create([
-                'name' => $request->name,
-                'price' => $request->price,
-                'category' => $request->category,
-                'icon' => $request->icon ?? '🔧',
-                'date_added' => now()
-            ]);
+        $data['icon'] = $data['icon'] ?? 'tool';
 
-            return response()->json([
-                'success' => true,
-                'message' => 'Service created successfully',
-                'service' => $service
-            ], 201);
+        $service = Service::create($data);
 
-        } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to create service: ' . $e->getMessage()
-            ], 500);
-        }
+        return response()->json(['data' => $service], 201);
     }
 
-    // Update service
     public function update(Request $request, $id)
     {
-        try {
-            $service = Service::findOrFail($id);
-            
-            $request->validate([
-                'name' => 'sometimes|required|string|max:255',
-                'price' => 'sometimes|required|numeric|min:0',
-                'category' => 'sometimes|required|string|max:100',
-                'icon' => 'nullable|string|max:50'
-            ]);
+        $service = Service::findOrFail($id);
 
-            $service->update($request->only([
-                'name', 
-                'price', 
-                'category', 
-                'icon'
-            ]));
+        $data = $request->validate([
+            'name'     => 'required|string|max:255',
+            'price'    => 'required|numeric|min:0',
+            'category' => 'required|string|max:255',
+            'icon'     => 'nullable|string|max:255',
+        ]);
 
-            return response()->json([
-                'success' => true,
-                'message' => 'Service updated successfully',
-                'service' => $service
-            ]);
+        $data['icon'] = $data['icon'] ?? 'tool';
 
-        } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to update service: ' . $e->getMessage()
-            ], 500);
-        }
+        $service->update($data);
+
+        return response()->json(['data' => $service]);
     }
 
-    // Delete service
     public function destroy($id)
     {
-        try {
-            $service = Service::findOrFail($id);
-            $service->delete();
-            
-            return response()->json([
-                'success' => true,
-                'message' => 'Service deleted successfully'
-            ]);
+        Service::findOrFail($id)->delete();
 
-        } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to delete service: ' . $e->getMessage()
-            ], 500);
-        }
+        return response()->json(['message' => 'Service deleted']);
     }
 }

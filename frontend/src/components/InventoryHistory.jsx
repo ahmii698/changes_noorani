@@ -44,12 +44,22 @@ const COLUMNS = [
   { label: "Quantity", align: "right" },
   { label: "Cash In", align: "right" },
   { label: "Cash Out", align: "right" },
-  { label: "Vend Pay", align: "right" },
-  { label: "Cash in Hand", align: "right" },
-  { label: "Owner Capital", align: "right" },
+  { label: "Vendor Payable Inventory", align: "right" },
+  { label: "Cash Inventory", align: "right" },
+  { label: "Cash IN Hand", align: "right" },
+  { label: "Total Inventory Cost", align: "right" },
 ];
 
 const alignCls = { left: "text-left", right: "text-right" };
+
+/* Same time par aane wali rows ka order (chhota number pehle) */
+const RANK = {
+  cash: 0,
+  purchase: 1,
+  credit: 2,
+  sell: 3,
+  vendorPay: 4,
+};
 
 /* ---------- API response ko array banane ke helpers ---------- */
 const toArray = (res) => {
@@ -59,6 +69,14 @@ const toArray = (res) => {
   return [];
 };
 
+/* Cash in Hand ki poori history (add / withdraw entries) */
+const parseCashEntries = (res) => {
+  const body = res?.data || {};
+  const list = Array.isArray(body.data) ? body.data : Array.isArray(body) ? body : [];
+  return list.filter((c) => c && (c.type === "add" || c.type === "withdraw"));
+};
+
+/* Agar history na mile to sirf current balance (fallback) */
 const parseManualCash = (res) => {
   const body = res?.data || {};
   const d = body.data ?? body;
@@ -80,8 +98,8 @@ const parseManualCash = (res) => {
   return 0;
 };
 
-/* ---------- Teen sources se ledger rows banana ---------- */
-const buildEntries = ({ products, vendors, invoices, manualCash }) => {
+/* ---------- Sab sources se ledger rows banana ---------- */
+const buildEntries = ({ products, vendors, invoices, cashEntries, manualCash }) => {
   const entries = [];
 
   /* Sale ke items ka naam -> kitna bika (cash purchase qty nikalne ke liye) */
@@ -100,7 +118,9 @@ const buildEntries = ({ products, vendors, invoices, manualCash }) => {
     if (key) purchaseByName[key] = parseFloat(p.purchase_price) || 0;
   });
 
-  /* 1) INVENTORY PURCHASE - CASH (jin products ka vendor nahi) */
+  /* 1) INVENTORY PURCHASE - CASH (jin products ka vendor nahi)
+        Yeh Cash Out mein nahi, Owner Capital mein jayega.
+        Cash in Hand phir bhi kam hoga. */
   products
     .filter((p) => !(p.credit_vendor || p.vendor_name))
     .forEach((p) => {
@@ -110,6 +130,8 @@ const buildEntries = ({ products, vendors, invoices, manualCash }) => {
       if (qty <= 0) return;
       entries.push({
         key: `prod-${p.id}`,
+        rank: RANK.purchase,
+        id: Number(p.id) || 0,
         ts: toTime(p.created_at || p.date_added),
         date: p.created_at || p.date_added,
         invoiceNo: p.invoice_number || p.invoice_no || "-",
@@ -118,13 +140,15 @@ const buildEntries = ({ products, vendors, invoices, manualCash }) => {
         price,
         qty,
         cashIn: 0,
-        cashOut: qty * price,
+        cashOut: 0,
+        ownerDelta: qty * price,
+        costDelta: qty * price, // maal aaya -> inventory cost barhi
         payableDelta: 0,
         isVendor: false,
       });
     });
 
-  /* 2) CREDIT PURCHASE + VENDOR PAYMENTS */
+  /* 2) CREDIT PURCHASE + VENDOR PAYMENTS (yeh Cash Out mein hi jayenge) */
   vendors.forEach((v) => {
     const recordTime = toTime(v.created_at);
     const payments = Array.isArray(v.payments) ? v.payments : [];
@@ -141,6 +165,8 @@ const buildEntries = ({ products, vendors, invoices, manualCash }) => {
       laterForRecord += amount;
       entries.push({
         key: `pay-${v.id}-${p.id ?? payTime}`,
+        rank: RANK.vendorPay,
+        id: Number(p.id) || 0,
         ts: payTime,
         date: p.created_at || p.date || p.payment_date,
         invoiceNo: v.invoice_number || "-",
@@ -150,6 +176,7 @@ const buildEntries = ({ products, vendors, invoices, manualCash }) => {
         qty: 0,
         cashIn: 0,
         cashOut: amount,
+        ownerDelta: 0,
         payableDelta: -amount,
         isVendor: true,
       });
@@ -161,6 +188,8 @@ const buildEntries = ({ products, vendors, invoices, manualCash }) => {
 
     entries.push({
       key: `cred-${v.id}`,
+      rank: RANK.credit,
+      id: Number(v.id) || 0,
       ts: recordTime,
       date: v.created_at,
       invoiceNo: v.invoice_number || "-",
@@ -169,7 +198,9 @@ const buildEntries = ({ products, vendors, invoices, manualCash }) => {
       price: qty ? total / qty : total,
       qty,
       cashIn: 0,
-      cashOut: initialPaid,
+      cashOut: 0,
+      ownerDelta: initialPaid, // purchase ke waqt jo apni cash di wo Owner Capital hai
+      costDelta: total, // poore bill ka maal aaya -> inventory cost barhi
       payableDelta: total - initialPaid,
       isVendor: true,
     });
@@ -191,6 +222,8 @@ const buildEntries = ({ products, vendors, invoices, manualCash }) => {
 
       entries.push({
         key: `inv-${inv.id}-${idx}`,
+        rank: RANK.sell,
+        id: Number(inv.id) * 1000 + idx,
         ts: toTime(inv.invoice_date || inv.created_at),
         date: inv.invoice_date || inv.created_at,
         invoiceNo: inv.invoice_no || inv.invoice_number || `#${inv.id}`,
@@ -200,20 +233,46 @@ const buildEntries = ({ products, vendors, invoices, manualCash }) => {
         qty,
         cashIn: cost,
         cashOut: 0,
+        ownerDelta: 0,
+        ownerReturn: cost, // maal bika to owner ka lagaya hua capital wapas nikal aaya
+        costDelta: -cost, // maal bika -> inventory cost kam hui
         payableDelta: 0,
         isVendor: false,
       });
     });
   });
 
-  /* Time ke hisaab se sort (purani pehle) */
-  entries.sort((a, b) => a.ts - b.ts);
-
-  /* 4) Manual Cash in Hand - sab se upar opening row */
-  if (manualCash > 0) {
-    const firstTs = entries.length ? entries[0].ts : Date.now();
-    entries.unshift({
+  /* 4) Manual Cash in Hand - har add / withdraw apni asli date par */
+  if (cashEntries.length > 0) {
+    cashEntries.forEach((c) => {
+      const amount = parseFloat(c.amount) || 0;
+      if (amount <= 0) return;
+      const isAdd = c.type === "add";
+      entries.push({
+        key: `cash-${c.id}`,
+        rank: RANK.cash,
+        id: Number(c.id) || 0,
+        ts: toTime(c.created_at),
+        date: c.created_at,
+        invoiceNo: "-",
+        details: isAdd ? "Cash in Hand (Add)" : "Cash in Hand (Withdraw)",
+        product: c.note || "-",
+        price: 0,
+        qty: 0,
+        cashIn: isAdd ? amount : 0,
+        cashOut: isAdd ? 0 : amount,
+        ownerDelta: 0,
+        payableDelta: 0,
+        isVendor: false,
+      });
+    });
+  } else if (manualCash > 0) {
+    /* History nahi mili to sirf balance ek row mein */
+    const firstTs = entries.length ? Math.min(...entries.map((e) => e.ts)) : Date.now();
+    entries.push({
       key: "manual-cash",
+      rank: RANK.cash,
+      id: 0,
       ts: firstTs,
       date: firstTs,
       invoiceNo: "-",
@@ -223,10 +282,15 @@ const buildEntries = ({ products, vendors, invoices, manualCash }) => {
       qty: 0,
       cashIn: manualCash,
       cashOut: 0,
+      ownerDelta: 0,
       payableDelta: 0,
       isVendor: false,
     });
   }
+
+  /* Time ke hisaab se sort: PURANA PEHLE, SAB SE NAYA SAB SE NEECHE.
+     Time barabar ho to rank, phir id se order fix rakha hai. */
+  entries.sort((a, b) => a.ts - b.ts || a.rank - b.rank || a.id - b.id);
 
   return entries;
 };
@@ -264,12 +328,19 @@ export default function InventoryHistory() {
   const [showSidebar, setShowSidebar] = useState(false);
   const [page, setPage] = useState(1);
 
-  const [raw, setRaw] = useState({ products: [], vendors: [], invoices: [], manualCash: 0 });
+  const [raw, setRaw] = useState({
+    products: [],
+    vendors: [],
+    invoices: [],
+    cashEntries: [],
+    manualCash: 0,
+  });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const jumpedToLast = useRef(false);
+  const tableScrollRef = useRef(null);
 
-  /* Teeno jagah se data lana */
+  /* Sab jagah se data lana */
   const loadData = useCallback(async () => {
     setLoading(true);
     setError("");
@@ -284,8 +355,11 @@ export default function InventoryHistory() {
         products: toArray(prodRes),
         vendors: toArray(vendRes),
         invoices: toArray(invRes),
+        cashEntries: cashRes ? parseCashEntries(cashRes) : [],
         manualCash: cashRes ? parseManualCash(cashRes) : 0,
       });
+      /* Refresh ke baad dobara aakhri page (sab se naye records) par jao */
+      jumpedToLast.current = false;
     } catch (e) {
       console.error("Inventory history load error:", e);
       setError("Data load nahi ho saka. Dobara try karo.");
@@ -298,20 +372,25 @@ export default function InventoryHistory() {
     loadData();
   }, [loadData]);
 
-  /* Rows + running Cash in Hand + running Vendor Pay */
+  /* Rows + running Cash in Hand + running Vendor Pay + running Owner Capital */
   const rows = useMemo(() => {
     const entries = buildEntries(raw);
     let cash = 0;
     let payable = 0;
+    let owner = 0;
+    let invCost = 0;
     return entries.map((e, i) => {
-      cash += e.cashIn - e.cashOut;
+      cash += e.cashIn - e.cashOut - e.ownerDelta; // cash dono surat mein kam hoti hai
       payable += e.payableDelta;
+      owner = Math.max(0, owner + e.ownerDelta - (e.ownerReturn || 0)); // 0 se neeche nahi jayega
+      invCost += e.costDelta || 0; // abhi stock mein maal ki total cost
       return {
         ...e,
         sr: i + 1,
         cashInHand: cash,
         vendorPay: e.isVendor ? payable : 0,
-        ownerCapital: 0, // abhi chhoda hua hai
+        ownerCapital: owner,
+        inventoryCost: invCost,
       };
     });
   }, [raw]);
@@ -322,6 +401,8 @@ export default function InventoryHistory() {
       cashIn: rows.reduce((s, r) => s + r.cashIn, 0),
       cashOut: rows.reduce((s, r) => s + r.cashOut, 0),
       vendorPay: rows.reduce((s, r) => s + r.payableDelta, 0),
+      ownerCapital: rows.length ? rows[rows.length - 1].ownerCapital : 0,
+      inventoryCost: rows.length ? rows[rows.length - 1].inventoryCost : 0,
       cashInHand: rows.length ? rows[rows.length - 1].cashInHand : 0,
     }),
     [rows]
@@ -330,7 +411,7 @@ export default function InventoryHistory() {
   /* Pagination */
   const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
 
-  /* Pehli baar data aane par aakhri page (latest records) khol do */
+  /* Data aane par aakhri page (sab se naye records) khol do */
   useEffect(() => {
     if (!loading && rows.length && !jumpedToLast.current) {
       jumpedToLast.current = true;
@@ -341,6 +422,11 @@ export default function InventoryHistory() {
   useEffect(() => {
     if (page > totalPages) setPage(totalPages);
   }, [page, totalPages]);
+
+  /* Page badalne par table ko wapas upar scroll karo */
+  useEffect(() => {
+    if (tableScrollRef.current) tableScrollRef.current.scrollTop = 0;
+  }, [page]);
 
   const startIdx = (page - 1) * PAGE_SIZE;
   const pageRows = rows.slice(startIdx, startIdx + PAGE_SIZE);
@@ -387,7 +473,7 @@ export default function InventoryHistory() {
 
         {/* Sheet card */}
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-slate-800 bg-[#0b1220]">
-          <div className="min-h-0 flex-1 overflow-auto">
+          <div ref={tableScrollRef} className="min-h-0 flex-1 overflow-auto">
             {loading && rows.length === 0 ? (
               <div className="flex h-full items-center justify-center gap-3 text-slate-400">
                 <Loader2 className="animate-spin text-amber-400" size={22} />
@@ -404,7 +490,7 @@ export default function InventoryHistory() {
                 </button>
               </div>
             ) : (
-              <table className="w-full min-w-[1300px] border-collapse text-sm">
+              <table className="w-full min-w-[1450px] border-collapse text-sm">
                 <thead className="sticky top-0 z-10 bg-[#0b1220]">
                   <tr className="border-b border-slate-700 text-xs uppercase tracking-wide text-slate-400">
                     {COLUMNS.map((c) => (
@@ -453,10 +539,15 @@ export default function InventoryHistory() {
                           <td className="border-r border-slate-800/60 px-4 py-3 text-right font-semibold text-purple-300">
                             {r.isVendor ? money(r.vendorPay) : "-"}
                           </td>
+                          <td className="border-r border-slate-800/60 px-4 py-3 text-right font-semibold text-blue-400">
+                            {money(r.ownerCapital)}
+                          </td>
                           <td className="border-r border-slate-800/60 px-4 py-3 text-right font-bold text-white">
                             {money(r.cashInHand)}
                           </td>
-                          <td className="px-4 py-3 text-right font-semibold text-blue-400">{money(r.ownerCapital)}</td>
+                          <td className="px-4 py-3 text-right font-semibold text-cyan-400">
+                            {money(r.inventoryCost)}
+                          </td>
                         </tr>
                       );
                     })
@@ -471,8 +562,9 @@ export default function InventoryHistory() {
                     <td className="px-4 py-3.5 text-right text-emerald-400">{money(totals.cashIn)}</td>
                     <td className="px-4 py-3.5 text-right text-rose-400">{money(totals.cashOut)}</td>
                     <td className="px-4 py-3.5 text-right text-purple-300">{money(totals.vendorPay)}</td>
+                    <td className="px-4 py-3.5 text-right text-blue-400">{money(totals.ownerCapital)}</td>
                     <td className="px-4 py-3.5 text-right text-white">{money(totals.cashInHand)}</td>
-                    <td className="px-4 py-3.5 text-right text-blue-400">-</td>
+                    <td className="px-4 py-3.5 text-right text-cyan-400">{money(totals.inventoryCost)}</td>
                   </tr>
                 </tfoot>
               </table>

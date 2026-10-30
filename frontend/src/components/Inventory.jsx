@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import toast from 'react-hot-toast';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
@@ -140,11 +140,32 @@ const emptyFormData = {
   paidAmount: ''
 };
 
+// ---------- Bulk add (aik waqt mein kayi products) ----------
+const INITIAL_BULK_ROWS = 3;
+const ROW_GRID = 'grid-cols-[32px_minmax(160px,2.2fr)_1fr_1fr_0.8fr_0.8fr_36px]';
+const BULK_COLS = 5; // name, purchase, sell, qty, low stock
+
+let bulkRowCounter = 0;
+const makeEmptyRow = () => ({
+  rid: ++bulkRowCounter,
+  name: '',
+  purchasePrice: '',
+  sellingPrice: '',
+  quantity: '',
+  lowStockThreshold: ''
+});
+
+const isRowFilled = (r) =>
+  [r.name, r.purchasePrice, r.sellingPrice, r.quantity].some(v => String(v ?? '').trim() !== '');
+
 const inputCls = (darkMode, extra = '') =>
   `px-2 py-1 border rounded focus:ring-2 focus:ring-amber-400 font-medium ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'border-gray-300'} ${extra}`;
 
 const modalInputCls = (darkMode) =>
   `w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-400 font-medium ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300 text-gray-900'}`;
+
+const rowInputCls = (darkMode) =>
+  `w-full px-2 py-1.5 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-400 font-medium ${darkMode ? 'bg-gray-800 border-gray-700 text-white placeholder-gray-500' : 'bg-white border-gray-300 text-gray-900'}`;
 
 const ProductRow = React.memo(({ product, darkMode, editingCell, onStartEdit, onSaveEdit, onKeyPress, onEditProduct, onDeleteProduct, onToggleHide, onViewHistory, formatPrice, isAdmin }) => {
   const isEditing = (field) => editingCell.productId === product.id && editingCell.field === field;
@@ -211,11 +232,11 @@ const ProductRow = React.memo(({ product, darkMode, editingCell, onStartEdit, on
         )}
       </td>
 
-      {isAdmin && editableCell('purchasePrice', 'number', 'w-28', product.purchase_price, formatPrice(product.purchase_price), mutedText, 'Double-click to edit')}
-      {isAdmin && editableCell('sellingPrice', 'number', 'w-28', product.selling_price, formatPrice(product.selling_price), mutedText, 'Double-click to edit')}
+      {isAdmin && editableCell('purchasePrice', 'number', 'w-28', product.purchase_price, formatPrice(product.purchase_price), mutedText, '', false)}
+      {isAdmin && editableCell('sellingPrice', 'number', 'w-28', product.selling_price, formatPrice(product.selling_price), mutedText, '', false)}
 
       <td className="px-4 py-3">
-        {isEditing('quantity') ? (
+        {!isAdmin && isEditing('quantity') ? (
           <input
             type="number"
             value={editingCell.value}
@@ -228,13 +249,13 @@ const ProductRow = React.memo(({ product, darkMode, editingCell, onStartEdit, on
           />
         ) : (
           <div
-            onDoubleClick={() => onStartEdit({ productId: product.id, field: 'quantity', value: product.quantity })}
-            className={`cursor-pointer font-bold flex items-center gap-1 ${
+            onDoubleClick={() => { if (!isAdmin) onStartEdit({ productId: product.id, field: 'quantity', value: product.quantity }); }}
+            className={`${isAdmin ? 'cursor-default' : 'cursor-pointer hover:bg-amber-50 dark:hover:bg-amber-900/20'} font-bold flex items-center gap-1 ${
               hasThreshold && product.quantity < threshold && product.quantity > 0 ? 'text-amber-500' :
               product.quantity === 0 ? 'text-red-500' :
               darkMode ? 'text-white' : 'text-gray-900'
-            } hover:bg-amber-50 dark:hover:bg-amber-900/20 px-2 py-1 rounded transition`}
-            title={`Double-click to edit ${hasThreshold ? `(Low stock at: ${threshold})` : ''}`}
+            } px-2 py-1 rounded transition`}
+            title={isAdmin ? 'Stock badalne ke liye Edit button use karo' : `Double-click to edit ${hasThreshold ? `(Low stock at: ${threshold})` : ''}`}
           >
             {product.quantity}
             {hasThreshold && product.quantity < threshold && product.quantity > 0 && <FiAlertCircle className="text-xs" title={`Low stock! Below ${threshold}`} />}
@@ -243,7 +264,7 @@ const ProductRow = React.memo(({ product, darkMode, editingCell, onStartEdit, on
         )}
       </td>
 
-      {isAdmin && editableCell('lowStockThreshold', 'number', 'w-16', product.low_stock_threshold ?? '', product.low_stock_threshold ?? '-', mutedText, 'Double-click to edit alert level')}
+      {isAdmin && editableCell('lowStockThreshold', 'number', 'w-16', product.low_stock_threshold ?? '', product.low_stock_threshold ?? '-', mutedText, '', false)}
 
       <td className="px-4 py-3 text-sm font-medium text-gray-400">{invoiceNo}</td>
       <td className="px-4 py-3 text-sm font-medium text-gray-400">{vendorName}</td>
@@ -322,7 +343,10 @@ const Inventory = ({ darkMode }) => {
     totalProfit: 0
   });
 
+  // formData: Edit modal + vendor/credit fields (Add modal mein bhi vendor wali fields yahin se aati hain)
   const [formData, setFormData] = useState({ ...emptyFormData });
+  // newRows: Add modal ki saari product rows
+  const [newRows, setNewRows] = useState(() => Array.from({ length: INITIAL_BULK_ROWS }, makeEmptyRow));
   const [viewMode, setViewMode] = useState('active');
   const [editingCell, setEditingCell] = useState({ productId: null, field: null, value: '' });
 
@@ -340,6 +364,11 @@ const Inventory = ({ darkMode }) => {
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyError, setHistoryError] = useState('');
 
+  // Modal ka scroll container - credit purchase tick karne par khud neeche scroll karne ke liye
+  const modalScrollRef = useRef(null);
+  // Rows wali list ka scroll container - nayi row add karne par neeche scroll + focus
+  const rowsContainerRef = useRef(null);
+
   useEffect(() => {
     const user = localStorage.getItem('user');
     if (user) {
@@ -347,6 +376,16 @@ const Inventory = ({ darkMode }) => {
       setIsAdmin(userData.role === 'admin');
     }
   }, []);
+
+  // ✅ "Vendor se khareeda hai?" tick karte hi modal khud scroll ho kar naye fields dikha de
+  useEffect(() => {
+    if (!isModalOpen || !formData.isCreditPurchase) return;
+    const timer = setTimeout(() => {
+      const el = modalScrollRef.current;
+      if (el) el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+    }, 50);
+    return () => clearTimeout(timer);
+  }, [isModalOpen, formData.isCreditPurchase]);
 
   const filteredProducts = useMemo(() => {
     let filtered = products;
@@ -416,6 +455,16 @@ const Inventory = ({ darkMode }) => {
     const totalProfit = data.reduce((sum, p) => sum + (((p.selling_price || 0) - (p.purchase_price || 0)) * (p.quantity || 0)), 0);
     return { totalStock, totalPurchaseValue, totalSellingValue, totalProfit };
   }, [filteredProducts]);
+
+  // Add modal ke liye: kitni rows bhari hui hain aur unka total bill
+  const bulkTotals = useMemo(() => {
+    const filled = newRows.filter(isRowFilled);
+    const totalBill = filled.reduce(
+      (sum, r) => sum + (parseFloat(r.purchasePrice) || 0) * (parseInt(r.quantity) || 0),
+      0
+    );
+    return { filledCount: filled.length, totalBill };
+  }, [newRows]);
 
   const cashProductsCost = useMemo(() => {
     const soldByName = {};
@@ -814,6 +863,44 @@ const Inventory = ({ darkMode }) => {
     setFormData(prev => ({ ...prev, [name]: value }));
   }, []);
 
+  // ---------- Bulk rows helpers ----------
+  const updateRow = useCallback((rid, field, value) => {
+    setNewRows(prev => prev.map(r => (r.rid === rid ? { ...r, [field]: value } : r)));
+  }, []);
+
+  const removeRow = useCallback((rid) => {
+    setNewRows(prev => (prev.length > 1 ? prev.filter(r => r.rid !== rid) : prev));
+  }, []);
+
+  const focusCell = (rowIdx, colIdx) => {
+    setTimeout(() => {
+      const el = rowsContainerRef.current?.querySelector(`input[data-row="${rowIdx}"][data-col="${colIdx}"]`);
+      if (el) {
+        el.focus();
+        el.scrollIntoView({ block: 'nearest' });
+      }
+    }, 30);
+  };
+
+  const addRows = (count = 1, focusFirstNew = true) => {
+    const firstNewIdx = newRows.length;
+    setNewRows(prev => [...prev, ...Array.from({ length: count }, makeEmptyRow)]);
+    if (focusFirstNew) focusCell(firstNewIdx, 0);
+  };
+
+  // Enter dabane par agle box mein jao (form submit na ho); aakhri box par nayi row ban jaye
+  const handleRowKeyDown = (e, rowIdx, colIdx) => {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    if (colIdx < BULK_COLS - 1) {
+      focusCell(rowIdx, colIdx + 1);
+    } else if (rowIdx < newRows.length - 1) {
+      focusCell(rowIdx + 1, 0);
+    } else {
+      addRows(1, true);
+    }
+  };
+
   const handleSubmit = useCallback(async (e) => {
     e.preventDefault();
 
@@ -824,32 +911,64 @@ const Inventory = ({ darkMode }) => {
       return;
     }
 
-    if (!formData.name || !formData.purchasePrice || !formData.sellingPrice || !formData.quantity) {
-      toast.error('Please fill all required fields');
+    // Sirf wo rows lo jinme kuch likha hai (khali rows ignore)
+    const filled = newRows
+      .map((r, i) => ({ r, n: i + 1 }))
+      .filter(({ r }) => isRowFilled(r));
+
+    if (filled.length === 0) {
+      toast.error('Kam az kam aik product ki detail bharo');
       return;
     }
 
-    const purchasePriceNum = parseFloat(formData.purchasePrice);
-    const sellingPriceNum = parseFloat(formData.sellingPrice);
-    const quantityNum = parseInt(formData.quantity);
-
-    let thresholdNum = null;
-    if (formData.lowStockThreshold !== '' && formData.lowStockThreshold !== null && formData.lowStockThreshold !== undefined) {
-      const parsed = parseInt(formData.lowStockThreshold);
-      if (!isNaN(parsed)) {
-        thresholdNum = parsed;
+    const parsed = [];
+    for (const { r, n } of filled) {
+      if (!r.name.trim() || String(r.purchasePrice).trim() === '' || String(r.sellingPrice).trim() === '' || String(r.quantity).trim() === '') {
+        toast.error(`Row ${n}: Name, Purchase, Sell aur Qty zaroori hain`);
+        return;
       }
+
+      const purchase = parseFloat(r.purchasePrice);
+      const selling = parseFloat(r.sellingPrice);
+      const qty = parseInt(r.quantity);
+
+      let threshold = null;
+      if (String(r.lowStockThreshold).trim() !== '') {
+        const t = parseInt(r.lowStockThreshold);
+        if (!isNaN(t)) threshold = t;
+      }
+
+      if (isNaN(purchase) || isNaN(selling) || isNaN(qty)) {
+        toast.error(`Row ${n}: Sahi numbers likho`);
+        return;
+      }
+      if (purchase < 0 || selling < 0 || qty < 0 || (threshold !== null && threshold < 0)) {
+        toast.error(`Row ${n}: Values negative nahi ho sakti`);
+        return;
+      }
+
+      parsed.push({
+        name: r.name.trim(),
+        purchase_price: purchase,
+        selling_price: selling,
+        quantity: qty,
+        low_stock_threshold: threshold
+      });
     }
 
-    if (isNaN(purchasePriceNum) || isNaN(sellingPriceNum) || isNaN(quantityNum)) {
-      toast.error('Please enter valid numbers');
-      return;
+    // Aik hi batch mein same naam do baar na ho (sales ka hisaab naam se match hota hai)
+    const seen = new Map();
+    for (let i = 0; i < parsed.length; i++) {
+      const key = parsed[i].name.toLowerCase();
+      if (seen.has(key)) {
+        toast.error(`Row ${filled[seen.get(key)].n} aur Row ${filled[i].n} ka naam same hai ("${parsed[i].name}")`);
+        return;
+      }
+      seen.set(key, i);
     }
 
-    if (purchasePriceNum < 0 || sellingPriceNum < 0 || quantityNum < 0 || (thresholdNum !== null && thresholdNum < 0)) {
-      toast.error('Values cannot be negative');
-      return;
-    }
+    const totalBill = parsed.reduce((s, p) => s + p.purchase_price * p.quantity, 0);
+    const totalQty = parsed.reduce((s, p) => s + p.quantity, 0);
 
     if (formData.isCreditPurchase && (!formData.vendorName || !formData.invoiceNumber)) {
       toast.error('Vendor name aur invoice number zaroori hai credit purchase ke liye');
@@ -858,73 +977,92 @@ const Inventory = ({ darkMode }) => {
 
     if (formData.isCreditPurchase) {
       const initialPay = parseFloat(formData.paidAmount) || 0;
-      if (initialPay > purchasePriceNum * quantityNum) {
+      if (initialPay > totalBill) {
         toast.error('Paid amount total amount se zyada nahi ho sakta');
         return;
       }
       if (!ensureCash(initialPay)) return;
     } else {
-      if (!ensureCash(purchasePriceNum * quantityNum)) return;
+      if (!ensureCash(totalBill)) return;
     }
 
     setIsSubmitting(true);
+
+    const created = []; // { id, item }
+    const rollback = async () => {
+      // Agar beech mein koi masla aaye to jo products ban chuke unhein wapas hata do (adha kaam na rahe)
+      await Promise.all(created.map(c => api.delete(`/products/${c.id}`).catch(() => null)));
+      await fetchProducts();
+    };
+
     try {
-      const productRes = await api.post('/products', {
-        name: formData.name,
-        purchase_price: purchasePriceNum,
-        selling_price: sellingPriceNum,
-        quantity: formData.isCreditPurchase ? 0 : quantityNum,
-        low_stock_threshold: thresholdNum
-      });
-
-      const newProduct = productRes.data?.data;
-
-      if (!newProduct?.id) {
-        toast.error('Product ban gaya lekin vendor link nahi ho saka. Inventory check karo.');
-        setFormData({ ...emptyFormData });
-        setIsModalOpen(false);
-        await fetchProducts();
-        return;
+      for (let i = 0; i < parsed.length; i++) {
+        const p = parsed[i];
+        try {
+          const res = await api.post('/products', {
+            name: p.name,
+            purchase_price: p.purchase_price,
+            selling_price: p.selling_price,
+            quantity: formData.isCreditPurchase ? 0 : p.quantity,
+            low_stock_threshold: p.low_stock_threshold
+          });
+          const np = res.data?.data;
+          if (!np?.id) throw new Error('Server ne product ID wapas nahi di');
+          created.push({ id: np.id, item: p });
+        } catch (err) {
+          console.error('Bulk add error:', err);
+          await rollback();
+          toast.error(
+            `Row ${filled[i].n} ("${p.name}") add nahi ho saka: ${err.response?.data?.message || err.message}. Baqi products bhi wapas hata diye, dobara try karo.`,
+            { duration: 6000 }
+          );
+          return;
+        }
       }
 
       if (formData.isCreditPurchase) {
         const paidAmountNum = parseFloat(formData.paidAmount) || 0;
-        const totalAmount = purchasePriceNum * quantityNum;
-
         try {
           await api.post('/credit/vendors', {
             vendor_name: formData.vendorName,
+            products: created.map(c => c.item.name).join(', '),
             invoice_number: formData.invoiceNumber,
-            total_amount: totalAmount,
+            total_amount: totalBill,
             paid_amount: paidAmountNum,
-            stock_quantity: quantityNum,
-            product_ids: [{
-              product_id: newProduct.id,
-              product_name: formData.name,
-              quantity: quantityNum,
-              purchase_price: purchasePriceNum
-            }]
+            stock_quantity: totalQty,
+            product_ids: created.map(c => ({
+              product_id: c.id,
+              product_name: c.item.name,
+              quantity: c.item.quantity,
+              purchase_price: c.item.purchase_price
+            }))
           });
-          toast.success('Product add ho gaya aur vendor se link ho gaya!');
           fetchVendorsList();
         } catch (vendorError) {
           console.error('Vendor link error:', vendorError);
-          toast.error(vendorError.response?.data?.message || 'Product ban gaya, lekin vendor link fail hua (invoice number unique honi chahiye)');
+          await rollback();
+          toast.error(
+            `${vendorError.response?.data?.message || 'Vendor link fail hua (invoice number unique honi chahiye)'}. Products save nahi hue, invoice number check karke dobara try karo.`,
+            { duration: 6000 }
+          );
+          return;
         }
-      } else {
-        toast.success('Product added successfully!');
       }
 
+      toast.success(
+        created.length === 1
+          ? 'Product add ho gaya!'
+          : `${created.length} products add ho gaye!`
+      );
+
       setFormData({ ...emptyFormData });
+      setNewRows(Array.from({ length: INITIAL_BULK_ROWS }, makeEmptyRow));
       setIsModalOpen(false);
       await fetchProducts();
-    } catch (error) {
-      console.error('Error adding product:', error);
-      toast.error(error.response?.data?.message || 'Failed to add product');
     } finally {
       setIsSubmitting(false);
     }
-  }, [formData, isAdmin, fetchProducts, fetchVendorsList, isSubmitting, ensureCash]);
+  }, [newRows, formData, isAdmin, fetchProducts, fetchVendorsList, isSubmitting, ensureCash]);
 
   const handleEditProduct = useCallback((product) => {
     setEditingProduct(product);
@@ -1148,6 +1286,7 @@ const Inventory = ({ darkMode }) => {
     setIsModalOpen(false);
     setEditingProduct(null);
     setFormData({ ...emptyFormData });
+    setNewRows(Array.from({ length: INITIAL_BULK_ROWS }, makeEmptyRow));
     setIsSubmitting(false);
     setShowVendorDropdown(false);
   };
@@ -1193,6 +1332,22 @@ const Inventory = ({ darkMode }) => {
   const thCls = `px-4 py-2 text-left text-xs font-bold uppercase ${darkMode ? 'text-gray-400' : 'text-gray-500'}`;
   const labelCls = `block text-sm font-bold mb-2 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`;
   const mutedCls = darkMode ? 'text-gray-400' : 'text-gray-500';
+
+  const renderRowInput = (r, i, col, field, type, placeholder) => (
+    <input
+      type={type}
+      value={r[field]}
+      data-row={i}
+      data-col={col}
+      onChange={(e) => updateRow(r.rid, field, e.target.value)}
+      onKeyDown={(e) => handleRowKeyDown(e, i, col)}
+      className={rowInputCls(darkMode)}
+      placeholder={placeholder}
+      min={type === 'number' ? '0' : undefined}
+      step={field === 'purchasePrice' || field === 'sellingPrice' ? '0.01' : undefined}
+      disabled={isSubmitting}
+    />
+  );
 
   if (loading) {
     return (
@@ -1289,12 +1444,12 @@ const Inventory = ({ darkMode }) => {
       {isAdmin && (
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           {[
-            { icon: FiShoppingCart, tint: 'bg-blue-500/15', color: 'text-blue-400', label: `${getStatsLabelText()} Purchase`, value: filteredStats.totalPurchase, sub: `${getStatsLabelText().toLowerCase()} purchases` },
+            { icon: FiShoppingCart, tint: 'bg-blue-500/15', color: 'text-blue-400', label: `${getStatsLabelText()} Inventory Cost`, value: filteredStats.totalPurchase, sub: `${getStatsLabelText().toLowerCase()} purchases` },
             { icon: FiDollarSign, tint: 'bg-amber-500/15', color: 'text-amber-400', label: `${getStatsLabelText()} Selling`, value: filteredStats.totalSelling, sub: `${getStatsLabelText().toLowerCase()} sales` },
             { icon: FiTrendingUp, tint: 'bg-emerald-500/15', color: 'text-emerald-400', label: `${getStatsLabelText()} Profit`, value: filteredStats.totalProfit, sub: `${getStatsLabelText().toLowerCase()} profit` },
-            { icon: FiBriefcase, tint: 'bg-purple-500/15', color: 'text-purple-400', label: 'Owner Capital', value: ownerCapital, sub: 'apni cash se liya hua maal' },
-            { icon: FiCreditCard, tint: 'bg-red-500/15', color: 'text-red-400', label: 'Vendor Pay', value: vendorPayable, sub: 'vendors ko dena baqi' },
-            { icon: FiBox, tint: 'bg-cyan-500/15', color: 'text-cyan-400', label: 'Inventory Cash in Hand', value: inventoryCashInHand, sub: 'sale ki cost wapas + manual cash - purchases' }
+            { icon: FiBriefcase, tint: 'bg-purple-500/15', color: 'text-purple-400', label: 'Cash Inventory ', value: ownerCapital, sub: 'apni cash se liya hua maal' },
+            { icon: FiCreditCard, tint: 'bg-red-500/15', color: 'text-red-400', label: 'Vendor Payable Inventory', value: vendorPayable, sub: 'vendors ko dena baqi' },
+            { icon: FiBox, tint: 'bg-cyan-500/15', color: 'text-cyan-400', label: 'Cash in hand / Capital', value: inventoryCashInHand, sub: 'sale ki cost wapas + manual cash - purchases' }
           ].map(s => (
             <div key={s.label} className={`rounded-xl p-4 border ${card}`}>
               <div className="flex items-center gap-2 mb-1">
@@ -1562,92 +1717,166 @@ const Inventory = ({ darkMode }) => {
 
       {isModalOpen && isAdmin && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className={`${darkMode ? 'bg-gray-900 text-white border-gray-700' : 'bg-white text-gray-900 border-gray-200'} rounded-2xl shadow-xl max-w-md w-full max-h-[90vh] overflow-y-auto border`}>
+          <div
+            ref={modalScrollRef}
+            className={`${darkMode ? 'bg-gray-900 text-white border-gray-700' : 'bg-white text-gray-900 border-gray-200'} rounded-2xl shadow-xl ${editingProduct ? 'max-w-md' : 'max-w-5xl'} w-full max-h-[90vh] overflow-y-auto border`}
+          >
             <div className={`px-6 py-4 border-b ${darkMode ? 'border-gray-700' : 'border-gray-200'} flex justify-between items-center`}>
-              <h3 className="text-xl font-bold">{editingProduct ? 'Edit Product' : 'Add New Product'}</h3>
+              <h3 className="text-xl font-bold">{editingProduct ? 'Edit Product' : 'Add New Products'}</h3>
               <button onClick={closeModal} className="text-gray-500 hover:text-gray-700 text-2xl">
                 <FiX />
               </button>
             </div>
 
             <form onSubmit={editingProduct ? handleUpdateSubmit : handleSubmit} className="p-6 space-y-4">
-              <div>
-                <label className={labelCls}>Product Name *</label>
-                <input
-                  type="text"
-                  name="name"
-                  value={formData.name}
-                  onChange={handleInputChange}
-                  className={modalInputCls(darkMode)}
-                  placeholder="Enter product name"
-                  required
-                  disabled={isSubmitting}
-                />
-              </div>
+              {editingProduct ? (
+                <>
+                  <div>
+                    <label className={labelCls}>Product Name *</label>
+                    <input
+                      type="text"
+                      name="name"
+                      value={formData.name}
+                      onChange={handleInputChange}
+                      className={modalInputCls(darkMode)}
+                      placeholder="Enter product name"
+                      required
+                      disabled={isSubmitting}
+                    />
+                  </div>
 
-              <div>
-                <label className={labelCls}>Purchase Price * (Rs.)</label>
-                <input
-                  type="number"
-                  name="purchasePrice"
-                  value={formData.purchasePrice}
-                  onChange={handleInputChange}
-                  className={modalInputCls(darkMode)}
-                  placeholder="Enter purchase price"
-                  min="0"
-                  step="0.01"
-                  required
-                  disabled={isSubmitting}
-                />
-              </div>
+                  <div>
+                    <label className={labelCls}>Purchase Price * (Rs.)</label>
+                    <input
+                      type="number"
+                      name="purchasePrice"
+                      value={formData.purchasePrice}
+                      onChange={handleInputChange}
+                      className={modalInputCls(darkMode)}
+                      placeholder="Enter purchase price"
+                      min="0"
+                      step="0.01"
+                      required
+                      disabled={isSubmitting}
+                    />
+                  </div>
 
-              <div>
-                <label className={labelCls}>Selling Price * (Rs.)</label>
-                <input
-                  type="number"
-                  name="sellingPrice"
-                  value={formData.sellingPrice}
-                  onChange={handleInputChange}
-                  className={modalInputCls(darkMode)}
-                  placeholder="Enter selling price"
-                  min="0"
-                  step="0.01"
-                  required
-                  disabled={isSubmitting}
-                />
-              </div>
+                  <div>
+                    <label className={labelCls}>Selling Price * (Rs.)</label>
+                    <input
+                      type="number"
+                      name="sellingPrice"
+                      value={formData.sellingPrice}
+                      onChange={handleInputChange}
+                      className={modalInputCls(darkMode)}
+                      placeholder="Enter selling price"
+                      min="0"
+                      step="0.01"
+                      required
+                      disabled={isSubmitting}
+                    />
+                  </div>
 
-              <div>
-                <label className={labelCls}>Stock Quantity *</label>
-                <input
-                  type="number"
-                  name="quantity"
-                  value={formData.quantity}
-                  onChange={handleInputChange}
-                  className={modalInputCls(darkMode)}
-                  placeholder="Enter stock quantity"
-                  min="0"
-                  required
-                  disabled={isSubmitting}
-                />
-              </div>
+                  <div>
+                    <label className={labelCls}>Stock Quantity *</label>
+                    <input
+                      type="number"
+                      name="quantity"
+                      value={formData.quantity}
+                      onChange={handleInputChange}
+                      className={modalInputCls(darkMode)}
+                      placeholder="Enter stock quantity"
+                      min="0"
+                      required
+                      disabled={isSubmitting}
+                    />
+                  </div>
 
-              <div>
-                <label className={labelCls}>
-                  Low Stock Alert At
-                </label>
-                <input
-                  type="number"
-                  name="lowStockThreshold"
-                  value={formData.lowStockThreshold}
-                  onChange={handleInputChange}
-                  className={modalInputCls(darkMode)}
-                  placeholder="Enter alert level (e.g. 5, 10, 0)"
-                  min="0"
-                  disabled={isSubmitting}
-                />
-                <p className={`text-xs font-bold mt-1 ${mutedCls}`}>⚠️ UI alert only - No email will be sent</p>
-              </div>
+                  <div>
+                    <label className={labelCls}>
+                      Low Stock Alert At
+                    </label>
+                    <input
+                      type="number"
+                      name="lowStockThreshold"
+                      value={formData.lowStockThreshold}
+                      onChange={handleInputChange}
+                      className={modalInputCls(darkMode)}
+                      placeholder="Enter alert level (e.g. 5, 10, 0)"
+                      min="0"
+                      disabled={isSubmitting}
+                    />
+                    <p className={`text-xs font-bold mt-1 ${mutedCls}`}>⚠️ UI alert only - No email will be sent</p>
+                  </div>
+                </>
+              ) : (
+                <div>
+                  <div className="overflow-x-auto">
+                    <div className="min-w-[760px]">
+                      <div className={`grid ${ROW_GRID} gap-2 mb-2 px-1 text-xs font-bold ${mutedCls}`}>
+                        <span>#</span>
+                        <span>Product Name *</span>
+                        <span>Purchase (Rs.) *</span>
+                        <span>Sell (Rs.) *</span>
+                        <span>Qty *</span>
+                        <span>Low Stock</span>
+                        <span></span>
+                      </div>
+
+                      <div ref={rowsContainerRef} className="max-h-[45vh] overflow-y-auto space-y-2 pr-1">
+                        {newRows.map((r, i) => (
+                          <div key={r.rid} className={`grid ${ROW_GRID} gap-2 items-center px-1`}>
+                            <span className={`text-xs font-bold text-center ${mutedCls}`}>{i + 1}</span>
+                            {renderRowInput(r, i, 0, 'name', 'text', 'Product name')}
+                            {renderRowInput(r, i, 1, 'purchasePrice', 'number', 'Purchase')}
+                            {renderRowInput(r, i, 2, 'sellingPrice', 'number', 'Sell')}
+                            {renderRowInput(r, i, 3, 'quantity', 'number', 'Qty')}
+                            {renderRowInput(r, i, 4, 'lowStockThreshold', 'number', 'e.g. 5')}
+                            <button
+                              type="button"
+                              onClick={() => removeRow(r.rid)}
+                              disabled={isSubmitting || newRows.length === 1}
+                              className="p-2 rounded-lg text-red-400 hover:bg-red-500/10 transition disabled:opacity-30 disabled:cursor-not-allowed"
+                              title="Row hatao"
+                            >
+                              <FiTrash2 className="text-sm" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center justify-between gap-3 mt-3">
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => addRows(1)}
+                        disabled={isSubmitting}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1 ${darkMode ? 'bg-gray-800 hover:bg-gray-700 text-white' : 'bg-gray-200 hover:bg-gray-300 text-gray-800'}`}
+                      >
+                        <FiPlus className="text-xs" /> Add Row
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => addRows(5)}
+                        disabled={isSubmitting}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1 ${darkMode ? 'bg-gray-800 hover:bg-gray-700 text-white' : 'bg-gray-200 hover:bg-gray-300 text-gray-800'}`}
+                      >
+                        <FiPlus className="text-xs" /> 5 Rows
+                      </button>
+                    </div>
+                    <p className={`text-xs font-bold ${mutedCls}`}>
+                      Products: <span className={darkMode ? 'text-white' : 'text-gray-900'}>{bulkTotals.filledCount}</span>
+                      {'  •  '}Total bill: <span className="text-amber-400">Rs. {bulkTotals.totalBill.toLocaleString()}</span>
+                    </p>
+                  </div>
+
+                  <p className={`text-xs font-bold mt-2 ${mutedCls}`}>
+                    ⚠️ Low stock alert sirf UI par dikhega, email nahi jayegi. Khali rows ignore ho jati hain. Enter dabane se agle box mein jaoge.
+                  </p>
+                </div>
+              )}
 
               {!editingProduct && (
                 <div className={`p-3 rounded-lg border ${darkMode ? 'border-gray-700 bg-gray-800/50' : 'border-gray-200 bg-gray-50'}`}>
@@ -1660,12 +1889,12 @@ const Inventory = ({ darkMode }) => {
                       disabled={isSubmitting}
                     />
                     <span className={`text-sm font-bold ${darkMode ? 'text-gray-200' : 'text-gray-700'}`}>
-                      Vendor se khareeda hai? (Credit Purchase)
+                      Vendor se khareeda hai? (Credit Purchase) — sab products aik hi invoice mein
                     </span>
                   </label>
 
                   {formData.isCreditPurchase && (
-                    <div className="mt-3 space-y-3">
+                    <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-3">
                       <div className="relative">
                         <label className={`block text-sm font-bold mb-1 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>Vendor Name *</label>
                         <input
@@ -1733,8 +1962,8 @@ const Inventory = ({ darkMode }) => {
                         />
                       </div>
 
-                      <p className={`text-xs font-bold ${mutedCls}`}>
-                        Total bill: Rs. {((parseFloat(formData.purchasePrice) || 0) * (parseInt(formData.quantity) || 0)).toLocaleString()} — baqi Credit page par "Pay Now" se dete rehna.
+                      <p className={`text-xs font-bold md:col-span-3 ${mutedCls}`}>
+                        Total bill: Rs. {bulkTotals.totalBill.toLocaleString()} — baqi Credit page par "Pay Now" se dete rehna.
                       </p>
                     </div>
                   )}
@@ -1763,7 +1992,11 @@ const Inventory = ({ darkMode }) => {
                   ) : (
                     <>
                       <FiCheckCircle className="text-sm" />
-                      {editingProduct ? 'Update Product' : 'Add Product'}
+                      {editingProduct
+                        ? 'Update Product'
+                        : bulkTotals.filledCount > 1
+                          ? `Add ${bulkTotals.filledCount} Products`
+                          : 'Add Product'}
                     </>
                   )}
                 </button>

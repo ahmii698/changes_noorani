@@ -1039,7 +1039,8 @@ const Dashboard = () => {
                   )}
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
+                {/* Cards order: Sales → Expenses → Discount → Profit → Active Products */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
                   <StatsCard 
                     title="Total Sales" 
                     value={`Rs. ${totalSales.toLocaleString()}`} 
@@ -1049,6 +1050,28 @@ const Dashboard = () => {
                     trend={getTrend('sales')}
                     sparkData={salesSpark}
                     sparkColor="#fbbf24"
+                    darkMode={darkMode} 
+                  />
+                  <StatsCard 
+                    title="Total Expenses" 
+                    value={`Rs. ${totalExpensesSum.toLocaleString()}`} 
+                    icon={FiShoppingCart} 
+                    iconBg="bg-blue-500/15" 
+                    iconColor="text-blue-400"
+                    trend={getTrend('expenses')}
+                    sparkData={expensesSpark}
+                    sparkColor="#3b82f6"
+                    darkMode={darkMode} 
+                  />
+                  <StatsCard 
+                    title="Total Discount" 
+                    value={`Rs. ${totalDiscount.toLocaleString()}`} 
+                    icon={FiGift} 
+                    iconBg="bg-orange-500/15" 
+                    iconColor="text-orange-400"
+                    trend={getTrend('discount')}
+                    sparkData={discountSpark}
+                    sparkColor="#f97316"
                     darkMode={darkMode} 
                   />
                   <StatsCard 
@@ -1065,17 +1088,6 @@ const Dashboard = () => {
                     darkMode={darkMode} 
                   />
                   <StatsCard 
-                    title="Total Expenses" 
-                    value={`Rs. ${totalExpensesSum.toLocaleString()}`} 
-                    icon={FiShoppingCart} 
-                    iconBg="bg-blue-500/15" 
-                    iconColor="text-blue-400"
-                    trend={getTrend('expenses')}
-                    sparkData={expensesSpark}
-                    sparkColor="#3b82f6"
-                    darkMode={darkMode} 
-                  />
-                  <StatsCard 
                     title="Active Products" 
                     value={totalProductsCount} 
                     icon={FiPackage} 
@@ -1083,28 +1095,6 @@ const Dashboard = () => {
                     iconColor="text-purple-400"
                     progressPercent={Math.min(100, (totalStock / 50) * 100)}
                     progressLabel={`${totalStock} units`}
-                    darkMode={darkMode} 
-                  />
-                  <StatsCard 
-                    title="Total Discount" 
-                    value={`Rs. ${totalDiscount.toLocaleString()}`} 
-                    icon={FiGift} 
-                    iconBg="bg-orange-500/15" 
-                    iconColor="text-orange-400"
-                    trend={getTrend('discount')}
-                    sparkData={discountSpark}
-                    sparkColor="#f97316"
-                    darkMode={darkMode} 
-                  />
-                  <StatsCard 
-                    title="Cash in Hand" 
-                    value={`Rs. ${cashInHand.cash.toLocaleString()}`} 
-                    subtitle={`Manual: ${cashInHand.manual.toLocaleString()} | Sales: ${cashInHand.received.toLocaleString()} | Purchases: ${(cashInHand.inventorySpent + cashInHand.vendorPaid).toLocaleString()}`}
-                    icon={FiCreditCard} 
-                    iconBg="bg-teal-500/15" 
-                    iconColor="text-teal-400"
-                    trend={null}
-                    negative={cashInHand.cash < 0}
                     darkMode={darkMode} 
                   />
                 </div>

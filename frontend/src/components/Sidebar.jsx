@@ -27,7 +27,7 @@ const Sidebar = ({ activeMenu, setActiveMenu, isOpen, setIsOpen, darkMode }) => 
     { id: 'all-data', label: 'Dashboard', icon: FiHome, path: '/dashboard' },
     { id: 'inventory', label: 'Inventory', icon: FiPackage, path: '/inventory' },
     { id: 'inventory-history', label: 'Inventory History', icon: FiRotateCcw, path: '/inventory-history' },
-    { id: 'cash-in-hand', label: 'Cash in Hand', icon: FiBriefcase, path: '/cash-in-hand' },
+    { id: 'cash-in-hand', label: 'Owner Capital', icon: FiBriefcase, path: '/cash-in-hand' },
     { id: 'finance', label: 'Finance', icon: FiDollarSign, hasSubmenu: true },
     { id: 'billing', label: 'Billing', icon: FiFileText, path: '/billing' },
     { id: 'reminders', label: 'Reminders', icon: FiBell, path: '/reminders', badge: reminderCount },

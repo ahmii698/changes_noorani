@@ -175,6 +175,9 @@ const BANK_NAMES = [
   { value: 'ubl', label: 'UBL (United Bank Limited)' },
 ];
 
+// ✅ Cart/print mein item ka type label
+const getItemTypeLabel = (item) => (item.type === 'service' ? 'Service' : 'Part');
+
 const BillingInvoice = ({ customerDetails, darkMode, onPaymentSuccess, restoredData }) => {
   const [cart, setCart] = useState([]);
   const [paymentAmount, setPaymentAmount] = useState('');
@@ -182,6 +185,8 @@ const BillingInvoice = ({ customerDetails, darkMode, onPaymentSuccess, restoredD
   const [selectedBank, setSelectedBank] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [viewMode, setViewMode] = useState('grid');
+  const [activeTab, setActiveTab] = useState('services'); // 'services' | 'products'
+  const [services, setServices] = useState([]);
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -192,7 +197,19 @@ const BillingInvoice = ({ customerDetails, darkMode, onPaymentSuccess, restoredD
   const [discountNote, setDiscountNote] = useState('');
   
   const [previousVisits, setPreviousVisits] = useState([]);
+
+  // ✅ Service modal states
+  const [showIconDropdown, setShowIconDropdown] = useState(false);
+  const [isServiceModalOpen, setIsServiceModalOpen] = useState(false);
+  const [editingService, setEditingService] = useState(null);
+  const [serviceFormData, setServiceFormData] = useState({
+    name: '',
+    price: '',
+    category: '',
+    icon: 'tool'
+  });
   
+  // Product modal (ab sirf EDIT ke liye - Add button hata diya hai)
   const [isProductModalOpen, setIsProductModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState(null);
   const [productFormData, setProductFormData] = useState({
@@ -238,7 +255,7 @@ const BillingInvoice = ({ customerDetails, darkMode, onPaymentSuccess, restoredD
   }, [restoredData]);
 
   const subtotal = useMemo(() => {
-    const total = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+    const total = cart.reduce((sum, item) => sum + ((parseFloat(item.price) || 0) * item.quantity), 0);
     return roundToTwo(total);
   }, [cart]);
 
@@ -283,6 +300,7 @@ const BillingInvoice = ({ customerDetails, darkMode, onPaymentSuccess, restoredD
     return paymentMethod;
   };
 
+  // ✅ FIX: Previous visits - /invoices se (customer/{phone} route api.php mein hai hi nahi)
   useEffect(() => {
     const fetchPreviousVisits = async () => {
       if (!isAdmin || !customerDetails?.phone) {
@@ -291,19 +309,28 @@ const BillingInvoice = ({ customerDetails, darkMode, onPaymentSuccess, restoredD
       }
       
       try {
-        const response = await api.get(`/invoices/customer/${customerDetails.phone}`);
-        if (response.data && Array.isArray(response.data)) {
-          const visits = response.data.slice(0, 10).map(inv => ({
-            id: inv.id,
-            date: inv.invoice_date ? new Date(inv.invoice_date).toLocaleDateString() : 'N/A',
-            products: inv.items?.map(item => item.service_name).join(', ') || 'N/A',
-            total: inv.total_amount || 0,
-            status: inv.status || 'Paid'
-          }));
-          setPreviousVisits(visits);
-        } else {
-          setPreviousVisits([]);
+        const response = await api.get('/invoices');
+        let invoices = [];
+        if (Array.isArray(response.data)) {
+          invoices = response.data;
+        } else if (response.data?.data && Array.isArray(response.data.data)) {
+          invoices = response.data.data;
         }
+
+        const phone = customerDetails.phone.replace(/\D/g, '');
+        const filtered = invoices.filter(inv => {
+          const invPhone = inv.customer_phone?.replace(/\D/g, '') || '';
+          return invPhone === phone;
+        });
+
+        const visits = filtered.slice(0, 10).map(inv => ({
+          id: inv.id,
+          date: inv.invoice_date ? new Date(inv.invoice_date).toLocaleDateString() : 'N/A',
+          products: inv.items?.map(item => item.service_name).join(', ') || 'N/A',
+          total: inv.total_amount || 0,
+          status: inv.status || 'Paid'
+        }));
+        setPreviousVisits(visits);
       } catch (error) {
         console.error('Error fetching previous visits:', error);
         setPreviousVisits([]);
@@ -312,6 +339,21 @@ const BillingInvoice = ({ customerDetails, darkMode, onPaymentSuccess, restoredD
 
     fetchPreviousVisits();
   }, [customerDetails, isAdmin]);
+
+  // ✅ Services fetch
+  const fetchServices = async () => {
+    try {
+      const response = await api.get('/services');
+      if (response.data && response.data.data && Array.isArray(response.data.data)) {
+        setServices(response.data.data);
+      } else if (response.data && Array.isArray(response.data)) {
+        setServices(response.data);
+      }
+    } catch (err) {
+      console.error('Error fetching services:', err);
+      toast.error('Failed to load services');
+    }
+  };
 
   // ✅ UPDATED: fetchProducts with Battery filter
   const fetchProducts = async () => {
@@ -349,7 +391,7 @@ const BillingInvoice = ({ customerDetails, darkMode, onPaymentSuccess, restoredD
   useEffect(() => {
     const loadData = async () => {
       setLoading(true);
-      await fetchProducts();
+      await Promise.all([fetchServices(), fetchProducts()]);
       setLoading(false);
     };
     loadData();
@@ -404,42 +446,110 @@ const BillingInvoice = ({ customerDetails, darkMode, onPaymentSuccess, restoredD
     }
   };
 
-  // ==================== PRODUCT FUNCTIONS ====================
-  const handleAddProduct = async () => {
-    if (!productFormData.name || !productFormData.purchase_price || !productFormData.selling_price || !productFormData.quantity) {
+  // ==================== SERVICE FUNCTIONS ====================
+  const closeServiceModal = () => {
+    setIsServiceModalOpen(false);
+    setEditingService(null);
+    setShowIconDropdown(false);
+    setServiceFormData({ name: '', price: '', category: '', icon: 'tool' });
+  };
+
+  const handleAddService = async () => {
+    if (!serviceFormData.name || !serviceFormData.price || !serviceFormData.category) {
       toast.error('Please fill all fields');
       return;
     }
     try {
-      const payload = {
-        name: productFormData.name,
-        purchase_price: parseFloat(productFormData.purchase_price),
-        selling_price: parseFloat(productFormData.selling_price),
-        quantity: parseInt(productFormData.quantity),
-        is_hidden: 0
-      };
-      console.log('📤 Adding product payload:', payload);
-      const response = await api.post('/products', payload);
+      const response = await api.post('/services', {
+        name: serviceFormData.name,
+        price: parseFloat(serviceFormData.price),
+        category: serviceFormData.category,
+        icon: serviceFormData.icon
+      });
       if (response.data) {
-        toast.success('Product added successfully!');
-        await fetchProducts();
-        setIsProductModalOpen(false);
-        setProductFormData({ name: '', purchase_price: '', selling_price: '', quantity: '' });
-        setEditingProduct(null);
+        toast.success('Service added successfully!');
+        await fetchServices();
+        closeServiceModal();
       }
     } catch (err) {
-      console.error('Error adding product:', err);
+      console.error('Error adding service:', err);
       if (err.response?.data?.errors) {
         const errors = err.response.data.errors;
         Object.keys(errors).forEach(key => {
           toast.error(`${key}: ${errors[key].join(', ')}`);
         });
       } else {
-        toast.error(err.response?.data?.message || 'Failed to add product');
+        toast.error(err.response?.data?.message || 'Failed to add service');
       }
     }
   };
 
+  const handleUpdateService = async () => {
+    if (!serviceFormData.name || !serviceFormData.price || !serviceFormData.category) {
+      toast.error('Please fill all fields');
+      return;
+    }
+    try {
+      const response = await api.put(`/services/${editingService.id}`, {
+        name: serviceFormData.name,
+        price: parseFloat(serviceFormData.price),
+        category: serviceFormData.category,
+        icon: serviceFormData.icon
+      });
+      if (response.data) {
+        toast.success('Service updated successfully!');
+        await fetchServices();
+        closeServiceModal();
+      }
+    } catch (err) {
+      console.error('Error updating service:', err);
+      if (err.response?.data?.errors) {
+        const errors = err.response.data.errors;
+        Object.keys(errors).forEach(key => {
+          toast.error(`${key}: ${errors[key].join(', ')}`);
+        });
+      } else {
+        toast.error(err.response?.data?.message || 'Failed to update service');
+      }
+    }
+  };
+
+  const handleDeleteService = async (serviceId, serviceName) => {
+    if (window.confirm(`Are you sure you want to delete "${serviceName}"?`)) {
+      try {
+        await api.delete(`/services/${serviceId}`);
+        toast.success('Service deleted successfully!');
+        await fetchServices();
+      } catch (err) {
+        console.error('Error deleting service:', err);
+        toast.error(err.response?.data?.message || 'Failed to delete service');
+      }
+    }
+  };
+
+  const openAddServiceModal = () => {
+    setEditingService(null);
+    setServiceFormData({ name: '', price: '', category: '', icon: 'tool' });
+    setIsServiceModalOpen(true);
+  };
+
+  const openEditServiceModal = (service) => {
+    setEditingService(service);
+    setServiceFormData({
+      name: service.name,
+      price: service.price,
+      category: service.category,
+      icon: service.icon || 'tool'
+    });
+    setIsServiceModalOpen(true);
+  };
+
+  const selectIcon = (iconValue) => {
+    setServiceFormData({ ...serviceFormData, icon: iconValue });
+    setShowIconDropdown(false);
+  };
+
+  // ==================== PRODUCT FUNCTIONS (sirf Edit / Delete) ====================
   const handleUpdateProduct = async () => {
     if (!productFormData.name || !productFormData.purchase_price || !productFormData.selling_price || !productFormData.quantity) {
       toast.error('Please fill all fields');
@@ -487,12 +597,6 @@ const BillingInvoice = ({ customerDetails, darkMode, onPaymentSuccess, restoredD
     }
   };
 
-  const openAddProductModal = () => {
-    setEditingProduct(null);
-    setProductFormData({ name: '', purchase_price: '', selling_price: '', quantity: '' });
-    setIsProductModalOpen(true);
-  };
-
   const openEditProductModal = (product) => {
     setEditingProduct(product);
     setProductFormData({
@@ -504,12 +608,20 @@ const BillingInvoice = ({ customerDetails, darkMode, onPaymentSuccess, restoredD
     setIsProductModalOpen(true);
   };
 
+  const filteredServices = searchTerm ? 
+    services.filter(s => s.name.toLowerCase().includes(searchTerm.toLowerCase())) : services;
+
   const filteredProducts = searchTerm ? 
     products.filter(p => p.name.toLowerCase().includes(searchTerm.toLowerCase())) : products;
 
   const getProductStock = (productId) => {
     const product = products.find(p => p.id === productId);
     return product ? product.quantity : 0;
+  };
+
+  const handleTabChange = (tab) => {
+    setActiveTab(tab);
+    setSearchTerm('');
   };
 
   // Add to bill
@@ -540,7 +652,7 @@ const BillingInvoice = ({ customerDetails, darkMode, onPaymentSuccess, restoredD
     }
     if (type === 'product') {
       const stock = getProductStock(id);
-      if (newQuantity > stock + (cart.find(i => i.id === id)?.quantity || 0)) {
+      if (newQuantity > stock) {
         toast.error(`Only ${stock} items available in stock`);
         return;
       }
@@ -607,7 +719,7 @@ const BillingInvoice = ({ customerDetails, darkMode, onPaymentSuccess, restoredD
       <tr>
         <td style="padding: 6px 8px; border: 1px solid #e5e7eb; text-align: center;">${idx + 1}</td>
         <td style="padding: 6px 8px; border: 1px solid #e5e7eb;">${item.name}</td>
-        <td style="padding: 6px 8px; border: 1px solid #e5e7eb; text-align: center;">Part</td>
+        <td style="padding: 6px 8px; border: 1px solid #e5e7eb; text-align: center;">${getItemTypeLabel(item)}</td>
         <td style="padding: 6px 8px; border: 1px solid #e5e7eb; text-align: center;">${item.quantity}</td>
         <td style="padding: 6px 8px; border: 1px solid #e5e7eb; text-align: right;">Rs. ${roundToTwo(item.price).toLocaleString()}</td>
         <td style="padding: 6px 8px; border: 1px solid #e5e7eb; text-align: right;">Rs. ${roundToTwo(item.price * item.quantity).toLocaleString()}</td>
@@ -962,6 +1074,7 @@ const BillingInvoice = ({ customerDetails, darkMode, onPaymentSuccess, restoredD
     const paymentMethodDisplay = getPaymentMethodDisplay();
     
     try {
+      // ✅ Stock sirf products ka ghatega, services ka nahi
       for (const item of cartSnapshot) {
         if (item.type === 'product') {
           const currentProduct = products.find(p => p.id === item.id);
@@ -994,7 +1107,7 @@ const BillingInvoice = ({ customerDetails, darkMode, onPaymentSuccess, restoredD
         invoice_time: lockedInvoiceTime,   // 🔒 locked - system time (HH:mm:ss)
         items: cartSnapshot.map(item => ({
           service_name: item.name,
-          service_category: 'Product',
+          service_category: item.type === 'service' ? (item.category || 'Service') : 'Product',
           price: roundToTwo(item.price),
           quantity: item.quantity,
           mileage: null
@@ -1151,20 +1264,41 @@ const BillingInvoice = ({ customerDetails, darkMode, onPaymentSuccess, restoredD
         )}
       </div>
 
-      {/* Products Section */}
+      {/* ✅ Tab Buttons: Services | Parts & Accessories */}
+      <div className={`flex gap-2 border-b ${darkMode ? 'border-gray-800' : 'border-gray-200'}`}>
+        <button
+          onClick={() => handleTabChange('services')}
+          className={`px-5 py-2.5 text-sm font-bold transition flex items-center gap-2 ${activeTab === 'services' ? 'text-amber-400 border-b-2 border-amber-400' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}
+        >
+          <FiTool className="text-base" /> Services
+        </button>
+        <button
+          onClick={() => handleTabChange('products')}
+          className={`px-5 py-2.5 text-sm font-bold transition flex items-center gap-2 ${activeTab === 'products' ? 'text-amber-400 border-b-2 border-amber-400' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}
+        >
+          <FiPackage className="text-base" /> Parts & Accessories
+        </button>
+      </div>
+
+      {/* Items + Bill */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* Products Section - Amber Theme */}
+        {/* Items Section - Amber Theme */}
         <div className={`${darkMode ? 'bg-gray-900' : 'bg-white'} rounded-xl overflow-hidden border ${darkMode ? 'border-gray-800' : 'border-gray-200 shadow-sm'}`}>
           <div className="px-4 py-3 bg-amber-400">
             <div className="flex justify-between items-center">
               <div className="flex items-center gap-2">
-                <FiPackage className="text-gray-900 text-lg" />
-                <h3 className="text-sm font-bold text-gray-900">Parts & Accessories</h3>
+                {activeTab === 'services' ? <FiTool className="text-gray-900 text-lg" /> : <FiPackage className="text-gray-900 text-lg" />}
+                <h3 className="text-sm font-bold text-gray-900">
+                  {activeTab === 'services' ? 'Available Services' : 'Parts & Accessories'}
+                </h3>
               </div>
               <div className="flex gap-1.5">
-                <button onClick={openAddProductModal} className="p-1.5 rounded-lg bg-gray-900/20 hover:bg-gray-900/30 transition flex items-center gap-1 text-gray-900 text-xs font-bold">
-                  <FiPlus className="text-sm" /> Add
-                </button>
+                {/* ✅ Add button SIRF Services tab par */}
+                {activeTab === 'services' && (
+                  <button onClick={openAddServiceModal} className="p-1.5 rounded-lg bg-gray-900/20 hover:bg-gray-900/30 transition flex items-center gap-1 text-gray-900 text-xs font-bold">
+                    <FiPlus className="text-sm" /> Add
+                  </button>
+                )}
                 <button onClick={() => setViewMode('grid')} className={`p-1.5 rounded-lg transition ${viewMode === 'grid' ? 'bg-gray-900/30' : 'hover:bg-gray-900/20'}`}>
                   <FiGrid className="text-gray-900" />
                 </button>
@@ -1175,87 +1309,159 @@ const BillingInvoice = ({ customerDetails, darkMode, onPaymentSuccess, restoredD
             </div>
             <div className="relative mt-2">
               <FiSearch className="absolute left-2.5 top-1/2 transform -translate-y-1/2 text-gray-700/60" />
-              <input type="text" placeholder="Search parts..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full pl-8 pr-3 py-1.5 rounded-lg text-xs font-medium bg-gray-900/20 text-gray-900 placeholder-gray-700/60 border border-gray-900/30 focus:outline-none focus:ring-2 focus:ring-gray-900/50" />
+              <input type="text" placeholder={activeTab === 'services' ? 'Search services...' : 'Search parts...'} value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full pl-8 pr-3 py-1.5 rounded-lg text-xs font-medium bg-gray-900/20 text-gray-900 placeholder-gray-700/60 border border-gray-900/30 focus:outline-none focus:ring-2 focus:ring-gray-900/50" />
             </div>
           </div>
           
           <div className={`p-3 max-h-[500px] overflow-y-auto ${darkMode ? 'bg-gray-950' : 'bg-gray-50'}`}>
-            {products.length === 0 ? (
-              <div className="text-center py-8 text-gray-500">
-                <FiPackage className="text-3xl mx-auto mb-2 text-gray-300" />
-                <p className="text-xs font-medium">No products found.</p>
-              </div>
-            ) : viewMode === 'grid' ? (
-              <div className="grid grid-cols-2 gap-2">
-                {filteredProducts.map(product => {
-                  const stock = product.quantity;
-                  const isOutOfStock = stock <= 0;
-                  return (
-                    <div key={product.id} className={`relative group p-3 rounded-lg transition-all duration-200 cursor-pointer ${isOutOfStock ? 'opacity-50 cursor-not-allowed bg-gray-100 dark:bg-gray-800' : darkMode ? 'bg-gray-800 hover:bg-gray-700 border border-gray-700 hover:border-amber-500' : 'bg-white hover:bg-amber-50 border border-gray-200 hover:border-amber-300'}`}>
-                      <div onClick={() => !isOutOfStock && addToBill(product, 'product')}>
-                        <FiPackage className="text-2xl mb-1.5 text-gray-500" />
-                        <p className={`font-bold text-xs ${darkMode ? 'text-white' : 'text-gray-900'}`}>{product.name}</p>
-                        <p className={`text-xs font-medium ${darkMode ? 'text-gray-400' : 'text-gray-500'} mt-0.5`}>Stock: {stock}</p>
-                        <p className="text-amber-400 font-bold text-base mt-1.5">Rs. {product.selling_price.toLocaleString()}</p>
-                        {stock < 5 && stock > 0 && <p className="text-xs font-semibold text-yellow-500 mt-0.5">Only {stock} left!</p>}
-                        {isOutOfStock && <p className="text-xs font-bold text-red-500 mt-0.5">Out of stock!</p>}
+            {activeTab === 'services' ? (
+              // ==================== SERVICES LIST ====================
+              services.length === 0 ? (
+                <div className="text-center py-8 text-gray-500">
+                  <FiTool className="text-3xl mx-auto mb-2 text-gray-300" />
+                  <p className="text-xs font-medium">No services found.</p>
+                  <p className="text-xs mt-1">Upar "Add" button se nayi service add karein.</p>
+                </div>
+              ) : viewMode === 'grid' ? (
+                <div className="grid grid-cols-2 gap-2">
+                  {filteredServices.map(service => (
+                    <div key={service.id} className={`relative group p-3 rounded-lg transition-all duration-200 cursor-pointer ${darkMode ? 'bg-gray-800 hover:bg-gray-700 border border-gray-700 hover:border-amber-500' : 'bg-white hover:bg-amber-50 border border-gray-200 hover:border-amber-300'}`}>
+                      <div onClick={() => addToBill(service, 'service')}>
+                        <div className="text-amber-400 mb-1.5">{getIconComponent(service.icon || 'tool')}</div>
+                        <p className={`font-bold text-xs ${darkMode ? 'text-white' : 'text-gray-900'}`}>{service.name}</p>
+                        <p className={`text-xs font-medium ${darkMode ? 'text-gray-400' : 'text-gray-500'} mt-0.5`}>{service.category}</p>
+                        <p className="text-amber-400 font-bold text-base mt-1.5">Rs. {service.price.toLocaleString()}</p>
                       </div>
                       {isAdmin && (
                         <div className="absolute top-1.5 right-1.5 flex gap-0.5 opacity-0 group-hover:opacity-100 transition">
-                          <button onClick={(e) => { e.stopPropagation(); openEditProductModal(product); }} className="p-1 rounded bg-blue-500 text-white hover:bg-blue-600 text-xs font-bold">
+                          <button onClick={(e) => { e.stopPropagation(); openEditServiceModal(service); }} className="p-1 rounded bg-blue-500 text-white hover:bg-blue-600 text-xs font-bold">
                             <FiEdit2 size={10} />
                           </button>
-                          <button onClick={(e) => { e.stopPropagation(); handleDeleteProduct(product.id, product.name); }} className="p-1 rounded bg-red-500 text-white hover:bg-red-600 text-xs font-bold">
+                          <button onClick={(e) => { e.stopPropagation(); handleDeleteService(service.id, service.name); }} className="p-1 rounded bg-red-500 text-white hover:bg-red-600 text-xs font-bold">
                             <FiTrash2 size={10} />
                           </button>
                         </div>
                       )}
                     </div>
-                  );
-                })}
-                {filteredProducts.length === 0 && (
-                  <div className="col-span-2 text-center py-6 text-gray-500">
-                    <p className="text-xs font-medium">No matching products found.</p>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div className="space-y-1.5">
-                {filteredProducts.map(product => {
-                  const stock = product.quantity;
-                  const isOutOfStock = stock <= 0;
-                  return (
-                    <div key={product.id} className={`relative group flex items-center justify-between p-2.5 rounded-lg transition-all duration-200 cursor-pointer ${isOutOfStock ? 'opacity-50 cursor-not-allowed bg-gray-100 dark:bg-gray-800' : darkMode ? 'bg-gray-800 hover:bg-gray-700' : 'bg-white hover:bg-amber-50'}`}>
-                      <div onClick={() => !isOutOfStock && addToBill(product, 'product')} className="flex-1 flex items-center gap-2.5">
-                        <FiPackage className="text-lg text-gray-500" />
+                  ))}
+                  {filteredServices.length === 0 && (
+                    <div className="col-span-2 text-center py-6 text-gray-500">
+                      <p className="text-xs font-medium">No matching services found.</p>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-1.5">
+                  {filteredServices.map(service => (
+                    <div key={service.id} className={`relative group flex items-center justify-between p-2.5 rounded-lg transition-all duration-200 cursor-pointer ${darkMode ? 'bg-gray-800 hover:bg-gray-700' : 'bg-white hover:bg-amber-50'}`}>
+                      <div onClick={() => addToBill(service, 'service')} className="flex-1 flex items-center gap-2.5">
+                        <div className="text-amber-400">{getIconComponent(service.icon || 'tool')}</div>
                         <div>
-                          <p className={`font-bold text-xs ${darkMode ? 'text-white' : 'text-gray-900'}`}>{product.name}</p>
-                          <p className={`text-xs font-medium ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Stock: {stock}</p>
+                          <p className={`font-bold text-xs ${darkMode ? 'text-white' : 'text-gray-900'}`}>{service.name}</p>
+                          <p className={`text-xs font-medium ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>{service.category}</p>
                         </div>
                       </div>
                       <div className="text-right">
-                        <p className="text-amber-400 font-bold text-xs">Rs. {product.selling_price.toLocaleString()}</p>
-                        {stock < 5 && stock > 0 && <p className="text-xs font-semibold text-yellow-500">Only {stock} left!</p>}
+                        <p className="text-amber-400 font-bold text-xs">Rs. {service.price.toLocaleString()}</p>
                       </div>
                       {isAdmin && (
                         <div className="absolute right-1.5 flex gap-0.5 opacity-0 group-hover:opacity-100 transition">
-                          <button onClick={(e) => { e.stopPropagation(); openEditProductModal(product); }} className="p-1 rounded bg-blue-500 text-white hover:bg-blue-600 text-xs font-bold">
+                          <button onClick={(e) => { e.stopPropagation(); openEditServiceModal(service); }} className="p-1 rounded bg-blue-500 text-white hover:bg-blue-600 text-xs font-bold">
                             <FiEdit2 size={10} />
                           </button>
-                          <button onClick={(e) => { e.stopPropagation(); handleDeleteProduct(product.id, product.name); }} className="p-1 rounded bg-red-500 text-white hover:bg-red-600 text-xs font-bold">
+                          <button onClick={(e) => { e.stopPropagation(); handleDeleteService(service.id, service.name); }} className="p-1 rounded bg-red-500 text-white hover:bg-red-600 text-xs font-bold">
                             <FiTrash2 size={10} />
                           </button>
                         </div>
                       )}
                     </div>
-                  );
-                })}
-                {filteredProducts.length === 0 && (
-                  <div className="text-center py-6 text-gray-500">
-                    <p className="text-xs font-medium">No matching products found.</p>
-                  </div>
-                )}
-              </div>
+                  ))}
+                  {filteredServices.length === 0 && (
+                    <div className="text-center py-6 text-gray-500">
+                      <p className="text-xs font-medium">No matching services found.</p>
+                    </div>
+                  )}
+                </div>
+              )
+            ) : (
+              // ==================== PARTS & ACCESSORIES LIST ====================
+              products.length === 0 ? (
+                <div className="text-center py-8 text-gray-500">
+                  <FiPackage className="text-3xl mx-auto mb-2 text-gray-300" />
+                  <p className="text-xs font-medium">No products found.</p>
+                </div>
+              ) : viewMode === 'grid' ? (
+                <div className="grid grid-cols-2 gap-2">
+                  {filteredProducts.map(product => {
+                    const stock = product.quantity;
+                    const isOutOfStock = stock <= 0;
+                    return (
+                      <div key={product.id} className={`relative group p-3 rounded-lg transition-all duration-200 cursor-pointer ${isOutOfStock ? 'opacity-50 cursor-not-allowed bg-gray-100 dark:bg-gray-800' : darkMode ? 'bg-gray-800 hover:bg-gray-700 border border-gray-700 hover:border-amber-500' : 'bg-white hover:bg-amber-50 border border-gray-200 hover:border-amber-300'}`}>
+                        <div onClick={() => !isOutOfStock && addToBill(product, 'product')}>
+                          <FiPackage className="text-2xl mb-1.5 text-gray-500" />
+                          <p className={`font-bold text-xs ${darkMode ? 'text-white' : 'text-gray-900'}`}>{product.name}</p>
+                          <p className={`text-xs font-medium ${darkMode ? 'text-gray-400' : 'text-gray-500'} mt-0.5`}>Stock: {stock}</p>
+                          <p className="text-amber-400 font-bold text-base mt-1.5">Rs. {product.selling_price.toLocaleString()}</p>
+                          {stock < 5 && stock > 0 && <p className="text-xs font-semibold text-yellow-500 mt-0.5">Only {stock} left!</p>}
+                          {isOutOfStock && <p className="text-xs font-bold text-red-500 mt-0.5">Out of stock!</p>}
+                        </div>
+                        {isAdmin && (
+                          <div className="absolute top-1.5 right-1.5 flex gap-0.5 opacity-0 group-hover:opacity-100 transition">
+                            <button onClick={(e) => { e.stopPropagation(); openEditProductModal(product); }} className="p-1 rounded bg-blue-500 text-white hover:bg-blue-600 text-xs font-bold">
+                              <FiEdit2 size={10} />
+                            </button>
+                            <button onClick={(e) => { e.stopPropagation(); handleDeleteProduct(product.id, product.name); }} className="p-1 rounded bg-red-500 text-white hover:bg-red-600 text-xs font-bold">
+                              <FiTrash2 size={10} />
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                  {filteredProducts.length === 0 && (
+                    <div className="col-span-2 text-center py-6 text-gray-500">
+                      <p className="text-xs font-medium">No matching products found.</p>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-1.5">
+                  {filteredProducts.map(product => {
+                    const stock = product.quantity;
+                    const isOutOfStock = stock <= 0;
+                    return (
+                      <div key={product.id} className={`relative group flex items-center justify-between p-2.5 rounded-lg transition-all duration-200 cursor-pointer ${isOutOfStock ? 'opacity-50 cursor-not-allowed bg-gray-100 dark:bg-gray-800' : darkMode ? 'bg-gray-800 hover:bg-gray-700' : 'bg-white hover:bg-amber-50'}`}>
+                        <div onClick={() => !isOutOfStock && addToBill(product, 'product')} className="flex-1 flex items-center gap-2.5">
+                          <FiPackage className="text-lg text-gray-500" />
+                          <div>
+                            <p className={`font-bold text-xs ${darkMode ? 'text-white' : 'text-gray-900'}`}>{product.name}</p>
+                            <p className={`text-xs font-medium ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Stock: {stock}</p>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-amber-400 font-bold text-xs">Rs. {product.selling_price.toLocaleString()}</p>
+                          {stock < 5 && stock > 0 && <p className="text-xs font-semibold text-yellow-500">Only {stock} left!</p>}
+                        </div>
+                        {isAdmin && (
+                          <div className="absolute right-1.5 flex gap-0.5 opacity-0 group-hover:opacity-100 transition">
+                            <button onClick={(e) => { e.stopPropagation(); openEditProductModal(product); }} className="p-1 rounded bg-blue-500 text-white hover:bg-blue-600 text-xs font-bold">
+                              <FiEdit2 size={10} />
+                            </button>
+                            <button onClick={(e) => { e.stopPropagation(); handleDeleteProduct(product.id, product.name); }} className="p-1 rounded bg-red-500 text-white hover:bg-red-600 text-xs font-bold">
+                              <FiTrash2 size={10} />
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                  {filteredProducts.length === 0 && (
+                    <div className="text-center py-6 text-gray-500">
+                      <p className="text-xs font-medium">No matching products found.</p>
+                    </div>
+                  )}
+                </div>
+              )
             )}
           </div>
         </div>
@@ -1277,7 +1483,7 @@ const BillingInvoice = ({ customerDetails, darkMode, onPaymentSuccess, restoredD
                   <FiShoppingCart className="text-3xl text-amber-400" />
                 </div>
                 <p className={`text-sm font-bold ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Cart is empty</p>
-                <p className={`text-xs font-medium ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>Click on parts to add</p>
+                <p className={`text-xs font-medium ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>Click on services or parts to add</p>
               </div>
             ) : (
               <>
@@ -1290,7 +1496,7 @@ const BillingInvoice = ({ customerDetails, darkMode, onPaymentSuccess, restoredD
                         </div>
                         <div>
                           <p className={`font-bold text-xs ${darkMode ? 'text-white' : 'text-gray-900'}`}>{item.name}</p>
-                          <p className={`text-xs font-medium ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Part • Rs. {roundToTwo(item.price).toLocaleString()} each</p>
+                          <p className={`text-xs font-medium ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>{getItemTypeLabel(item)} • Rs. {roundToTwo(item.price).toLocaleString()} each</p>
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
@@ -1491,12 +1697,69 @@ const BillingInvoice = ({ customerDetails, darkMode, onPaymentSuccess, restoredD
         </div>
       </div>
 
-      {/* Product Modal - Amber Theme */}
+      {/* ✅ Service Modal - Amber Theme */}
+      {isServiceModalOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className={`${darkMode ? 'bg-gray-900 text-white' : 'bg-white text-gray-900'} rounded-xl shadow-xl max-w-md w-full border ${darkMode ? 'border-gray-800' : 'border-gray-200'}`}>
+            <div className={`px-5 py-3 border-b ${darkMode ? 'border-gray-800' : 'border-gray-200'} flex justify-between items-center`}>
+              <h3 className="text-base font-bold">{editingService ? 'Edit Service' : 'Add New Service'}</h3>
+              <button onClick={closeServiceModal} className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300">
+                <FiX className="text-xl" />
+              </button>
+            </div>
+            <div className="p-5 space-y-3">
+              <div>
+                <label className={`block text-sm font-bold mb-1 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>Service Name *</label>
+                <input type="text" value={serviceFormData.name} onChange={(e) => setServiceFormData({ ...serviceFormData, name: e.target.value })} className={`w-full px-3 py-2 rounded-lg border text-sm font-medium focus:ring-2 focus:ring-amber-400 outline-none ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'border-gray-300'}`} placeholder="Enter service name" />
+              </div>
+              <div>
+                <label className={`block text-sm font-bold mb-1 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>Price * (Rs.)</label>
+                <input type="number" value={serviceFormData.price} onChange={(e) => setServiceFormData({ ...serviceFormData, price: e.target.value })} className={`w-full px-3 py-2 rounded-lg border text-sm font-medium focus:ring-2 focus:ring-amber-400 outline-none ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'border-gray-300'}`} placeholder="Enter price" min="0" step="0.01" />
+              </div>
+              <div>
+                <label className={`block text-sm font-bold mb-1 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>Category *</label>
+                <input type="text" value={serviceFormData.category} onChange={(e) => setServiceFormData({ ...serviceFormData, category: e.target.value })} className={`w-full px-3 py-2 rounded-lg border text-sm font-medium focus:ring-2 focus:ring-amber-400 outline-none ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'border-gray-300'}`} placeholder="Enter category" />
+              </div>
+              <div>
+                <label className={`block text-sm font-bold mb-1 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>Icon</label>
+                <div className="relative">
+                  <button type="button" onClick={() => setShowIconDropdown(!showIconDropdown)} className={`w-full px-3 py-2 rounded-lg border text-sm font-medium focus:ring-2 focus:ring-amber-400 outline-none flex items-center justify-between ${darkMode ? 'bg-gray-800 border-gray-700 text-white' : 'border-gray-300'}`}>
+                    <div className="flex items-center gap-2 text-amber-400">
+                      {getIconComponent(serviceFormData.icon)}
+                      <span className={`text-sm ${darkMode ? 'text-white' : 'text-gray-900'}`}>Select Icon</span>
+                    </div>
+                    <FiChevronDown className={`transition-transform ${showIconDropdown ? 'rotate-180' : ''}`} />
+                  </button>
+                  {showIconDropdown && (
+                    <div className={`absolute z-10 mt-1 w-full max-h-60 overflow-y-auto rounded-lg border shadow-lg ${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
+                      <div className="grid grid-cols-4 gap-1 p-2">
+                        {iconOptions.map((icon, index) => (
+                          <button key={index} type="button" onClick={() => selectIcon(icon.value)} className={`p-2 rounded-lg text-center transition-colors flex items-center justify-center ${serviceFormData.icon === icon.value ? 'bg-amber-400 text-gray-900' : darkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-100'}`} title={icon.name}>
+                            {icon.icon}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+              <div className="flex gap-3 pt-3">
+                <button type="button" onClick={closeServiceModal} className={`flex-1 px-4 py-2 rounded-lg transition text-sm font-bold ${darkMode ? 'bg-gray-800 hover:bg-gray-700 text-white' : 'bg-gray-200 hover:bg-gray-300 text-gray-700'}`}>Cancel</button>
+                <button type="button" onClick={editingService ? handleUpdateService : handleAddService} className="flex-1 px-4 py-2 bg-amber-400 text-gray-900 rounded-lg hover:bg-amber-300 transition flex items-center justify-center gap-2 shadow-md text-sm font-bold">
+                  <FiCheckCircle className="text-sm" /> {editingService ? 'Update Service' : 'Add Service'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Product Modal (sirf Edit) - Amber Theme */}
       {isProductModalOpen && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className={`${darkMode ? 'bg-gray-900 text-white' : 'bg-white text-gray-900'} rounded-xl shadow-xl max-w-md w-full border ${darkMode ? 'border-gray-800' : 'border-gray-200'}`}>
             <div className={`px-5 py-3 border-b ${darkMode ? 'border-gray-800' : 'border-gray-200'} flex justify-between items-center`}>
-              <h3 className="text-base font-bold">{editingProduct ? 'Edit Product' : 'Add New Product'}</h3>
+              <h3 className="text-base font-bold">Edit Product</h3>
               <button onClick={() => { setIsProductModalOpen(false); setEditingProduct(null); }} className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300">
                 <FiX className="text-xl" />
               </button>
@@ -1520,8 +1783,8 @@ const BillingInvoice = ({ customerDetails, darkMode, onPaymentSuccess, restoredD
               </div>
               <div className="flex gap-3 pt-3">
                 <button type="button" onClick={() => { setIsProductModalOpen(false); setEditingProduct(null); }} className={`flex-1 px-4 py-2 rounded-lg transition text-sm font-bold ${darkMode ? 'bg-gray-800 hover:bg-gray-700 text-white' : 'bg-gray-200 hover:bg-gray-300 text-gray-700'}`}>Cancel</button>
-                <button type="button" onClick={editingProduct ? handleUpdateProduct : handleAddProduct} className="flex-1 px-4 py-2 bg-amber-400 text-gray-900 rounded-lg hover:bg-amber-300 transition flex items-center justify-center gap-2 shadow-md text-sm font-bold">
-                  <FiCheckCircle className="text-sm" /> {editingProduct ? 'Update' : 'Add'}
+                <button type="button" onClick={handleUpdateProduct} className="flex-1 px-4 py-2 bg-amber-400 text-gray-900 rounded-lg hover:bg-amber-300 transition flex items-center justify-center gap-2 shadow-md text-sm font-bold">
+                  <FiCheckCircle className="text-sm" /> Update
                 </button>
               </div>
             </div>

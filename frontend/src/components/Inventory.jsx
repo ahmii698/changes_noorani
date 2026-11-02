@@ -2,14 +2,14 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import toast from 'react-hot-toast';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
-import 'jspdf-autotable';
+import autoTable from 'jspdf-autotable';
 import {
   FiSearch, FiX, FiPlus, FiFileText, FiDownload,
   FiEdit2, FiPackage, FiDollarSign, FiTrendingUp,
   FiShoppingCart, FiBarChart2, FiCheckCircle, FiAlertCircle,
   FiLoader, FiUser, FiTrash2, FiEye, FiEyeOff,
   FiCalendar, FiArrowUp, FiArrowDown,
-  FiChevronLeft, FiChevronRight,
+  FiChevronLeft, FiChevronRight, FiRefreshCw,
   FiBriefcase, FiCreditCard, FiBox
 } from 'react-icons/fi';
 import api from '../services/api';
@@ -140,7 +140,7 @@ const emptyFormData = {
   paidAmount: ''
 };
 
-// ---------- Bulk add (aik waqt mein kayi products) ----------
+// ---------- Bulk add (multiple products at once) ----------
 const INITIAL_BULK_ROWS = 3;
 const ROW_GRID = 'grid-cols-[32px_minmax(160px,2.2fr)_1fr_1fr_0.8fr_0.8fr_36px]';
 const BULK_COLS = 5; // name, purchase, sell, qty, low stock
@@ -255,7 +255,7 @@ const ProductRow = React.memo(({ product, darkMode, editingCell, onStartEdit, on
               product.quantity === 0 ? 'text-red-500' :
               darkMode ? 'text-white' : 'text-gray-900'
             } px-2 py-1 rounded transition`}
-            title={isAdmin ? 'Stock badalne ke liye Edit button use karo' : `Double-click to edit ${hasThreshold ? `(Low stock at: ${threshold})` : ''}`}
+            title={isAdmin ? 'Use the Edit button to change stock' : `Double-click to edit ${hasThreshold ? `(Low stock at: ${threshold})` : ''}`}
           >
             {product.quantity}
             {hasThreshold && product.quantity < threshold && product.quantity > 0 && <FiAlertCircle className="text-xs" title={`Low stock! Below ${threshold}`} />}
@@ -326,6 +326,7 @@ const Inventory = ({ darkMode }) => {
   const [editingProduct, setEditingProduct] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [products, setProducts] = useState([]);
   const [isAdmin, setIsAdmin] = useState(false);
 
@@ -343,9 +344,9 @@ const Inventory = ({ darkMode }) => {
     totalProfit: 0
   });
 
-  // formData: Edit modal + vendor/credit fields (Add modal mein bhi vendor wali fields yahin se aati hain)
+  // formData: Edit modal + vendor/credit fields (the Add modal also uses the vendor fields from here)
   const [formData, setFormData] = useState({ ...emptyFormData });
-  // newRows: Add modal ki saari product rows
+  // newRows: all product rows of the Add modal
   const [newRows, setNewRows] = useState(() => Array.from({ length: INITIAL_BULK_ROWS }, makeEmptyRow));
   const [viewMode, setViewMode] = useState('active');
   const [editingCell, setEditingCell] = useState({ productId: null, field: null, value: '' });
@@ -364,9 +365,9 @@ const Inventory = ({ darkMode }) => {
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyError, setHistoryError] = useState('');
 
-  // Modal ka scroll container - credit purchase tick karne par khud neeche scroll karne ke liye
+  // Modal scroll container - auto-scrolls down when "credit purchase" is ticked
   const modalScrollRef = useRef(null);
-  // Rows wali list ka scroll container - nayi row add karne par neeche scroll + focus
+  // Rows list scroll container - scroll + focus when a new row is added
   const rowsContainerRef = useRef(null);
 
   useEffect(() => {
@@ -377,7 +378,7 @@ const Inventory = ({ darkMode }) => {
     }
   }, []);
 
-  // ✅ "Vendor se khareeda hai?" tick karte hi modal khud scroll ho kar naye fields dikha de
+  // When "Bought from a vendor?" is ticked, scroll the modal so the new fields are visible
   useEffect(() => {
     if (!isModalOpen || !formData.isCreditPurchase) return;
     const timer = setTimeout(() => {
@@ -456,7 +457,7 @@ const Inventory = ({ darkMode }) => {
     return { totalStock, totalPurchaseValue, totalSellingValue, totalProfit };
   }, [filteredProducts]);
 
-  // Add modal ke liye: kitni rows bhari hui hain aur unka total bill
+  // For the Add modal: number of filled rows and their total bill
   const bulkTotals = useMemo(() => {
     const filled = newRows.filter(isRowFilled);
     const totalBill = filled.reduce(
@@ -526,7 +527,7 @@ const Inventory = ({ darkMode }) => {
 
   const ensureCash = useCallback((required) => {
     if (required > inventoryCashInHand + 0.001) {
-      toast.error(`Cash in Hand mein sirf Rs. ${inventoryCashInHand.toLocaleString()} hain. Pehle apna Cash in Hand barhao, phir cash par maal lo (ya credit par lo).`);
+      toast.error(`Cash in Hand only has Rs. ${inventoryCashInHand.toLocaleString()}. Increase your Cash in Hand first, then buy stock with cash (or buy on credit).`);
       return false;
     }
     return true;
@@ -594,8 +595,9 @@ const Inventory = ({ darkMode }) => {
     return labels[sortOption] || 'Default';
   };
 
-  const fetchProducts = useCallback(async () => {
-    setLoading(true);
+  // silent = true: reload data in the background without showing the full-page loader
+  const fetchProducts = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
       const response = await api.get('/products', { params: { show_hidden: 'true' } });
 
@@ -608,13 +610,15 @@ const Inventory = ({ darkMode }) => {
 
       setProducts(productsData);
       setFilteredStats(calculateFilteredStats(productsData, timeFilter, customDate || null));
+      return true;
     } catch (error) {
       if (error.name !== 'AbortError' && error.name !== 'CanceledError') {
         console.error('Error fetching products:', error);
         toast.error('Failed to load products');
       }
+      return false;
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, [calculateFilteredStats, timeFilter, customDate]);
 
@@ -714,6 +718,24 @@ const Inventory = ({ darkMode }) => {
     }
   }, []);
 
+  // Refresh button: reloads only this page's data (no full browser reload)
+  const handleRefresh = useCallback(async () => {
+    if (isRefreshing) return;
+    setIsRefreshing(true);
+    try {
+      const [productsOk] = await Promise.all([
+        fetchProducts(true),
+        fetchVendorsList(),
+        fetchInvoices(),
+        fetchManualCash()
+      ]);
+      setEditingCell({ productId: null, field: null, value: '' });
+      if (productsOk) toast.success('Inventory refreshed');
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, [isRefreshing, fetchProducts, fetchVendorsList, fetchInvoices, fetchManualCash]);
+
   const debouncedSearch = useMemo(
     () => debounce((value) => setSearchTerm(value), 300),
     []
@@ -785,78 +807,119 @@ const Inventory = ({ darkMode }) => {
     fetchManualCash();
   }, [fetchProducts, fetchVendorsList, fetchInvoices, fetchManualCash]);
 
+  const getReportDate = () => new Date().toISOString().slice(0, 10);
+
   const exportToExcel = useCallback((data, filename) => {
-    const exportData = data.map(p => ({
-      'Product': p.name,
-      ...(isAdmin && { 'Purchase Price': `Rs. ${(p.purchase_price || 0).toLocaleString()}` }),
-      ...(isAdmin && { 'Selling Price': `Rs. ${(p.selling_price || 0).toLocaleString()}` }),
-      'Stock': p.quantity || 0,
-      ...(isAdmin && { 'Low Stock At': p.low_stock_threshold ?? '-' }),
-      'Invoice No': p.credit_vendor?.invoice_number || '-',
-      'Vendor': p.credit_vendor?.name || p.vendor_name || '-',
-      'Date & Time': (() => { const t = formatDateTime(p.created_at || p.date_added); return `${t.date} ${t.time}`.trim(); })(),
-      'Updated At': (() => { const t = formatDateTime(p.updated_at || p.created_at || p.date_added); return `${t.date} ${t.time}`.trim(); })(),
-      'Status': p.is_hidden === true ? 'Hidden' : 'Active'
-    }));
+    if (!data || data.length === 0) {
+      toast.error('No data to export');
+      return;
+    }
 
-    exportData.push({
-      'Product': 'TOTAL',
-      ...(isAdmin && { 'Purchase Price': `Rs. ${summaryTotals.totalPurchaseValue.toLocaleString()}` }),
-      ...(isAdmin && { 'Selling Price': `Rs. ${summaryTotals.totalSellingValue.toLocaleString()}` }),
-      'Stock': summaryTotals.totalStock,
-      ...(isAdmin && { 'Low Stock At': '-' }),
-      'Invoice No': '-',
-      'Vendor': '-',
-      'Date & Time': '-',
-      'Updated At': '-',
-      'Status': ''
-    });
+    try {
+      const exportData = data.map(p => ({
+        'Product': p.name,
+        ...(isAdmin && { 'Purchase Price': `Rs. ${(p.purchase_price || 0).toLocaleString()}` }),
+        ...(isAdmin && { 'Selling Price': `Rs. ${(p.selling_price || 0).toLocaleString()}` }),
+        'Stock': p.quantity || 0,
+        ...(isAdmin && { 'Low Stock At': p.low_stock_threshold ?? '-' }),
+        'Invoice No': p.credit_vendor?.invoice_number || '-',
+        'Vendor': p.credit_vendor?.name || p.vendor_name || '-',
+        'Date & Time': (() => { const t = formatDateTime(p.created_at || p.date_added); return `${t.date} ${t.time}`.trim(); })(),
+        'Updated At': (() => { const t = formatDateTime(p.updated_at || p.created_at || p.date_added); return `${t.date} ${t.time}`.trim(); })(),
+        'Status': p.is_hidden === true ? 'Hidden' : 'Active'
+      }));
 
-    const ws = XLSX.utils.json_to_sheet(exportData);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Inventory');
-    XLSX.writeFile(wb, `${filename}.xlsx`);
-    toast.success('Exported to Excel');
+      exportData.push({
+        'Product': 'TOTAL',
+        ...(isAdmin && { 'Purchase Price': `Rs. ${summaryTotals.totalPurchaseValue.toLocaleString()}` }),
+        ...(isAdmin && { 'Selling Price': `Rs. ${summaryTotals.totalSellingValue.toLocaleString()}` }),
+        'Stock': summaryTotals.totalStock,
+        ...(isAdmin && { 'Low Stock At': '-' }),
+        'Invoice No': '-',
+        'Vendor': '-',
+        'Date & Time': '-',
+        'Updated At': '-',
+        'Status': ''
+      });
+
+      const ws = XLSX.utils.json_to_sheet(exportData);
+      ws['!cols'] = Object.keys(exportData[0]).map(key => ({
+        wch: Math.max(key.length, ...exportData.map(row => String(row[key] ?? '').length)) + 2
+      }));
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Inventory');
+      XLSX.writeFile(wb, `${filename}_${getReportDate()}.xlsx`);
+      toast.success('Excel report downloaded');
+    } catch (error) {
+      console.error('Excel export error:', error);
+      toast.error('Failed to create Excel report');
+    }
   }, [isAdmin, summaryTotals]);
 
   const exportToPDF = useCallback((data, title) => {
-    const doc = new jsPDF('landscape');
-    doc.text(title, 14, 10);
-
-    const head = ['Product'];
-    if (isAdmin) head.push('Purchase Price', 'Selling Price');
-    head.push('Stock');
-    if (isAdmin) head.push('Low Stock At');
-    head.push('Invoice No', 'Vendor', 'Date & Time', 'Updated At', 'Status');
-
-    const body = data.map(p => {
-      const row = [p.name || ''];
-      if (isAdmin) row.push(`Rs. ${(p.purchase_price || 0).toLocaleString()}`, `Rs. ${(p.selling_price || 0).toLocaleString()}`);
-      row.push(p.quantity || 0);
-      if (isAdmin) row.push(p.low_stock_threshold ?? '-');
-      row.push(p.credit_vendor?.invoice_number || '-', p.credit_vendor?.name || p.vendor_name || '-');
-      const t = formatDateTime(p.created_at || p.date_added);
-      row.push(`${t.date} ${t.time}`.trim());
-      const u = formatDateTime(p.updated_at || p.created_at || p.date_added);
-      row.push(`${u.date} ${u.time}`.trim());
-      row.push(p.is_hidden === true ? 'Hidden' : 'Active');
-      return row;
-    });
-
-    const summaryRow = ['TOTAL'];
-    if (isAdmin) {
-      summaryRow.push(`Rs. ${summaryTotals.totalPurchaseValue.toLocaleString()}`);
-      summaryRow.push(`Rs. ${summaryTotals.totalSellingValue.toLocaleString()}`);
+    if (!data || data.length === 0) {
+      toast.error('No data to export');
+      return;
     }
-    summaryRow.push(summaryTotals.totalStock);
-    if (isAdmin) summaryRow.push('-');
-    summaryRow.push('-', '-', '-', '-', '');
-    body.push(summaryRow);
 
-    doc.autoTable({ head: [head], body, startY: 20 });
-    doc.save(`${title}.pdf`);
-    toast.success('Exported to PDF');
-  }, [isAdmin, summaryTotals]);
+    try {
+      const doc = new jsPDF('landscape');
+      doc.setFontSize(14);
+      doc.text(title.replace(/_/g, ' '), 14, 12);
+      doc.setFontSize(9);
+      doc.text(`Generated: ${new Date().toLocaleString('en-GB')}   |   Filter: ${getFilterLabel()}`, 14, 18);
+
+      const head = ['Product'];
+      if (isAdmin) head.push('Purchase Price', 'Selling Price');
+      head.push('Stock');
+      if (isAdmin) head.push('Low Stock At');
+      head.push('Invoice No', 'Vendor', 'Date & Time', 'Updated At', 'Status');
+
+      const body = data.map(p => {
+        const row = [p.name || ''];
+        if (isAdmin) row.push(`Rs. ${(p.purchase_price || 0).toLocaleString()}`, `Rs. ${(p.selling_price || 0).toLocaleString()}`);
+        row.push(p.quantity || 0);
+        if (isAdmin) row.push(p.low_stock_threshold ?? '-');
+        row.push(p.credit_vendor?.invoice_number || '-', p.credit_vendor?.name || p.vendor_name || '-');
+        const t = formatDateTime(p.created_at || p.date_added);
+        row.push(`${t.date} ${t.time}`.trim());
+        const u = formatDateTime(p.updated_at || p.created_at || p.date_added);
+        row.push(`${u.date} ${u.time}`.trim());
+        row.push(p.is_hidden === true ? 'Hidden' : 'Active');
+        return row;
+      });
+
+      const summaryRow = ['TOTAL'];
+      if (isAdmin) {
+        summaryRow.push(`Rs. ${summaryTotals.totalPurchaseValue.toLocaleString()}`);
+        summaryRow.push(`Rs. ${summaryTotals.totalSellingValue.toLocaleString()}`);
+      }
+      summaryRow.push(summaryTotals.totalStock);
+      if (isAdmin) summaryRow.push('-');
+      summaryRow.push('-', '-', '-', '-', '');
+      body.push(summaryRow);
+
+      autoTable(doc, {
+        head: [head],
+        body,
+        startY: 24,
+        styles: { fontSize: 8 },
+        headStyles: { fillColor: [31, 41, 55] },
+        didParseCell: (hook) => {
+          if (hook.section === 'body' && hook.row.index === body.length - 1) {
+            hook.cell.styles.fontStyle = 'bold';
+            hook.cell.styles.fillColor = [229, 231, 235];
+          }
+        }
+      });
+      doc.save(`${title}_${getReportDate()}.pdf`);
+      toast.success('PDF report downloaded');
+    } catch (error) {
+      console.error('PDF export error:', error);
+      toast.error('Failed to create PDF report');
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAdmin, summaryTotals, timeFilter, customDate]);
 
   const handleInputChange = useCallback((e) => {
     const { name, value } = e.target;
@@ -888,7 +951,7 @@ const Inventory = ({ darkMode }) => {
     if (focusFirstNew) focusCell(firstNewIdx, 0);
   };
 
-  // Enter dabane par agle box mein jao (form submit na ho); aakhri box par nayi row ban jaye
+  // Pressing Enter moves to the next box (no form submit); on the last box a new row is created
   const handleRowKeyDown = (e, rowIdx, colIdx) => {
     if (e.key !== 'Enter') return;
     e.preventDefault();
@@ -911,20 +974,20 @@ const Inventory = ({ darkMode }) => {
       return;
     }
 
-    // Sirf wo rows lo jinme kuch likha hai (khali rows ignore)
+    // Only take rows that have something written in them (empty rows are ignored)
     const filled = newRows
       .map((r, i) => ({ r, n: i + 1 }))
       .filter(({ r }) => isRowFilled(r));
 
     if (filled.length === 0) {
-      toast.error('Kam az kam aik product ki detail bharo');
+      toast.error('Enter the details of at least one product');
       return;
     }
 
     const parsed = [];
     for (const { r, n } of filled) {
       if (!r.name.trim() || String(r.purchasePrice).trim() === '' || String(r.sellingPrice).trim() === '' || String(r.quantity).trim() === '') {
-        toast.error(`Row ${n}: Name, Purchase, Sell aur Qty zaroori hain`);
+        toast.error(`Row ${n}: Name, Purchase, Sell and Qty are required`);
         return;
       }
 
@@ -939,11 +1002,11 @@ const Inventory = ({ darkMode }) => {
       }
 
       if (isNaN(purchase) || isNaN(selling) || isNaN(qty)) {
-        toast.error(`Row ${n}: Sahi numbers likho`);
+        toast.error(`Row ${n}: Please enter valid numbers`);
         return;
       }
       if (purchase < 0 || selling < 0 || qty < 0 || (threshold !== null && threshold < 0)) {
-        toast.error(`Row ${n}: Values negative nahi ho sakti`);
+        toast.error(`Row ${n}: Values cannot be negative`);
         return;
       }
 
@@ -956,12 +1019,12 @@ const Inventory = ({ darkMode }) => {
       });
     }
 
-    // Aik hi batch mein same naam do baar na ho (sales ka hisaab naam se match hota hai)
+    // The same name must not appear twice in one batch (sales are matched by product name)
     const seen = new Map();
     for (let i = 0; i < parsed.length; i++) {
       const key = parsed[i].name.toLowerCase();
       if (seen.has(key)) {
-        toast.error(`Row ${filled[seen.get(key)].n} aur Row ${filled[i].n} ka naam same hai ("${parsed[i].name}")`);
+        toast.error(`Row ${filled[seen.get(key)].n} and Row ${filled[i].n} have the same name ("${parsed[i].name}")`);
         return;
       }
       seen.set(key, i);
@@ -971,14 +1034,14 @@ const Inventory = ({ darkMode }) => {
     const totalQty = parsed.reduce((s, p) => s + p.quantity, 0);
 
     if (formData.isCreditPurchase && (!formData.vendorName || !formData.invoiceNumber)) {
-      toast.error('Vendor name aur invoice number zaroori hai credit purchase ke liye');
+      toast.error('Vendor name and invoice number are required for a credit purchase');
       return;
     }
 
     if (formData.isCreditPurchase) {
       const initialPay = parseFloat(formData.paidAmount) || 0;
       if (initialPay > totalBill) {
-        toast.error('Paid amount total amount se zyada nahi ho sakta');
+        toast.error('Paid amount cannot be more than the total amount');
         return;
       }
       if (!ensureCash(initialPay)) return;
@@ -990,7 +1053,7 @@ const Inventory = ({ darkMode }) => {
 
     const created = []; // { id, item }
     const rollback = async () => {
-      // Agar beech mein koi masla aaye to jo products ban chuke unhein wapas hata do (adha kaam na rahe)
+      // If anything fails midway, remove the products already created so nothing is left half-done
       await Promise.all(created.map(c => api.delete(`/products/${c.id}`).catch(() => null)));
       await fetchProducts();
     };
@@ -1007,13 +1070,13 @@ const Inventory = ({ darkMode }) => {
             low_stock_threshold: p.low_stock_threshold
           });
           const np = res.data?.data;
-          if (!np?.id) throw new Error('Server ne product ID wapas nahi di');
+          if (!np?.id) throw new Error('Server did not return a product ID');
           created.push({ id: np.id, item: p });
         } catch (err) {
           console.error('Bulk add error:', err);
           await rollback();
           toast.error(
-            `Row ${filled[i].n} ("${p.name}") add nahi ho saka: ${err.response?.data?.message || err.message}. Baqi products bhi wapas hata diye, dobara try karo.`,
+            `Row ${filled[i].n} ("${p.name}") could not be added: ${err.response?.data?.message || err.message}. The other products were removed as well, please try again.`,
             { duration: 6000 }
           );
           return;
@@ -1042,7 +1105,7 @@ const Inventory = ({ darkMode }) => {
           console.error('Vendor link error:', vendorError);
           await rollback();
           toast.error(
-            `${vendorError.response?.data?.message || 'Vendor link fail hua (invoice number unique honi chahiye)'}. Products save nahi hue, invoice number check karke dobara try karo.`,
+            `${vendorError.response?.data?.message || 'Vendor link failed (the invoice number must be unique)'}. Products were not saved, please check the invoice number and try again.`,
             { duration: 6000 }
           );
           return;
@@ -1051,8 +1114,8 @@ const Inventory = ({ darkMode }) => {
 
       toast.success(
         created.length === 1
-          ? 'Product add ho gaya!'
-          : `${created.length} products add ho gaye!`
+          ? 'Product added!'
+          : `${created.length} products added!`
       );
 
       setFormData({ ...emptyFormData });
@@ -1306,9 +1369,9 @@ const Inventory = ({ darkMode }) => {
     } catch (error) {
       console.error('Error fetching product history:', error);
       if (error.response?.status === 404) {
-        setHistoryError('History ka backend abhi set nahi hua (route / table baqi hai).');
+        setHistoryError('The history backend is not set up yet (route / table is missing).');
       } else {
-        setHistoryError(error.response?.data?.message || 'History load nahi ho saki');
+        setHistoryError(error.response?.data?.message || 'Could not load history');
       }
     } finally {
       setHistoryLoading(false);
@@ -1447,9 +1510,9 @@ const Inventory = ({ darkMode }) => {
             { icon: FiShoppingCart, tint: 'bg-blue-500/15', color: 'text-blue-400', label: `${getStatsLabelText()} Inventory Cost`, value: filteredStats.totalPurchase, sub: `${getStatsLabelText().toLowerCase()} purchases` },
             { icon: FiDollarSign, tint: 'bg-amber-500/15', color: 'text-amber-400', label: `${getStatsLabelText()} Selling`, value: filteredStats.totalSelling, sub: `${getStatsLabelText().toLowerCase()} sales` },
             { icon: FiTrendingUp, tint: 'bg-emerald-500/15', color: 'text-emerald-400', label: `${getStatsLabelText()} Profit`, value: filteredStats.totalProfit, sub: `${getStatsLabelText().toLowerCase()} profit` },
-            { icon: FiBriefcase, tint: 'bg-purple-500/15', color: 'text-purple-400', label: 'Cash Inventory ', value: ownerCapital, sub: 'apni cash se liya hua maal' },
-            { icon: FiCreditCard, tint: 'bg-red-500/15', color: 'text-red-400', label: 'Vendor Payable Inventory', value: vendorPayable, sub: 'vendors ko dena baqi' },
-            { icon: FiBox, tint: 'bg-cyan-500/15', color: 'text-cyan-400', label: 'Cash in hand / Capital', value: inventoryCashInHand, sub: 'sale ki cost wapas + manual cash - purchases' }
+            { icon: FiBriefcase, tint: 'bg-purple-500/15', color: 'text-purple-400', label: 'Cash Inventory', value: ownerCapital, sub: 'stock bought with own cash' },
+            { icon: FiCreditCard, tint: 'bg-red-500/15', color: 'text-red-400', label: 'Vendor Payable Inventory', value: vendorPayable, sub: 'remaining to pay vendors' },
+            { icon: FiBox, tint: 'bg-cyan-500/15', color: 'text-cyan-400', label: 'Cash in hand / Capital', value: inventoryCashInHand, sub: 'cost recovered from sales + manual cash - purchases' }
           ].map(s => (
             <div key={s.label} className={`rounded-xl p-4 border ${card}`}>
               <div className="flex items-center gap-2 mb-1">
@@ -1511,10 +1574,26 @@ const Inventory = ({ darkMode }) => {
               </button>
             )}
 
-            <button onClick={() => exportToExcel(filteredProducts, 'Inventory_Report')} className="px-2.5 py-1.5 bg-emerald-500 text-white rounded-lg text-xs hover:bg-emerald-600 transition flex items-center gap-1 shadow-md font-bold">
+            <button
+              onClick={handleRefresh}
+              disabled={isRefreshing}
+              title="Refresh this page's data"
+              className="px-2.5 py-1.5 bg-blue-600 text-white rounded-lg text-xs hover:bg-blue-700 transition flex items-center gap-1 shadow-md font-bold disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              <FiRefreshCw className={`text-xs ${isRefreshing ? 'animate-spin' : ''}`} /> Refresh
+            </button>
+            <button
+              onClick={() => exportToExcel(filteredProducts, 'Inventory_Report')}
+              title="Download Excel report"
+              className="px-2.5 py-1.5 bg-emerald-500 text-white rounded-lg text-xs hover:bg-emerald-600 transition flex items-center gap-1 shadow-md font-bold"
+            >
               <FiFileText className="text-xs" /> Excel
             </button>
-            <button onClick={() => exportToPDF(filteredProducts, 'Inventory_Report')} className="px-2.5 py-1.5 bg-red-500 text-white rounded-lg text-xs hover:bg-red-600 transition flex items-center gap-1 shadow-md font-bold">
+            <button
+              onClick={() => exportToPDF(filteredProducts, 'Inventory_Report')}
+              title="Download PDF report"
+              className="px-2.5 py-1.5 bg-red-500 text-white rounded-lg text-xs hover:bg-red-600 transition flex items-center gap-1 shadow-md font-bold"
+            >
               <FiDownload className="text-xs" /> PDF
             </button>
           </div>
@@ -1837,7 +1916,7 @@ const Inventory = ({ darkMode }) => {
                               onClick={() => removeRow(r.rid)}
                               disabled={isSubmitting || newRows.length === 1}
                               className="p-2 rounded-lg text-red-400 hover:bg-red-500/10 transition disabled:opacity-30 disabled:cursor-not-allowed"
-                              title="Row hatao"
+                              title="Remove row"
                             >
                               <FiTrash2 className="text-sm" />
                             </button>
@@ -1873,7 +1952,7 @@ const Inventory = ({ darkMode }) => {
                   </div>
 
                   <p className={`text-xs font-bold mt-2 ${mutedCls}`}>
-                    ⚠️ Low stock alert sirf UI par dikhega, email nahi jayegi. Khali rows ignore ho jati hain. Enter dabane se agle box mein jaoge.
+                    ⚠️ The low stock alert is shown in the UI only, no email will be sent. Empty rows are ignored. Press Enter to move to the next box.
                   </p>
                 </div>
               )}
@@ -1889,7 +1968,7 @@ const Inventory = ({ darkMode }) => {
                       disabled={isSubmitting}
                     />
                     <span className={`text-sm font-bold ${darkMode ? 'text-gray-200' : 'text-gray-700'}`}>
-                      Vendor se khareeda hai? (Credit Purchase) — sab products aik hi invoice mein
+                      Bought from a vendor? (Credit Purchase) — all products go under one invoice
                     </span>
                   </label>
 
@@ -1931,7 +2010,7 @@ const Inventory = ({ darkMode }) => {
 
                         {vendorsList.length > 0 && (
                           <p className={`text-xs font-bold mt-1 ${mutedCls}`}>
-                            Purana vendor select karne ke liye type karo ya list se choose karo
+                            Type to find an existing vendor or choose from the list
                           </p>
                         )}
                       </div>
@@ -1949,13 +2028,13 @@ const Inventory = ({ darkMode }) => {
                       </div>
 
                       <div>
-                        <label className={`block text-sm font-bold mb-1 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>Abhi Kitna Diya (Rs.)</label>
+                        <label className={`block text-sm font-bold mb-1 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>Paid Now (Rs.)</label>
                         <input
                           type="number"
                           value={formData.paidAmount || ''}
                           onChange={(e) => setFormData(prev => ({ ...prev, paidAmount: e.target.value }))}
                           className={modalInputCls(darkMode)}
-                          placeholder="0 = poora udhaar"
+                          placeholder="0 = full credit"
                           min="0"
                           step="0.01"
                           disabled={isSubmitting}
@@ -1963,7 +2042,7 @@ const Inventory = ({ darkMode }) => {
                       </div>
 
                       <p className={`text-xs font-bold md:col-span-3 ${mutedCls}`}>
-                        Total bill: Rs. {bulkTotals.totalBill.toLocaleString()} — baqi Credit page par "Pay Now" se dete rehna.
+                        Total bill: Rs. {bulkTotals.totalBill.toLocaleString()} — pay the remaining balance later from the Credit page using "Pay Now".
                       </p>
                     </div>
                   )}
@@ -2035,7 +2114,7 @@ const Inventory = ({ darkMode }) => {
               ) : historyEntries.length === 0 ? (
                 <div className="flex flex-col items-center gap-2 py-10 text-center">
                   <FiPackage className="text-4xl text-gray-400" />
-                  <p className={mutedCls}>Abhi tak koi history record nahi hui.</p>
+                  <p className={mutedCls}>No history has been recorded yet.</p>
                 </div>
               ) : (
                 <div className="space-y-4">

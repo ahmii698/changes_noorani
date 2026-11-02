@@ -2,13 +2,16 @@
 
 import React, { useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
-import { 
-  FiBell, FiDollarSign, FiEdit2, FiCheck, FiX, 
-  FiRefreshCw, FiClock, FiEye, FiLoader, FiUsers, FiFileText, FiTrendingUp
+import {
+  FiBell, FiDollarSign, FiEdit2, FiCheck, FiX,
+  FiRefreshCw, FiClock, FiEye, FiLoader, FiFileText, FiDownload
 } from 'react-icons/fi';
+import * as XLSX from 'xlsx';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import api from '../services/api';
 
-// ✅ Bank Names List - Same as Billing
+// Bank names list - same as Billing
 const BANK_NAMES = [
   { value: 'allied', label: 'Allied Bank' },
   { value: 'alfalah', label: 'Bank Alfalah' },
@@ -29,13 +32,13 @@ const Reminders = ({ darkMode }) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
 
-  // ✅ Payment History States
+  // Payment history states
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [paymentHistory, setPaymentHistory] = useState([]);
   const [selectedInvoiceNo, setSelectedInvoiceNo] = useState('');
   const [loadingHistory, setLoadingHistory] = useState(false);
 
-  // ✅ Check user role on mount
+  // Check user role on mount
   useEffect(() => {
     const user = localStorage.getItem('user');
     if (user) {
@@ -44,7 +47,7 @@ const Reminders = ({ darkMode }) => {
     }
   }, []);
 
-  // ✅ Get payment method display with bank name
+  // Get payment method display with bank name
   const getPaymentMethodDisplay = () => {
     if (paymentMethod === 'cash') return 'Cash';
     if (paymentMethod === 'card') return 'Credit/Debit Card';
@@ -56,28 +59,36 @@ const Reminders = ({ darkMode }) => {
     return paymentMethod;
   };
 
-  // ✅ Fetch pending payments
-  const fetchPendingPayments = async () => {
+  // Fetch pending payments (silent = no full-page loader)
+  const fetchPendingPayments = async (silent = false) => {
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       const response = await api.get('/pending-payments');
       setPendingPayments(response.data.data || []);
     } catch (error) {
       console.error('Error fetching pending payments:', error);
       toast.error('Failed to load pending payments');
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
-  // ✅ Auto-refresh every 3 hours
+  // Refresh button: reloads only this page's data
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await fetchPendingPayments(true);
+    setRefreshing(false);
+    toast.success('Pending payments refreshed');
+  };
+
+  // Auto-refresh every 3 hours
   useEffect(() => {
     fetchPendingPayments();
-    const interval = setInterval(fetchPendingPayments, 10800000);
+    const interval = setInterval(() => fetchPendingPayments(true), 10800000);
     return () => clearInterval(interval);
   }, []);
 
-  // ✅ Fetch payment history for specific invoice
+  // Fetch payment history for a specific invoice
   const fetchPaymentHistory = async (invoiceNo) => {
     setLoadingHistory(true);
     setSelectedInvoiceNo(invoiceNo);
@@ -97,13 +108,13 @@ const Reminders = ({ darkMode }) => {
     }
   };
 
-  // ✅ Handle payment update
+  // Handle payment update
   const handlePaymentUpdate = async () => {
     if (!isAdmin) {
       toast.error('Only admin can record payments');
       return;
     }
-    
+
     if (!paymentAmount || parseFloat(paymentAmount) <= 0) {
       toast.error('Please enter a valid amount');
       return;
@@ -124,13 +135,13 @@ const Reminders = ({ darkMode }) => {
     try {
       const paymentMethodDisplay = getPaymentMethodDisplay();
       const currentDateTime = new Date().toISOString();
-      
-      await api.put(`/pending-payments/${selectedPayment.id}`, { 
+
+      await api.put(`/pending-payments/${selectedPayment.id}`, {
         amount,
         payment_method: paymentMethodDisplay,
         paid_at: currentDateTime
       });
-      
+
       const formattedTime = new Date(currentDateTime).toLocaleString('en-US', {
         month: '2-digit',
         day: '2-digit',
@@ -140,14 +151,14 @@ const Reminders = ({ darkMode }) => {
         hour12: true,
         timeZone: 'Asia/Karachi'
       });
-      
+
       toast.success(`✅ Rs. ${amount.toLocaleString()} payment recorded via ${paymentMethodDisplay} at ${formattedTime}!`);
       setShowPaymentModal(false);
       setSelectedPayment(null);
       setPaymentAmount('');
       setPaymentMethod('cash');
       setSelectedBank('');
-      fetchPendingPayments();
+      fetchPendingPayments(true);
     } catch (error) {
       console.error('Error updating payment:', error);
       toast.error(error.response?.data?.message || 'Failed to update payment');
@@ -168,11 +179,145 @@ const Reminders = ({ darkMode }) => {
     setShowPaymentModal(true);
   };
 
+  const closePaymentModal = () => {
+    setShowPaymentModal(false);
+    setSelectedPayment(null);
+    setPaymentAmount('');
+    setPaymentMethod('cash');
+    setSelectedBank('');
+  };
+
   // Stats calculations
   const totalPending = pendingPayments.reduce((sum, p) => sum + (p.remaining_amount || 0), 0);
+  const totalPaid = pendingPayments.reduce((sum, p) => sum + (p.paid_amount || 0), 0);
+  const totalAmount = pendingPayments.reduce((sum, p) => sum + (p.total_amount || 0), 0);
   const totalCustomers = pendingPayments.length;
   const totalInvoices = pendingPayments.filter(p => p.invoice_no).length;
   const avgPending = totalCustomers > 0 ? Math.round(totalPending / totalCustomers) : 0;
+
+  // ===== Export helpers =====
+  const getFileDate = () => new Date().toISOString().slice(0, 10);
+
+  const getReportTimestamp = () =>
+    new Date().toLocaleString('en-US', {
+      month: '2-digit',
+      day: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true,
+      timeZone: 'Asia/Karachi'
+    });
+
+  // Excel report
+  const handleExportExcel = () => {
+    if (pendingPayments.length === 0) {
+      toast.error('No data to export');
+      return;
+    }
+    try {
+      const rows = pendingPayments.map((p, i) => ({
+        '#': i + 1,
+        'Customer': p.customer_name || 'N/A',
+        'Phone': p.customer_phone || 'N/A',
+        'Invoice #': p.invoice_no || 'N/A',
+        'Total (Rs.)': p.total_amount || 0,
+        'Paid (Rs.)': p.paid_amount || 0,
+        'Pending (Rs.)': p.remaining_amount || 0,
+      }));
+
+      rows.push({
+        '#': '',
+        'Customer': 'TOTAL',
+        'Phone': '',
+        'Invoice #': '',
+        'Total (Rs.)': totalAmount,
+        'Paid (Rs.)': totalPaid,
+        'Pending (Rs.)': totalPending,
+      });
+
+      const worksheet = XLSX.utils.json_to_sheet(rows);
+      worksheet['!cols'] = [
+        { wch: 5 }, { wch: 25 }, { wch: 16 }, { wch: 16 },
+        { wch: 14 }, { wch: 14 }, { wch: 14 },
+      ];
+
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Pending Payments');
+      XLSX.writeFile(workbook, `Pending_Payments_${getFileDate()}.xlsx`);
+      toast.success('Excel report downloaded');
+    } catch (error) {
+      console.error('Excel export error:', error);
+      toast.error('Failed to create Excel report');
+    }
+  };
+
+  // PDF report
+  const handleExportPDF = () => {
+    if (pendingPayments.length === 0) {
+      toast.error('No data to export');
+      return;
+    }
+    try {
+      const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' });
+      const pageWidth = doc.internal.pageSize.getWidth();
+
+      doc.setFontSize(18);
+      doc.setFont('helvetica', 'bold');
+      doc.text('Pending Payments Report', pageWidth / 2, 40, { align: 'center' });
+
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'normal');
+      doc.text(`Generated: ${getReportTimestamp()}`, pageWidth / 2, 58, { align: 'center' });
+      doc.text(
+        `Customers: ${totalCustomers}   |   Invoices: ${totalInvoices}   |   Total Pending: Rs. ${totalPending.toLocaleString()}`,
+        pageWidth / 2,
+        74,
+        { align: 'center' }
+      );
+
+      autoTable(doc, {
+        startY: 90,
+        head: [['#', 'Customer', 'Phone', 'Invoice #', 'Total (Rs.)', 'Paid (Rs.)', 'Pending (Rs.)']],
+        body: pendingPayments.map((p, i) => [
+          i + 1,
+          p.customer_name || 'N/A',
+          p.customer_phone || 'N/A',
+          p.invoice_no || 'N/A',
+          (p.total_amount || 0).toLocaleString(),
+          (p.paid_amount || 0).toLocaleString(),
+          (p.remaining_amount || 0).toLocaleString(),
+        ]),
+        foot: [[
+          '', 'TOTAL', '', '',
+          totalAmount.toLocaleString(),
+          totalPaid.toLocaleString(),
+          totalPending.toLocaleString(),
+        ]],
+        theme: 'grid',
+        headStyles: { fillColor: [245, 158, 11], textColor: [17, 24, 39], fontStyle: 'bold' },
+        footStyles: { fillColor: [243, 244, 246], textColor: [17, 24, 39], fontStyle: 'bold' },
+        styles: { fontSize: 10, cellPadding: 6 },
+        columnStyles: {
+          0: { halign: 'center', cellWidth: 30 },
+          4: { halign: 'right' },
+          5: { halign: 'right' },
+          6: { halign: 'right' },
+        },
+        didDrawPage: () => {
+          const pageHeight = doc.internal.pageSize.getHeight();
+          doc.setFontSize(9);
+          doc.text(`Page ${doc.internal.getNumberOfPages()}`, pageWidth - 40, pageHeight - 20, { align: 'right' });
+        },
+      });
+
+      doc.save(`Pending_Payments_${getFileDate()}.pdf`);
+      toast.success('PDF report downloaded');
+    } catch (error) {
+      console.error('PDF export error:', error);
+      toast.error('Failed to create PDF report');
+    }
+  };
 
   if (loading) {
     return (
@@ -185,9 +330,11 @@ const Reminders = ({ darkMode }) => {
     );
   }
 
+  const noData = pendingPayments.length === 0;
+
   return (
     <div className="space-y-5">
-      {/* Header - Amber Theme */}
+      {/* Header */}
       <div className={`flex items-center justify-between flex-wrap gap-4 p-5 rounded-xl border ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200 shadow-sm'}`}>
         <div className="flex items-center gap-4">
           <div className="w-12 h-12 rounded-full bg-amber-500/20 flex items-center justify-center">
@@ -200,22 +347,54 @@ const Reminders = ({ darkMode }) => {
             </p>
           </div>
         </div>
-        <button
-          onClick={fetchPendingPayments}
-          disabled={refreshing}
-          className={`px-4 py-2 rounded-lg text-sm font-semibold transition flex items-center gap-2 ${
-            refreshing ? 'bg-gray-400 cursor-not-allowed text-white' : 'bg-amber-400 hover:bg-amber-300 text-gray-900'
-          } shadow-md`}
-        >
-          <FiRefreshCw className={refreshing ? 'animate-spin' : ''} />
-          {refreshing ? 'Refreshing...' : 'Refresh'}
-        </button>
+
+        {/* Action buttons: Refresh, Excel, PDF */}
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            onClick={handleRefresh}
+            disabled={refreshing}
+            className={`px-4 py-2 rounded-lg text-sm font-semibold transition flex items-center gap-2 shadow-md ${
+              refreshing
+                ? 'bg-blue-600/60 text-white cursor-not-allowed'
+                : 'bg-blue-600 hover:bg-blue-500 text-white'
+            }`}
+          >
+            <FiRefreshCw className={refreshing ? 'animate-spin' : ''} />
+            {refreshing ? 'Refreshing...' : 'Refresh'}
+          </button>
+
+          <button
+            onClick={handleExportExcel}
+            disabled={noData}
+            className={`px-4 py-2 rounded-lg text-sm font-semibold transition flex items-center gap-2 ${
+              darkMode
+                ? 'bg-green-700/40 text-green-300 hover:bg-green-700/60'
+                : 'bg-green-100 text-green-700 hover:bg-green-200'
+            } ${noData ? 'opacity-50 cursor-not-allowed' : ''}`}
+          >
+            <FiFileText />
+            Excel
+          </button>
+
+          <button
+            onClick={handleExportPDF}
+            disabled={noData}
+            className={`px-4 py-2 rounded-lg text-sm font-semibold transition flex items-center gap-2 ${
+              darkMode
+                ? 'bg-red-700/40 text-red-300 hover:bg-red-700/60'
+                : 'bg-red-100 text-red-700 hover:bg-red-200'
+            } ${noData ? 'opacity-50 cursor-not-allowed' : ''}`}
+          >
+            <FiDownload />
+            PDF
+          </button>
+        </div>
       </div>
 
-      {/* Content - Amber Theme */}
+      {/* Content */}
       <div className={`rounded-xl border ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200 shadow-sm'}`}>
         <div className="p-5">
-          {pendingPayments.length === 0 ? (
+          {noData ? (
             <div className="text-center py-12">
               <FiDollarSign className="text-5xl text-gray-400 mx-auto mb-4" />
               <p className={`text-lg ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
@@ -306,13 +485,13 @@ const Reminders = ({ darkMode }) => {
             </div>
           )}
 
-          {/* Stats - Amber Theme */}
-          {pendingPayments.length > 0 && (
+          {/* Stats */}
+          {!noData && (
             <div className={`mt-5 p-4 rounded-lg ${darkMode ? 'bg-gray-800' : 'bg-gray-100'}`}>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                 <div>
                   <p className={`text-sm ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Total Pending</p>
-                  <p className={`text-xl font-bold text-red-500`}>
+                  <p className="text-xl font-bold text-red-500">
                     Rs. {totalPending.toLocaleString()}
                   </p>
                 </div>
@@ -345,7 +524,7 @@ const Reminders = ({ darkMode }) => {
         Auto-checks every 3 hours • {new Date().toLocaleTimeString()}
       </div>
 
-      {/* ✅ Payment Modal - Amber Theme */}
+      {/* Payment Modal */}
       {showPaymentModal && selectedPayment && isAdmin && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className={`${darkMode ? 'bg-gray-900 text-white' : 'bg-white text-gray-900'} rounded-xl shadow-xl max-w-md w-full border ${darkMode ? 'border-gray-800' : 'border-gray-200'}`}>
@@ -354,8 +533,8 @@ const Reminders = ({ darkMode }) => {
                 <FiDollarSign className="text-xl text-amber-400" />
                 Record Payment
               </h3>
-              <button 
-                onClick={() => { setShowPaymentModal(false); setSelectedPayment(null); setPaymentAmount(''); setPaymentMethod('cash'); setSelectedBank(''); }} 
+              <button
+                onClick={closePaymentModal}
                 className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"
               >
                 <FiX className="text-xl" />
@@ -367,18 +546,18 @@ const Reminders = ({ darkMode }) => {
                 <p className={`text-lg font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>{selectedPayment.customer_name}</p>
                 <p className={`text-sm ${darkMode ? 'text-gray-400' : 'text-gray-600'} mt-2`}>Invoice #</p>
                 <p className={`text-lg font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>{selectedPayment.invoice_no}</p>
-                <div className="grid grid-cols-3 gap-4 mt-3 pt-3 border-t ${darkMode ? 'border-gray-700' : 'border-gray-200'}">
+                <div className={`grid grid-cols-3 gap-4 mt-3 pt-3 border-t ${darkMode ? 'border-gray-700' : 'border-gray-200'}`}>
                   <div>
                     <p className={`text-sm ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Total</p>
                     <p className={`font-semibold text-base ${darkMode ? 'text-white' : 'text-gray-900'}`}>Rs. {selectedPayment.total_amount?.toLocaleString()}</p>
                   </div>
                   <div>
                     <p className={`text-sm ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Paid</p>
-                    <p className={`font-semibold text-base text-emerald-600 dark:text-emerald-400`}>Rs. {selectedPayment.paid_amount?.toLocaleString()}</p>
+                    <p className="font-semibold text-base text-emerald-600 dark:text-emerald-400">Rs. {selectedPayment.paid_amount?.toLocaleString()}</p>
                   </div>
                   <div>
                     <p className={`text-sm ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Pending</p>
-                    <p className={`font-semibold text-base text-red-600 dark:text-red-400`}>Rs. {selectedPayment.remaining_amount?.toLocaleString()}</p>
+                    <p className="font-semibold text-base text-red-600 dark:text-red-400">Rs. {selectedPayment.remaining_amount?.toLocaleString()}</p>
                   </div>
                 </div>
               </div>
@@ -448,12 +627,12 @@ const Reminders = ({ darkMode }) => {
                       </option>
                     ))}
                   </select>
-                  {!selectedBank && paymentMethod === 'bank' && (
+                  {!selectedBank && (
                     <p className={`text-sm mt-1 ${darkMode ? 'text-red-400' : 'text-red-500'}`}>
                       ⚠️ Please select a bank
                     </p>
                   )}
-                  {selectedBank && paymentMethod === 'bank' && (
+                  {selectedBank && (
                     <p className={`text-sm mt-1 ${darkMode ? 'text-green-400' : 'text-green-600'}`}>
                       ✅ Selected: {BANK_NAMES.find(b => b.value === selectedBank)?.label}
                     </p>
@@ -464,7 +643,7 @@ const Reminders = ({ darkMode }) => {
               <div className="flex gap-3 pt-3">
                 <button
                   type="button"
-                  onClick={() => { setShowPaymentModal(false); setSelectedPayment(null); setPaymentAmount(''); setPaymentMethod('cash'); setSelectedBank(''); }}
+                  onClick={closePaymentModal}
                   className={`flex-1 px-4 py-2.5 rounded-lg transition text-base font-medium ${
                     darkMode ? 'bg-gray-800 hover:bg-gray-700 text-white' : 'bg-gray-200 hover:bg-gray-300 text-gray-700'
                   }`}
@@ -496,7 +675,7 @@ const Reminders = ({ darkMode }) => {
         </div>
       )}
 
-      {/* ✅ Payment History Modal - Amber Theme */}
+      {/* Payment History Modal */}
       {showHistoryModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className={`${darkMode ? 'bg-gray-900 text-white' : 'bg-white text-gray-900'} rounded-xl shadow-xl max-w-2xl w-full border ${darkMode ? 'border-gray-800' : 'border-gray-200'}`}>
@@ -505,8 +684,8 @@ const Reminders = ({ darkMode }) => {
                 <FiClock className="text-xl text-purple-400" />
                 Payment History - {selectedInvoiceNo}
               </h3>
-              <button 
-                onClick={() => { setShowHistoryModal(false); setPaymentHistory([]); }} 
+              <button
+                onClick={() => { setShowHistoryModal(false); setPaymentHistory([]); }}
                 className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"
               >
                 <FiX className="text-xl" />
@@ -515,7 +694,7 @@ const Reminders = ({ darkMode }) => {
             <div className="p-6">
               {loadingHistory ? (
                 <div className="text-center py-8">
-                  <FiLoader className="w-8 h-8 border-4 border-purple-500 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+                  <FiLoader className="w-8 h-8 text-purple-500 animate-spin mx-auto mb-3" />
                   <p className={`text-base ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Loading history...</p>
                 </div>
               ) : paymentHistory.length === 0 ? (
@@ -524,65 +703,63 @@ const Reminders = ({ darkMode }) => {
                   <p className={`text-base ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>No payment history found</p>
                 </div>
               ) : (
-                <>
-                  <div className="overflow-x-auto">
-                    <table className="w-full">
-                      <thead className={darkMode ? 'bg-gray-800' : 'bg-gray-50'}>
-                        <tr>
-                          <th className="px-4 py-3 text-left text-sm font-semibold uppercase text-gray-500 dark:text-gray-400">#</th>
-                          <th className="px-4 py-3 text-left text-sm font-semibold uppercase text-gray-500 dark:text-gray-400">Amount</th>
-                          <th className="px-4 py-3 text-left text-sm font-semibold uppercase text-gray-500 dark:text-gray-400">Payment Method</th>
-                          <th className="px-4 py-3 text-left text-sm font-semibold uppercase text-gray-500 dark:text-gray-400">Date & Time</th>
-                          <th className="px-4 py-3 text-left text-sm font-semibold uppercase text-gray-500 dark:text-gray-400">Received By</th>
-                        </tr>
-                      </thead>
-                      <tbody className={`divide-y ${darkMode ? 'divide-gray-800' : 'divide-gray-200'}`}>
-                        {paymentHistory.map((payment, index) => (
-                          <tr key={payment.id || index} className={darkMode ? 'hover:bg-gray-800/50' : 'hover:bg-gray-50'}>
-                            <td className="px-4 py-3 text-sm text-center text-gray-500">{index + 1}</td>
-                            <td className="px-4 py-3 text-base font-semibold text-emerald-600 dark:text-emerald-400">
-                              Rs. {parseFloat(payment.amount).toLocaleString()}
-                            </td>
-                            <td className="px-4 py-3">
-                              <span className={`px-2.5 py-1 rounded-full text-sm ${darkMode ? 'bg-purple-900/30 text-purple-400' : 'bg-purple-100 text-purple-700'}`}>
-                                {payment.payment_method || 'Cash'}
-                              </span>
-                            </td>
-                            <td className="px-4 py-3 text-sm">
-                              {payment.paid_at ? (
-                                new Date(payment.paid_at).toLocaleString('en-US', {
-                                  month: '2-digit',
-                                  day: '2-digit',
-                                  year: 'numeric',
-                                  hour: '2-digit',
-                                  minute: '2-digit',
-                                  hour12: true,
-                                  timeZone: 'Asia/Karachi'
-                                })
-                              ) : (
-                                <span className={`text-sm ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>N/A</span>
-                              )}
-                            </td>
-                            <td className="px-4 py-3">
-                              <span className={`px-2.5 py-1 rounded-full text-sm ${darkMode ? 'bg-blue-900/30 text-blue-400' : 'bg-blue-100 text-blue-700'}`}>
-                                Admin
-                              </span>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                      <tfoot className={darkMode ? 'bg-gray-800' : 'bg-gray-50'}>
-                        <tr className="font-semibold">
-                          <td colSpan="1" className="px-4 py-3 text-right text-sm">Total Paid:</td>
-                          <td className="px-4 py-3 text-base text-emerald-600 dark:text-emerald-400">
-                            Rs. {paymentHistory.reduce((sum, p) => sum + parseFloat(p.amount), 0).toLocaleString()}
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead className={darkMode ? 'bg-gray-800' : 'bg-gray-50'}>
+                      <tr>
+                        <th className="px-4 py-3 text-left text-sm font-semibold uppercase text-gray-500 dark:text-gray-400">#</th>
+                        <th className="px-4 py-3 text-left text-sm font-semibold uppercase text-gray-500 dark:text-gray-400">Amount</th>
+                        <th className="px-4 py-3 text-left text-sm font-semibold uppercase text-gray-500 dark:text-gray-400">Payment Method</th>
+                        <th className="px-4 py-3 text-left text-sm font-semibold uppercase text-gray-500 dark:text-gray-400">Date & Time</th>
+                        <th className="px-4 py-3 text-left text-sm font-semibold uppercase text-gray-500 dark:text-gray-400">Received By</th>
+                      </tr>
+                    </thead>
+                    <tbody className={`divide-y ${darkMode ? 'divide-gray-800' : 'divide-gray-200'}`}>
+                      {paymentHistory.map((payment, index) => (
+                        <tr key={payment.id || index} className={darkMode ? 'hover:bg-gray-800/50' : 'hover:bg-gray-50'}>
+                          <td className="px-4 py-3 text-sm text-center text-gray-500">{index + 1}</td>
+                          <td className="px-4 py-3 text-base font-semibold text-emerald-600 dark:text-emerald-400">
+                            Rs. {parseFloat(payment.amount).toLocaleString()}
                           </td>
-                          <td colSpan="3"></td>
+                          <td className="px-4 py-3">
+                            <span className={`px-2.5 py-1 rounded-full text-sm ${darkMode ? 'bg-purple-900/30 text-purple-400' : 'bg-purple-100 text-purple-700'}`}>
+                              {payment.payment_method || 'Cash'}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-sm">
+                            {payment.paid_at ? (
+                              new Date(payment.paid_at).toLocaleString('en-US', {
+                                month: '2-digit',
+                                day: '2-digit',
+                                year: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit',
+                                hour12: true,
+                                timeZone: 'Asia/Karachi'
+                              })
+                            ) : (
+                              <span className={`text-sm ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>N/A</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className={`px-2.5 py-1 rounded-full text-sm ${darkMode ? 'bg-blue-900/30 text-blue-400' : 'bg-blue-100 text-blue-700'}`}>
+                              Admin
+                            </span>
+                          </td>
                         </tr>
-                      </tfoot>
-                    </table>
-                  </div>
-                </>
+                      ))}
+                    </tbody>
+                    <tfoot className={darkMode ? 'bg-gray-800' : 'bg-gray-50'}>
+                      <tr className="font-semibold">
+                        <td className="px-4 py-3 text-right text-sm">Total Paid:</td>
+                        <td className="px-4 py-3 text-base text-emerald-600 dark:text-emerald-400">
+                          Rs. {paymentHistory.reduce((sum, p) => sum + parseFloat(p.amount), 0).toLocaleString()}
+                        </td>
+                        <td colSpan="3"></td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
               )}
               <div className="mt-4 flex justify-end">
                 <button

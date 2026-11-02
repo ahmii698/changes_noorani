@@ -18,7 +18,8 @@ import {
   FiCpu, FiHardDrive, FiMonitor,
   FiFacebook, FiInstagram, FiGift, FiArchive
 } from 'react-icons/fi';
-import api, { saveCart } from '../../services/api';
+// ✅ CHANGE 1: deleteDiscardedCart import kiya
+import api, { saveCart, deleteDiscardedCart } from '../../services/api';
 import logo from '/fusix.jpg';
 
 // Icon list for dropdown
@@ -222,6 +223,9 @@ const BillingInvoice = ({ customerDetails, darkMode, onPaymentSuccess, restoredD
   // Draft Bill states
   const [isSavingDraft, setIsSavingDraft] = useState(false);
 
+  // ✅ CHANGE 2: Jis draft se bill restore hua uski id (taake dobara draft banne par duplicate na bane)
+  const [draftId, setDraftId] = useState(null);
+
   // 🔒 Live clock - date/time system se auto aata hai, user change nahi kar sakta
   const [now, setNow] = useState(() => new Date());
   
@@ -250,6 +254,8 @@ const BillingInvoice = ({ customerDetails, darkMode, onPaymentSuccess, restoredD
         quantity: item.quantity || 1
       }));
       setCart(restoredItems);
+      // ✅ CHANGE 3: draft_id yaad rakho
+      setDraftId(restoredData.draft_id || null);
       toast.success(`✅ ${restoredItems.length} items restored!`);
     }
   }, [restoredData]);
@@ -397,6 +403,19 @@ const BillingInvoice = ({ customerDetails, darkMode, onPaymentSuccess, restoredD
     loadData();
   }, []);
 
+  // ✅ CHANGE 4: Purana linked draft hata do (agar is bill ka koi draft linked hai)
+  const removeLinkedDraft = async () => {
+    if (!draftId) return;
+    try {
+      await deleteDiscardedCart(draftId);
+    } catch (e) {
+      // Draft pehle se delete ho chuka ho to koi masla nahi
+      console.warn('Linked draft already removed or not found', e);
+    }
+    setDraftId(null);
+    window.dispatchEvent(new Event('discarded-update'));
+  };
+
   // ==================== SAVE AS DRAFT FUNCTION ====================
   const handleSaveDraft = async () => {
     if (cart.length === 0) {
@@ -428,6 +447,8 @@ const BillingInvoice = ({ customerDetails, darkMode, onPaymentSuccess, restoredD
 
       const response = await saveCart(cartData);
       if (response.success) {
+        // ✅ CHANGE 5: Naya draft save ho gaya, ab purana delete karo (sirf ek draft rahe)
+        await removeLinkedDraft();
         toast.success('💾 Bill saved as draft successfully!');
         setCart([]);
         setPaymentAmount('');
@@ -1117,6 +1138,9 @@ const BillingInvoice = ({ customerDetails, darkMode, onPaymentSuccess, restoredD
       console.log('📤 Sending invoice payload:', JSON.stringify(payload, null, 2));
       
       await api.post('/invoices', payload);
+
+      // ✅ CHANGE 6: Pay hone ke baad linked draft Drafted Bills se automatically hat jaye
+      await removeLinkedDraft();
       
       const reminderAdded = await addServiceReminder(invoiceNo, cartSnapshot);
       if (reminderAdded) {

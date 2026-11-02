@@ -14,6 +14,7 @@ import Dashboard from './components/Dashboard';
 const DASHBOARD_PATHS = [
   '/dashboard',
   '/billing',
+  '/payment', // ✅ PAYMENT PAGE ADDED
   '/inventory',
   '/inventory-history',
   '/cash-in-hand',

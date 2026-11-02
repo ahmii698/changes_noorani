@@ -1,13 +1,17 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef, lazy, Suspense } from 'react';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
+import * as XLSX from 'xlsx';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import { 
   FiMenu, FiChevronLeft, FiSun, FiMoon, FiLogOut, 
   FiPackage, FiDollarSign, FiFileText, FiBarChart2, 
   FiTrendingUp, FiShoppingCart, FiCheckCircle, 
   FiAlertCircle, FiClock, FiArrowRight, FiLoader, FiUsers,
   FiCreditCard, FiCalendar, FiGift, FiChevronDown, FiChevronUp, FiFile,
-  FiBattery, FiArchive, FiMoreVertical, FiBell, FiBriefcase, FiRotateCcw
+  FiBattery, FiArchive, FiMoreVertical, FiBell, FiBriefcase, FiRotateCcw,
+  FiRefreshCw, FiDownload
 } from 'react-icons/fi';
 import { 
   LineChart, Line, BarChart, Bar, AreaChart, Area,
@@ -35,11 +39,13 @@ const EstimatedBill = lazy(() => import('./EstimatedBill'));
 const BatteryPage = lazy(() => import('./BatteryPage'));
 const EstimateRecords = lazy(() => import('./EstimateRecords'));
 const LeaveApplication = lazy(() => import('./leave/LeaveApplication'));
+// Payment page
+const Payment = lazy(() => import('./Payment'));
 
-// Shuru me hath me jitna cash tha. Abhi 0 hai.
+// Opening cash on hand when the business started. Currently 0.
 const OPENING_CASH = 0;
 
-// /cash-in-hand API se manual cash ka total nikalta hai (Inventory.jsx wala same logic)
+// Extracts the manual cash total from the /cash-in-hand API (same logic as Inventory.jsx)
 const extractManualCash = (res) => {
   if (!res) return 0;
   const body = res.data || {};
@@ -79,7 +85,7 @@ const Sparkline = ({ data, color }) => (
   <div className="h-10 mt-3 -mx-1">
     <ResponsiveContainer width="100%" height="100%">
       <AreaChart data={data} margin={{ top: 2, right: 0, left: 0, bottom: 0 }}>
-        {/* Negative profit bhi dikhane ke liye auto domain */}
+        {/* Auto domain so negative profit is also visible */}
         <YAxis domain={['auto', 'auto']} hide />
         <Area
           type="monotone"
@@ -136,6 +142,13 @@ const StatsCard = React.memo(({
 
 const getInvoiceDiscount = (inv) => parseFloat(inv?.discount) || 0;
 const getInvoiceGross = (inv) => (parseFloat(inv?.total_amount) || 0) + getInvoiceDiscount(inv);
+
+const formatShortDate = (d) => {
+  if (!d) return '-';
+  const date = new Date(d);
+  if (isNaN(date.getTime())) return '-';
+  return date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+};
 
 const getDateRange = (filter, customDate = null) => {
   const now = new Date();
@@ -218,6 +231,7 @@ const Dashboard = () => {
   const [activeMenu, setActiveMenu] = useState(getDefaultMenu());
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [darkMode, setDarkMode] = useState(() => {
     const saved = localStorage.getItem('darkMode');
     return saved !== null ? saved === 'true' : true;
@@ -238,6 +252,8 @@ const Dashboard = () => {
   const [vendorPaymentExpenses, setVendorPaymentExpenses] = useState([]);
   const [manualCashTotal, setManualCashTotal] = useState(0);
 
+  const fetchFailedRef = useRef(false);
+
   useEffect(() => {
     const userData = localStorage.getItem('user');
     if (userData) {
@@ -257,8 +273,8 @@ const Dashboard = () => {
 
   const productsArray = useMemo(() => Array.isArray(products) ? products : [], [products]);
 
-  // Dashboard ke Expenses: sirf normal expenses + salary.
-  // Inventory ki cost aur vendor payments yahan NAHI ginti.
+  // Dashboard expenses: regular expenses + salary only.
+  // Inventory cost and vendor payments are NOT counted here.
   const expensesArray = useMemo(
     () => [
       ...(Array.isArray(expenses) ? expenses : []),
@@ -267,7 +283,7 @@ const Dashboard = () => {
     [expenses, salaryPayments]
   );
 
-  // Cash in Hand ke liye cash nikalne wali sari cheezein (expenses + cash inventory + vendor payments)
+  // Everything that takes cash out for Cash in Hand (expenses + cash inventory + vendor payments)
   const cashOutflowArray = useMemo(
     () => [
       ...expensesArray,
@@ -313,7 +329,7 @@ const Dashboard = () => {
     [filteredInvoices]
   );
 
-  // NET PROFIT = invoices ka profit - expenses (salary samet)
+  // NET PROFIT = invoice profit - expenses (including salary)
   const totalProfitCalc = useMemo(() => {
     let profit = 0;
     for (const inv of filteredInvoices) {
@@ -338,10 +354,10 @@ const Dashboard = () => {
     [totalSales, totalProfitCalc]
   );
 
-  // CASH IN HAND (all-time, time filter se independent)
-  // Manual cash (Cash in Hand page se add kiya hua) + sale ka poora paisa jama hota hai.
-  // Cash se liya hua maal (inventory) aur vendor ko di hui payments minus hoti hain.
-  // Normal expenses / salary yahan NAHI katte.
+  // CASH IN HAND (all-time, independent of the time filter)
+  // Manual cash (added from the Cash in Hand page) + the full sale amounts are added.
+  // Inventory bought with cash and payments made to vendors are subtracted.
+  // Regular expenses / salary are NOT deducted here.
   const cashInHand = useMemo(() => {
     const received = invoicesArray.reduce(
       (sum, inv) => sum + (parseFloat(inv.total_amount) || 0),
@@ -500,6 +516,7 @@ const Dashboard = () => {
 
   const fetchAllData = useCallback(async (silent = false) => {
     const abortController = new AbortController();
+    fetchFailedRef.current = false;
     if (!silent) setLoading(true);
     try {
       const [productsRes, expensesRes, invoicesRes, servicesRes, employeesRes, allProductsRes, vendorsRes, manualCashRes] = await Promise.all([
@@ -614,6 +631,7 @@ const Dashboard = () => {
       
     } catch (err) {
       if (err.name !== 'AbortError') {
+        fetchFailedRef.current = true;
         console.error('Error fetching data:', err);
         toast.error('Failed to load data');
         setProducts([]);
@@ -655,6 +673,20 @@ const Dashboard = () => {
     }
     localStorage.setItem('darkMode', darkMode);
   }, [darkMode]);
+
+  // Refreshes only the dashboard data (no full page reload)
+  const handleRefresh = useCallback(async () => {
+    if (refreshing) return;
+    setRefreshing(true);
+    try {
+      await fetchAllData(true);
+      if (!fetchFailedRef.current) {
+        toast.success('Dashboard refreshed');
+      }
+    } finally {
+      setRefreshing(false);
+    }
+  }, [fetchAllData, refreshing]);
 
   const handleAddProduct = useCallback(async (product) => {
     try {
@@ -742,6 +774,7 @@ const Dashboard = () => {
       'finance-reminders': 'Upcoming Payments & Reminders',
       'finance-credit': 'Credit Management',
       billing: 'Billing System',
+      payment: 'Payment',
       estimate: 'Estimate / Quotation',
       'estimate-records': 'Estimate Records',
       battery: 'Battery Sale',
@@ -767,6 +800,7 @@ const Dashboard = () => {
       'finance-reminders': 'Track upcoming bills, salaries and payments',
       'finance-credit': 'Manage vendor credits, payments and history',
       billing: 'Create bills, print invoices, export data',
+      payment: 'View subscription details and pay your monthly fee',
       estimate: 'Create and print customer estimates / quotations',
       'estimate-records': 'View all estimate records with search and filters',
       battery: 'Sell batteries with trade-in option',
@@ -792,6 +826,7 @@ const Dashboard = () => {
       'finance-reminders': <FiBell className="text-2xl" />,
       'finance-credit': <FiCreditCard className="text-2xl" />,
       billing: <FiFileText className="text-2xl" />,
+      payment: <FiCreditCard className="text-2xl" />,
       estimate: <FiFile className="text-2xl" />,
       'estimate-records': <FiArchive className="text-2xl" />,
       battery: <FiBattery className="text-2xl" />,
@@ -821,6 +856,210 @@ const Dashboard = () => {
     setCustomDate(date);
     if (date) {
       setTimeFilter('custom');
+    }
+  };
+
+  // ---------- Report export (Excel / PDF) ----------
+
+  const getReportFileName = () => {
+    const period = getFilterLabel().replace(/[^a-zA-Z0-9]+/g, '_').replace(/^_|_$/g, '');
+    const today = new Date().toISOString().slice(0, 10);
+    return `Dashboard_Report_${period}_${today}`;
+  };
+
+  const buildReportData = () => {
+    const summary = [
+      ['Period', getFilterLabel()],
+      ['Total Sales', totalSales],
+      ['Total Expenses', totalExpensesSum],
+      ['Total Discount', totalDiscount],
+      ['Total Profit', totalProfitCalc],
+      ['Profit Margin (%)', Number(profitMargin.toFixed(1))],
+      ['Active Products', totalProductsCount],
+      ['Total Stock (units)', totalStock],
+      ['Cash in Hand (all time)', cashInHand.cash]
+    ];
+
+    const monthly = trimmedMonthlyData.map(m => ({
+      Month: m.month,
+      Sales: m.sales,
+      Profit: m.profit,
+      Expenses: m.expenses,
+      Discount: m.discount
+    }));
+
+    const invoiceRows = [...filteredInvoices]
+      .sort((a, b) => new Date(b.invoice_date) - new Date(a.invoice_date))
+      .map(inv => ({
+        'Invoice #': inv.invoice_no || inv.invoiceNo || '-',
+        Customer: inv.customer_name || inv.customer?.name || 'Walk-in',
+        Date: formatShortDate(inv.invoice_date),
+        'Gross Amount': getInvoiceGross(inv),
+        Discount: getInvoiceDiscount(inv),
+        'Net Amount': parseFloat(inv.total_amount) || 0,
+        Status: inv.status || 'Pending'
+      }));
+
+    const expenseRows = [...filteredExpenses]
+      .sort((a, b) => new Date(b.date || b.created_at) - new Date(a.date || a.created_at))
+      .map(exp => ({
+        Title: exp.title || exp.description || '-',
+        Category: exp.category || '-',
+        Date: formatShortDate(exp.date || exp.created_at),
+        Amount: parseFloat(exp.amount) || 0
+      }));
+
+    const lowStockRows = lowStockProducts.map(p => ({
+      Product: p.name,
+      Quantity: parseInt(p.quantity) || 0,
+      Threshold: p.low_stock_threshold ?? 5
+    }));
+
+    const productRows = productSalesData.map(p => ({
+      Product: p.name,
+      'Stock Value': p.value
+    }));
+
+    return { summary, monthly, invoiceRows, expenseRows, lowStockRows, productRows };
+  };
+
+  const handleExportExcel = () => {
+    try {
+      const data = buildReportData();
+      const wb = XLSX.utils.book_new();
+
+      const summarySheet = XLSX.utils.aoa_to_sheet([
+        ['Dashboard Report'],
+        ['Generated', new Date().toLocaleString()],
+        [],
+        ['Metric', 'Value'],
+        ...data.summary
+      ]);
+      summarySheet['!cols'] = [{ wch: 28 }, { wch: 24 }];
+      XLSX.utils.book_append_sheet(wb, summarySheet, 'Summary');
+
+      const addSheet = (name, rows, emptyMessage) => {
+        const ws = rows.length > 0
+          ? XLSX.utils.json_to_sheet(rows)
+          : XLSX.utils.aoa_to_sheet([[emptyMessage]]);
+        if (rows.length > 0) {
+          ws['!cols'] = Object.keys(rows[0]).map(key => ({ wch: Math.max(key.length + 4, 16) }));
+        }
+        XLSX.utils.book_append_sheet(wb, ws, name);
+      };
+
+      addSheet('Monthly', data.monthly, 'No monthly data');
+      addSheet('Invoices', data.invoiceRows, 'No invoices found');
+      addSheet('Expenses', data.expenseRows, 'No expenses found');
+      addSheet('Product Sales', data.productRows, 'No product data');
+      addSheet('Low Stock', data.lowStockRows, 'All products have sufficient stock');
+
+      XLSX.writeFile(wb, `${getReportFileName()}.xlsx`);
+      toast.success('Excel report downloaded');
+    } catch (err) {
+      console.error('Excel export error:', err);
+      toast.error('Failed to generate Excel report');
+    }
+  };
+
+  const handleExportPdf = () => {
+    try {
+      const data = buildReportData();
+      const doc = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'a4' });
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const pageHeight = doc.internal.pageSize.getHeight();
+      const money = (n) => `Rs. ${(Number(n) || 0).toLocaleString()}`;
+
+      doc.setFontSize(18);
+      doc.setTextColor(20);
+      doc.text('Dashboard Report', 40, 45);
+      doc.setFontSize(10);
+      doc.setTextColor(90);
+      doc.text(`Period: ${getFilterLabel()}`, 40, 65);
+      doc.text(`Generated: ${new Date().toLocaleString()}`, pageWidth - 40, 65, { align: 'right' });
+
+      let y = 90;
+      const addSection = (title, head, body, extraOptions = {}) => {
+        if (body.length === 0) return;
+        if (y > pageHeight - 120) {
+          doc.addPage();
+          y = 45;
+        }
+        doc.setFontSize(12);
+        doc.setTextColor(20);
+        doc.text(title, 40, y);
+        autoTable(doc, {
+          startY: y + 8,
+          head: [head],
+          body,
+          theme: 'grid',
+          styles: { fontSize: 9, cellPadding: 4 },
+          headStyles: { fillColor: [251, 191, 36], textColor: 20 },
+          margin: { left: 40, right: 40 },
+          ...extraOptions
+        });
+        y = doc.lastAutoTable.finalY + 26;
+      };
+
+      addSection(
+        'Summary',
+        ['Metric', 'Value'],
+        [
+          ['Total Sales', money(totalSales)],
+          ['Total Expenses', money(totalExpensesSum)],
+          ['Total Discount', money(totalDiscount)],
+          ['Total Profit', money(totalProfitCalc)],
+          ['Profit Margin', `${profitMargin.toFixed(1)}%`],
+          ['Active Products', String(totalProductsCount)],
+          ['Total Stock (units)', String(totalStock)],
+          ['Cash in Hand (all time)', money(cashInHand.cash)]
+        ]
+      );
+
+      addSection(
+        'Monthly Overview',
+        ['Month', 'Sales', 'Profit', 'Expenses', 'Discount'],
+        data.monthly.map(m => [m.Month, money(m.Sales), money(m.Profit), money(m.Expenses), money(m.Discount)])
+      );
+
+      addSection(
+        `Invoices (${data.invoiceRows.length})`,
+        ['Invoice #', 'Customer', 'Date', 'Net Amount', 'Status'],
+        data.invoiceRows.map(r => [r['Invoice #'], r.Customer, r.Date, money(r['Net Amount']), r.Status])
+      );
+
+      addSection(
+        `Expenses (${data.expenseRows.length})`,
+        ['Title', 'Category', 'Date', 'Amount'],
+        data.expenseRows.map(r => [r.Title, r.Category, r.Date, money(r.Amount)])
+      );
+
+      addSection(
+        'Product Sales',
+        ['Product', 'Stock Value'],
+        data.productRows.map(r => [r.Product, money(r['Stock Value'])])
+      );
+
+      addSection(
+        `Low Stock Alerts (${data.lowStockRows.length})`,
+        ['Product', 'Quantity', 'Threshold'],
+        data.lowStockRows.map(r => [r.Product, String(r.Quantity), String(r.Threshold)]),
+        { headStyles: { fillColor: [239, 68, 68], textColor: 255 } }
+      );
+
+      const totalPages = doc.internal.getNumberOfPages();
+      for (let i = 1; i <= totalPages; i++) {
+        doc.setPage(i);
+        doc.setFontSize(9);
+        doc.setTextColor(120);
+        doc.text(`Page ${i} of ${totalPages}`, pageWidth / 2, pageHeight - 20, { align: 'center' });
+      }
+
+      doc.save(`${getReportFileName()}.pdf`);
+      toast.success('PDF report downloaded');
+    } catch (err) {
+      console.error('PDF export error:', err);
+      toast.error('Failed to generate PDF report');
     }
   };
 
@@ -1037,6 +1276,35 @@ const Dashboard = () => {
                       )}
                     </div>
                   )}
+
+                  {/* Refresh / Excel / PDF actions */}
+                  <div className="ml-auto flex items-center gap-2">
+                    <button
+                      onClick={handleRefresh}
+                      disabled={refreshing}
+                      title="Refresh dashboard data"
+                      className="flex items-center gap-2 px-4 py-1.5 rounded-lg text-sm font-bold bg-blue-600 text-white hover:bg-blue-500 transition disabled:opacity-60 disabled:cursor-not-allowed"
+                    >
+                      <FiRefreshCw className={`text-base ${refreshing ? 'animate-spin' : ''}`} />
+                      Refresh
+                    </button>
+                    <button
+                      onClick={handleExportExcel}
+                      title="Download Excel report"
+                      className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-sm font-bold transition ${darkMode ? 'bg-emerald-900/50 text-emerald-300 hover:bg-emerald-900/80' : 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'}`}
+                    >
+                      <FiFileText className="text-base" />
+                      Excel
+                    </button>
+                    <button
+                      onClick={handleExportPdf}
+                      title="Download PDF report"
+                      className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-sm font-bold transition ${darkMode ? 'bg-red-900/50 text-red-300 hover:bg-red-900/80' : 'bg-red-100 text-red-700 hover:bg-red-200'}`}
+                    >
+                      <FiDownload className="text-base" />
+                      PDF
+                    </button>
+                  </div>
                 </div>
 
                 {/* Cards order: Sales → Expenses → Discount → Profit → Active Products */}
@@ -1366,6 +1634,11 @@ const Dashboard = () => {
                   products={productsArray}
                   setProducts={setProducts}
                 />
+              )}
+
+              {/* Payment page - Admin only */}
+              {activeMenu === 'payment' && userRole === 'admin' && (
+                <Payment darkMode={darkMode} />
               )}
 
               {activeMenu === 'estimate' && (

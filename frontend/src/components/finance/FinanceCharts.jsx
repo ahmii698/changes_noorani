@@ -1,6 +1,9 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import FinancialCharts from './FinancialCharts';
-import { FiLoader } from 'react-icons/fi';
+import { FiLoader, FiRefreshCw, FiFileText, FiDownload } from 'react-icons/fi';
+import * as XLSX from 'xlsx';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import api from '../../services/api';
 import toast from 'react-hot-toast';
 
@@ -11,8 +14,8 @@ const parseListResponse = (res) => {
   return [];
 };
 
-// Dashboard ki tarah: normal expenses ke saath sirf Salary count hoti hai.
-// Inventory (Cash) aur Vendor Payment expenses mein NAHI ginte.
+// Same as the dashboard: only Salary is counted together with regular expenses.
+// Inventory (Cash) and Vendor Payment expenses are NOT counted.
 const fetchSalaryExpenses = async () => {
   const employeesRes = await api.get('/employees').catch(() => null);
 
@@ -30,11 +33,14 @@ const fetchSalaryExpenses = async () => {
 
 const getExpenseDate = (exp) => exp.expense_date || exp.date || exp.created_at;
 
+const formatMoney = (value) => `Rs. ${(Number(value) || 0).toLocaleString()}`;
+
 const FinanceCharts = ({ darkMode }) => {
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [compareYear, setCompareYear] = useState(null);
   const [chartType, setChartType] = useState('line');
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(null);
 
   const [expenses, setExpenses] = useState([]);
@@ -86,7 +92,7 @@ const FinanceCharts = ({ darkMode }) => {
 
       monthInvoices.forEach(inv => {
         const invDiscount = parseFloat(inv.discount) || 0;
-        // Sales = gross (discount se pehle), Dashboard / Finance Overview ki tarah
+        // Sales = gross amount (before discount), same as Dashboard / Finance Overview
         monthSales += (parseFloat(inv.total_amount) || 0) + invDiscount;
         monthDiscount += invDiscount;
 
@@ -99,7 +105,7 @@ const FinanceCharts = ({ darkMode }) => {
           monthProfit += (price - purchasePrice) * qty;
         });
 
-        // Discount profit se minus hota hai
+        // Discount is subtracted from profit
         monthProfit -= invDiscount;
       });
 
@@ -128,10 +134,10 @@ const FinanceCharts = ({ darkMode }) => {
         month: monthNames[i],
         monthIndex: i,
         expenses: totalExpenses,
-        // 'revenue' key chart (FinancialCharts) use karta hai, ye ab Sales hai
+        // The 'revenue' key is used by FinancialCharts and now represents Sales
         revenue: monthSales,
         sales: monthSales,
-        // Chart ki 'profit' line net profit dikhati hai
+        // The chart 'profit' line shows net profit
         profit: netProfit,
         salesProfit: monthProfit,
         netProfit,
@@ -160,8 +166,13 @@ const FinanceCharts = ({ darkMode }) => {
     });
   }, []);
 
-  const loadChartData = useCallback(async () => {
-    setLoading(true);
+  // isRefresh = true: keeps the page visible and only spins the Refresh button
+  const loadChartData = useCallback(async (isRefresh = false) => {
+    if (isRefresh) {
+      setRefreshing(true);
+    } else {
+      setLoading(true);
+    }
     setError(null);
 
     try {
@@ -176,7 +187,7 @@ const FinanceCharts = ({ darkMode }) => {
       const regularExpenses = parseListResponse(expensesRes);
       const invoicesList = parseListResponse(invoicesRes);
 
-      // Dashboard ki tarah: sirf normal expenses + salary
+      // Same as the dashboard: regular expenses + salary only
       const expensesList = [...regularExpenses, ...salaryExpenses];
 
       setInvoices(invoicesList);
@@ -187,12 +198,15 @@ const FinanceCharts = ({ darkMode }) => {
       const monthlyChartData = calculateMonthlyData(selectedYear, productsList, expensesList, invoicesList);
       setMonthlyData(monthlyChartData);
       calculateYearlyOverview(monthlyChartData);
+
+      if (isRefresh) toast.success('Data refreshed');
     } catch (err) {
       console.error('Error loading chart data:', err);
       setError('Failed to load chart data. Please try again.');
       toast.error('Failed to load chart data');
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   }, [selectedYear, calculateInventoryStats, calculateMonthlyData, calculateYearlyOverview]);
 
@@ -215,6 +229,159 @@ const FinanceCharts = ({ darkMode }) => {
     return Array.from(years).sort((a, b) => b - a);
   }, [invoices, expenses]);
 
+  const handleRefresh = () => {
+    if (refreshing || loading) return;
+    loadChartData(true);
+  };
+
+  const handleExportExcel = () => {
+    try {
+      const wb = XLSX.utils.book_new();
+
+      // Sheet 1: Summary
+      const summaryRows = [
+        ['Finance Report', selectedYear],
+        ['Generated On', new Date().toLocaleString()],
+        [],
+        ['Metric', 'Amount (Rs.)'],
+        ['Total Sales', yearlyOverview.totalSales],
+        ['Total Profit', yearlyOverview.totalProfit],
+        ['Total Expenses', yearlyOverview.totalExpenses],
+        ['Net Profit', yearlyOverview.totalNetProfit],
+        [],
+        ['Inventory Overview', ''],
+        ['Total Purchase Value', inventoryStats.totalPurchase],
+        ['Total Selling Value', inventoryStats.totalSelling],
+        ['Expected Profit', inventoryStats.totalProfit]
+      ];
+      const summarySheet = XLSX.utils.aoa_to_sheet(summaryRows);
+      summarySheet['!cols'] = [{ wch: 26 }, { wch: 20 }];
+      XLSX.utils.book_append_sheet(wb, summarySheet, 'Summary');
+
+      // Sheet 2: Monthly breakdown
+      const monthlyRows = monthlyData.map(m => ({
+        Month: m.month,
+        'Sales (Rs.)': m.sales,
+        'Discount (Rs.)': m.discount,
+        'Profit (Rs.)': m.salesProfit,
+        'Expenses (Rs.)': m.expenses,
+        'Net Profit (Rs.)': m.netProfit,
+        'Items Sold': m.itemsSold,
+        Invoices: m.invoiceCount
+      }));
+      monthlyRows.push({
+        Month: 'Total',
+        'Sales (Rs.)': yearlyOverview.totalSales,
+        'Discount (Rs.)': monthlyData.reduce((s, m) => s + m.discount, 0),
+        'Profit (Rs.)': yearlyOverview.totalProfit,
+        'Expenses (Rs.)': yearlyOverview.totalExpenses,
+        'Net Profit (Rs.)': yearlyOverview.totalNetProfit,
+        'Items Sold': monthlyData.reduce((s, m) => s + m.itemsSold, 0),
+        Invoices: monthlyData.reduce((s, m) => s + m.invoiceCount, 0)
+      });
+      const monthlySheet = XLSX.utils.json_to_sheet(monthlyRows);
+      monthlySheet['!cols'] = [
+        { wch: 10 }, { wch: 16 }, { wch: 16 }, { wch: 16 },
+        { wch: 16 }, { wch: 18 }, { wch: 12 }, { wch: 10 }
+      ];
+      XLSX.utils.book_append_sheet(wb, monthlySheet, `Monthly ${selectedYear}`);
+
+      XLSX.writeFile(wb, `Finance_Report_${selectedYear}.xlsx`);
+      toast.success('Excel report downloaded');
+    } catch (err) {
+      console.error('Excel export error:', err);
+      toast.error('Failed to export Excel report');
+    }
+  };
+
+  const handleExportPDF = () => {
+    try {
+      const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' });
+      const pageWidth = doc.internal.pageSize.getWidth();
+
+      doc.setFontSize(18);
+      doc.text(`Finance Report - ${selectedYear}`, 40, 40);
+      doc.setFontSize(10);
+      doc.setTextColor(120);
+      doc.text(`Generated on ${new Date().toLocaleString()}`, pageWidth - 40, 40, { align: 'right' });
+      doc.setTextColor(0);
+
+      // Summary table
+      autoTable(doc, {
+        startY: 60,
+        head: [['Metric', 'Amount']],
+        body: [
+          ['Total Sales', formatMoney(yearlyOverview.totalSales)],
+          ['Total Profit', formatMoney(yearlyOverview.totalProfit)],
+          ['Total Expenses', formatMoney(yearlyOverview.totalExpenses)],
+          ['Net Profit', formatMoney(yearlyOverview.totalNetProfit)]
+        ],
+        theme: 'grid',
+        headStyles: { fillColor: [37, 99, 235] },
+        styles: { fontSize: 10 },
+        tableWidth: 300,
+        margin: { left: 40 }
+      });
+
+      // Inventory table
+      autoTable(doc, {
+        startY: doc.lastAutoTable.finalY + 16,
+        head: [['Inventory Overview', 'Amount']],
+        body: [
+          ['Total Purchase Value', formatMoney(inventoryStats.totalPurchase)],
+          ['Total Selling Value', formatMoney(inventoryStats.totalSelling)],
+          ['Expected Profit', formatMoney(inventoryStats.totalProfit)]
+        ],
+        theme: 'grid',
+        headStyles: { fillColor: [75, 85, 99] },
+        styles: { fontSize: 10 },
+        tableWidth: 300,
+        margin: { left: 40 }
+      });
+
+      // Monthly breakdown table
+      const totalDiscount = monthlyData.reduce((s, m) => s + m.discount, 0);
+      const totalItems = monthlyData.reduce((s, m) => s + m.itemsSold, 0);
+      const totalInvoices = monthlyData.reduce((s, m) => s + m.invoiceCount, 0);
+
+      autoTable(doc, {
+        startY: doc.lastAutoTable.finalY + 20,
+        head: [['Month', 'Sales', 'Discount', 'Profit', 'Expenses', 'Net Profit', 'Items Sold', 'Invoices']],
+        body: monthlyData.map(m => [
+          m.month,
+          formatMoney(m.sales),
+          formatMoney(m.discount),
+          formatMoney(m.salesProfit),
+          formatMoney(m.expenses),
+          formatMoney(m.netProfit),
+          m.itemsSold,
+          m.invoiceCount
+        ]),
+        foot: [[
+          'Total',
+          formatMoney(yearlyOverview.totalSales),
+          formatMoney(totalDiscount),
+          formatMoney(yearlyOverview.totalProfit),
+          formatMoney(yearlyOverview.totalExpenses),
+          formatMoney(yearlyOverview.totalNetProfit),
+          totalItems,
+          totalInvoices
+        ]],
+        theme: 'striped',
+        headStyles: { fillColor: [220, 38, 38] },
+        footStyles: { fillColor: [31, 41, 55], textColor: 255 },
+        styles: { fontSize: 9 },
+        margin: { left: 40, right: 40 }
+      });
+
+      doc.save(`Finance_Report_${selectedYear}.pdf`);
+      toast.success('PDF report downloaded');
+    } catch (err) {
+      console.error('PDF export error:', err);
+      toast.error('Failed to export PDF report');
+    }
+  };
+
   if (loading) {
     return (
       <div className={`min-h-[400px] flex items-center justify-center ${darkMode ? 'bg-gray-900' : 'bg-gray-100'}`}>
@@ -228,6 +395,32 @@ const FinanceCharts = ({ darkMode }) => {
 
   return (
     <div className="space-y-6">
+      {/* Action buttons */}
+      <div className="flex flex-wrap items-center justify-end gap-3">
+        <button
+          onClick={handleRefresh}
+          disabled={refreshing}
+          className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed transition"
+        >
+          <FiRefreshCw className={refreshing ? 'animate-spin' : ''} />
+          Refresh
+        </button>
+        <button
+          onClick={handleExportExcel}
+          className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-green-300 bg-green-900/60 border border-green-700 hover:bg-green-800/70 transition"
+        >
+          <FiFileText />
+          Excel
+        </button>
+        <button
+          onClick={handleExportPDF}
+          className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-red-300 bg-red-900/60 border border-red-700 hover:bg-red-800/70 transition"
+        >
+          <FiDownload />
+          PDF
+        </button>
+      </div>
+
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
         {/* 1. Total Sales */}
         <div className={`p-4 rounded-xl ${darkMode ? 'bg-gray-800' : 'bg-white'} shadow-lg border ${darkMode ? 'border-gray-700' : 'border-gray-200'}`}>
@@ -236,7 +429,7 @@ const FinanceCharts = ({ darkMode }) => {
           <p className="text-xs text-gray-400">Year {selectedYear}</p>
         </div>
 
-        {/* 2. Total Profit (sales ka profit, expenses se pehle) */}
+        {/* 2. Total Profit (sales profit, before expenses) */}
         <div className={`p-4 rounded-xl ${darkMode ? 'bg-gray-800' : 'bg-white'} shadow-lg border ${darkMode ? 'border-gray-700' : 'border-gray-200'}`}>
           <p className="text-sm text-gray-500">Total Profit</p>
           <p className={`text-2xl font-bold ${yearlyOverview.totalProfit >= 0 ? 'text-green-500' : 'text-red-500'}`}>
@@ -280,7 +473,7 @@ const FinanceCharts = ({ darkMode }) => {
         <div className="p-4 bg-red-50 dark:bg-red-900/20 rounded-lg text-center border border-red-200 dark:border-red-800">
           <p className="text-sm text-red-700 dark:text-red-400">⚠️ {error}</p>
           <button
-            onClick={loadChartData}
+            onClick={() => loadChartData()}
             className="mt-2 px-4 py-1 bg-red-500 text-white rounded-lg text-sm hover:bg-red-600 transition"
           >
             Retry

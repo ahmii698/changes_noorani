@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useCallback, useMemo, lazy, Suspense } from 'react';
-import { FiCalendar, FiTrendingUp, FiDollarSign, FiPackage, FiBarChart2, FiChevronDown, FiChevronUp, FiDownload, FiFileText, FiLoader, FiClock, FiTrendingDown, FiChevronLeft, FiChevronRight, FiPercent, FiGift } from 'react-icons/fi';
+import { FiCalendar, FiTrendingUp, FiDollarSign, FiPackage, FiBarChart2, FiChevronDown, FiChevronUp, FiDownload, FiFileText, FiLoader, FiClock, FiTrendingDown, FiChevronLeft, FiChevronRight, FiPercent, FiGift, FiRefreshCw } from 'react-icons/fi';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
-import 'jspdf-autotable';
+import autoTable from 'jspdf-autotable';
 import toast from 'react-hot-toast';
 import api from '../../services/api';
 
@@ -16,8 +16,8 @@ const parseListResponse = (res) => {
   return [];
 };
 
-// Dashboard ki tarah: normal expenses ke saath sirf Salary count hoti hai.
-// Inventory (Cash) aur Vendor Payment expenses mein NAHI ginte.
+// Same as the Dashboard: only Salary is counted together with normal expenses.
+// Inventory (Cash) and Vendor Payment are NOT counted as expenses.
 const fetchSalaryExpenses = async (signal) => {
   const employeesRes = await api.get('/employees', { signal }).catch(() => null);
 
@@ -468,6 +468,8 @@ const FinanceOverview = ({ darkMode }) => {
     }
   }, []);
 
+  /* Loads all data for this page. Also used by the Refresh button.
+     Returns true on success, false on failure. */
   const loadAllData = useCallback(async () => {
     const abortController = new AbortController();
     setLoading(true);
@@ -481,7 +483,7 @@ const FinanceOverview = ({ darkMode }) => {
         fetchSalaryExpenses(abortController.signal)
       ]);
 
-      // Dashboard ki tarah: sirf normal expenses + salary
+      // Same as the Dashboard: only normal expenses + salary
       const expensesList = [...regularExpenses, ...salaryExpenses];
 
       const productsMap = new Map();
@@ -495,7 +497,7 @@ const FinanceOverview = ({ darkMode }) => {
       setFilteredStats({
         expenses: filtered.expenseTotal,
         expenseCount: filtered.expenseCount,
-        // Sales ka profit (discount pehle hi minus ho chuka hai)
+        // Sales profit (discount is already subtracted)
         salesProfit: filtered.sales.profit,
         // Net profit = sales profit - expenses
         profit: filtered.sales.profit - filtered.expenseTotal,
@@ -583,7 +585,7 @@ const FinanceOverview = ({ darkMode }) => {
         weekExpenseCount: weekExpCount,
         monthExpenses: monthExp,
         monthExpenseCount: monthExpCount,
-        // Net profit = sales profit (discount ke baad) - expenses
+        // Net profit = sales profit (after discount) - expenses
         todayProfit: todaySummary.profit - todayExp,
         weekProfit: weekSummary.profit - weekExp,
         monthProfit: monthSummary.profit - monthExp,
@@ -603,23 +605,26 @@ const FinanceOverview = ({ darkMode }) => {
       setSelectedYearData({ ...yearlySummary, count: yearInvoices.length, details: yearlyDetails });
       setCurrentPage(1);
 
+      return true;
     } catch (err) {
       if (err.name !== 'AbortError') {
         console.error('Error loading data:', err);
         setError('Failed to load finance data. Please check your connection.');
       }
+      return false;
     } finally {
       setLoading(false);
     }
-
-    return () => abortController.abort();
   }, [selectedYear, fetchProducts, fetchExpenses, fetchInvoices, getStartOfWeek, getStartOfMonth, calculateFilteredData, timeFilter, customDate]);
 
   useEffect(() => {
-    const cleanup = loadAllData();
-    return () => {
-      if (cleanup && typeof cleanup === 'function') cleanup();
-    };
+    loadAllData();
+  }, [loadAllData]);
+
+  /* Refresh only this page's data (no full browser reload) */
+  const handleRefresh = useCallback(async () => {
+    const ok = await loadAllData();
+    if (ok) toast.success('Data refreshed');
   }, [loadAllData]);
 
   const flattenedItems = useMemo(() => {
@@ -657,6 +662,184 @@ const FinanceOverview = ({ darkMode }) => {
     }
   }, [currentPage, totalPages]);
 
+  /* ---------- Full report export (follows the selected filter) ---------- */
+  const reportFileName = useCallback(() => {
+    const label = getFilterLabel().replace(/[^a-zA-Z0-9-]+/g, '_');
+    return `Finance_Report_${label}`;
+  }, [getFilterLabel]);
+
+  const exportReportExcel = useCallback(() => {
+    if (filteredSalesData.details.length === 0 && filteredExpenseData.length === 0) {
+      toast.error('No data available for the selected filter');
+      return;
+    }
+
+    /* Sheet 1: Summary */
+    const summarySheet = XLSX.utils.aoa_to_sheet([
+      ['Finance Report'],
+      ['Period', getFilterLabel()],
+      ['Generated on', new Date().toLocaleString('en-GB')],
+      [],
+      ['Revenue', filteredSalesData.total],
+      ['Profit (after discount)', filteredStats.salesProfit],
+      ['Expenses', filteredStats.expenses],
+      ['Discount', filteredSalesData.discount],
+      ['Net Profit', filteredStats.profit],
+      ['Invoices', filteredSalesData.count],
+      ['Items Sold', filteredSalesData.items]
+    ]);
+    summarySheet['!cols'] = [{ wch: 26 }, { wch: 24 }];
+
+    /* Sheet 2: Sales */
+    const salesRows = [];
+    filteredSalesData.details.forEach(inv => {
+      inv.items.forEach(item => {
+        salesRows.push({
+          'Invoice #': inv.invoiceNo,
+          'Customer': inv.customer,
+          'Date': new Date(inv.date).toLocaleDateString(),
+          'Item': item.service_name,
+          'Type': item.isProduct ? 'Product' : 'Service',
+          'Quantity': Number(item.quantity) || 0,
+          'Purchase Price': item.purchasePrice || 0,
+          'Selling Price': Number(item.price) || 0,
+          'Unit Profit': item.unitProfit || 0,
+          'Total Profit': (item.unitProfit || 0) * (Number(item.quantity) || 0),
+          'Invoice Discount': inv.discount || 0
+        });
+      });
+    });
+    const salesSheet = XLSX.utils.json_to_sheet(salesRows);
+    salesSheet['!cols'] = [
+      { wch: 14 }, { wch: 22 }, { wch: 14 }, { wch: 26 }, { wch: 10 },
+      { wch: 10 }, { wch: 16 }, { wch: 14 }, { wch: 12 }, { wch: 14 }, { wch: 16 }
+    ];
+
+    /* Sheet 3: Expenses */
+    const expenseRows = filteredExpenseData.map(exp => ({
+      'Description': exp.description || '-',
+      'Category': exp.category || 'General',
+      'Date': new Date(exp.date).toLocaleDateString(),
+      'Amount': exp.amount || 0
+    }));
+    const expenseSheet = XLSX.utils.json_to_sheet(expenseRows);
+    expenseSheet['!cols'] = [{ wch: 34 }, { wch: 16 }, { wch: 14 }, { wch: 14 }];
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, summarySheet, 'Summary');
+    XLSX.utils.book_append_sheet(wb, salesSheet, 'Sales');
+    XLSX.utils.book_append_sheet(wb, expenseSheet, 'Expenses');
+    XLSX.writeFile(wb, `${reportFileName()}.xlsx`);
+    toast.success('Excel report downloaded');
+  }, [filteredSalesData, filteredExpenseData, filteredStats, getFilterLabel, reportFileName]);
+
+  const exportReportPDF = useCallback(() => {
+    if (filteredSalesData.details.length === 0 && filteredExpenseData.length === 0) {
+      toast.error('No data available for the selected filter');
+      return;
+    }
+
+    const rs = (n) => `Rs. ${(Number(n) || 0).toLocaleString()}`;
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' });
+
+    doc.setFontSize(16);
+    doc.text('Finance Report', 40, 36);
+    doc.setFontSize(10);
+    doc.text(`Period: ${getFilterLabel()}`, 40, 54);
+    doc.text(`Generated on ${new Date().toLocaleString('en-GB')}`, 40, 68);
+
+    /* Summary */
+    autoTable(doc, {
+      startY: 82,
+      head: [['Revenue', 'Profit (after discount)', 'Expenses', 'Discount', 'Net Profit', 'Invoices', 'Items Sold']],
+      body: [[
+        rs(filteredSalesData.total),
+        rs(filteredStats.salesProfit),
+        rs(filteredStats.expenses),
+        rs(filteredSalesData.discount),
+        rs(filteredStats.profit),
+        filteredSalesData.count,
+        filteredSalesData.items
+      ]],
+      theme: 'grid',
+      styles: { fontSize: 9, cellPadding: 5 },
+      headStyles: { fillColor: [15, 23, 42], textColor: 255 },
+      margin: { left: 40, right: 40 }
+    });
+
+    /* Sales */
+    const salesBody = [];
+    filteredSalesData.details.forEach(inv => {
+      inv.items.forEach(item => {
+        salesBody.push([
+          inv.invoiceNo,
+          inv.customer,
+          new Date(inv.date).toLocaleDateString(),
+          item.service_name,
+          item.isProduct ? 'Product' : 'Service',
+          item.quantity,
+          item.purchasePrice > 0 ? rs(item.purchasePrice) : '-',
+          rs(item.price),
+          rs(item.unitProfit),
+          rs((item.unitProfit || 0) * (Number(item.quantity) || 0))
+        ]);
+      });
+    });
+
+    if (salesBody.length > 0) {
+      const salesStart = (doc.lastAutoTable?.finalY || 120) + 24;
+      doc.setFontSize(12);
+      doc.text('Sales', 40, salesStart);
+      autoTable(doc, {
+        startY: salesStart + 8,
+        head: [['Invoice', 'Customer', 'Date', 'Item', 'Type', 'Qty', 'Purchase', 'Sell', 'Unit Profit', 'Total Profit']],
+        body: salesBody,
+        foot: [[
+          { content: 'Total Profit (after discount)', colSpan: 9, styles: { halign: 'right' } },
+          rs(filteredSalesData.profit)
+        ]],
+        showFoot: 'lastPage',
+        theme: 'grid',
+        styles: { fontSize: 8, cellPadding: 4 },
+        headStyles: { fillColor: [15, 23, 42], textColor: 255 },
+        footStyles: { fillColor: [226, 232, 240], textColor: 20, fontStyle: 'bold' },
+        margin: { left: 40, right: 40 }
+      });
+    }
+
+    /* Expenses */
+    if (filteredExpenseData.length > 0) {
+      const expStart = (doc.lastAutoTable?.finalY || 120) + 24;
+      doc.setFontSize(12);
+      doc.text('Expenses', 40, expStart);
+      autoTable(doc, {
+        startY: expStart + 8,
+        head: [['Description', 'Category', 'Date', 'Amount']],
+        body: filteredExpenseData.map(exp => [
+          exp.description || '-',
+          exp.category || 'General',
+          new Date(exp.date).toLocaleDateString(),
+          rs(exp.amount)
+        ]),
+        foot: [[
+          { content: 'Total Expenses', colSpan: 3, styles: { halign: 'right' } },
+          rs(filteredStats.expenses)
+        ]],
+        showFoot: 'lastPage',
+        theme: 'grid',
+        styles: { fontSize: 8, cellPadding: 4 },
+        headStyles: { fillColor: [15, 23, 42], textColor: 255 },
+        footStyles: { fillColor: [226, 232, 240], textColor: 20, fontStyle: 'bold' },
+        columnStyles: { 3: { halign: 'right' } },
+        margin: { left: 40, right: 40 }
+      });
+    }
+
+    doc.save(`${reportFileName()}.pdf`);
+    toast.success('PDF report downloaded');
+  }, [filteredSalesData, filteredExpenseData, filteredStats, getFilterLabel, reportFileName]);
+
+  /* ---------- Yearly sales report export ---------- */
   const exportToExcel = useCallback(() => {
     if (selectedYearData.details.length === 0) {
       toast.error('No data available for the selected year');
@@ -715,7 +898,7 @@ const FinanceOverview = ({ darkMode }) => {
       });
     });
 
-    doc.autoTable({
+    autoTable(doc, {
       head: [['Invoice', 'Customer', 'Date', 'Item', 'Type', 'Qty', 'Purchase', 'Sell', 'Unit Profit', 'Total Profit']],
       body: tableData,
       startY: 20,
@@ -737,6 +920,37 @@ const FinanceOverview = ({ darkMode }) => {
 
   return (
     <div className={`space-y-4 ${darkMode ? 'text-white' : 'text-gray-900'}`}>
+      {/* Action buttons: Refresh / Excel / PDF */}
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        <button
+          type="button"
+          onClick={handleRefresh}
+          title="Refresh this page"
+          className="flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-bold hover:bg-blue-500 transition"
+        >
+          <FiRefreshCw />
+          Refresh
+        </button>
+        <button
+          type="button"
+          onClick={exportReportExcel}
+          title="Download Excel report for the selected filter"
+          className="flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-600/80 text-white text-sm font-bold hover:bg-emerald-500 transition"
+        >
+          <FiFileText />
+          Excel
+        </button>
+        <button
+          type="button"
+          onClick={exportReportPDF}
+          title="Download PDF report for the selected filter"
+          className="flex items-center gap-2 px-4 py-2 rounded-lg bg-red-600/80 text-white text-sm font-bold hover:bg-red-500 transition"
+        >
+          <FiDownload />
+          PDF
+        </button>
+      </div>
+
       <div className={`flex flex-wrap items-center gap-1.5 p-3 rounded-xl border ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200 shadow-sm'}`}>
         <span className={`text-xs font-medium mr-1 ${darkMode ? 'text-gray-400' : 'text-gray-700'}`}>Filter:</span>
         {[
@@ -821,7 +1035,7 @@ const FinanceOverview = ({ darkMode }) => {
               <p className={`text-xs ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>{filteredSalesData.items} items sold</p>
             </div>
 
-            {/* 2. Profit (sales ka profit, expenses se pehle) */}
+            {/* 2. Profit (sales profit, before expenses) */}
             <div className={`rounded-xl p-4 border ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200 shadow-sm'}`}>
               <div className="flex items-center gap-2 mb-1">
                 <div className="p-1.5 rounded-full bg-emerald-500/15">

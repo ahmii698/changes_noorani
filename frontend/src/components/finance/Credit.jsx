@@ -1,34 +1,37 @@
 // src/components/finance/Credit.jsx
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { 
-  FiPlus, FiSearch, FiEye, FiEdit, FiX, 
-  FiPackage, FiFileText, FiDollarSign, FiClock,
+import {
+  FiPlus, FiSearch, FiEye, FiEdit, FiX,
+  FiDollarSign,
   FiChevronLeft, FiChevronRight, FiInbox,
-  FiList, FiCalendar, FiCheckCircle, FiAlertCircle,
+  FiList, FiCheckCircle,
   FiTrash2, FiLoader, FiShoppingCart, FiBox, FiUser,
-  FiPlusCircle, FiCreditCard
+  FiCreditCard, FiRefreshCw, FiFileText, FiDownload
 } from 'react-icons/fi';
 import toast from 'react-hot-toast';
+import * as XLSX from 'xlsx';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import api from '../../services/api';
 import './Credit.css';
 
-// ✅ Helper function to format date in Pakistan Time (UTC+5)
+// Format a date in Pakistan time (Asia/Karachi)
 const formatPakistanTime = (dateString) => {
   if (!dateString) return { date: 'N/A', time: '' };
-  
+
   try {
     const date = new Date(dateString);
     if (isNaN(date.getTime())) return { date: 'N/A', time: '' };
-    
+
     const pakistanTime = new Date(date.getTime() + (5 * 60 * 60 * 1000));
-    
+
     const formattedDate = pakistanTime.toLocaleDateString('en-GB', {
       day: '2-digit',
       month: '2-digit',
       year: 'numeric',
       timeZone: 'Asia/Karachi'
     });
-    
+
     const formattedTime = pakistanTime.toLocaleTimeString('en-US', {
       hour: '2-digit',
       minute: '2-digit',
@@ -36,13 +39,15 @@ const formatPakistanTime = (dateString) => {
       hour12: true,
       timeZone: 'Asia/Karachi'
     });
-    
+
     return { date: formattedDate, time: formattedTime };
   } catch (e) {
     console.error('Date parse error:', e);
     return { date: 'N/A', time: '' };
   }
 };
+
+const formatMoney = (value) => `Rs. ${(Number(value) || 0).toLocaleString()}`;
 
 const Credit = ({ darkMode }) => {
   const [searchTerm, setSearchTerm] = useState('');
@@ -55,6 +60,7 @@ const Credit = ({ darkMode }) => {
   const [isPayModalOpen, setIsPayModalOpen] = useState(false);
   const [vendors, setVendors] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [statistics, setStatistics] = useState({
     totalVendors: 0,
     totalBalance: 0,
@@ -72,24 +78,24 @@ const Credit = ({ darkMode }) => {
 
   const [editPayAmount, setEditPayAmount] = useState('');
 
-  // ✅ Loading states for buttons to prevent double clicks
+  // Loading states to prevent double clicks
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isPaying, setIsPaying] = useState(false);
-  
-  // ✅ Refs for button disable
+
+  // Refs for disabling submit buttons
   const editSubmitRef = useRef(null);
   const paySubmitRef = useRef(null);
 
-  // 🔒 Style for locked (read-only) fields in Edit Vendor modal
+  // Style for locked (read-only) fields in the Edit Vendor modal
   const lockedInputStyle = {
     backgroundColor: darkMode ? '#374151' : '#f3f4f6',
     cursor: 'not-allowed'
   };
 
-  // ✅ FIXED: Group vendors by name with proper payments merging & SORTING (NEWEST FIRST)
+  // Group vendors by name, merge payments, and sort newest first
   const groupVendorsByName = (vendorsList) => {
     const grouped = {};
-    
+
     vendorsList.forEach(vendor => {
       const key = vendor.vendor_name?.toLowerCase() || 'unknown';
       if (!grouped[key]) {
@@ -109,12 +115,12 @@ const Credit = ({ darkMode }) => {
           productsList: []
         };
       }
-      
+
       grouped[key].totalAmount += parseFloat(vendor.total_amount) || 0;
       grouped[key].paidAmount += parseFloat(vendor.paid_amount) || 0;
       grouped[key].balanceAmount += parseFloat(vendor.balance_amount) || 0;
       grouped[key].stockQuantity += parseInt(vendor.stock_quantity) || 0;
-      
+
       grouped[key].records.push({
         id: vendor.id,
         invoiceNumber: vendor.invoice_number,
@@ -124,7 +130,7 @@ const Credit = ({ darkMode }) => {
         createdAt: vendor.created_at,
         products: vendor.products
       });
-      
+
       if (vendor.payments && Array.isArray(vendor.payments)) {
         vendor.payments.forEach(payment => {
           const exists = grouped[key].payments.some(p => p.id === payment.id);
@@ -139,39 +145,34 @@ const Credit = ({ darkMode }) => {
           }
         });
       }
-      
+
       if (vendor.productsList) {
         grouped[key].productsList = [...grouped[key].productsList, ...vendor.productsList];
       }
     });
-    
-    // ✅ CRITICAL FIX: Sort vendors by their latest record date (NEWEST FIRST)
+
+    // Sort vendors by their latest record date (newest first)
     return Object.values(grouped).sort((a, b) => {
       const getLatestDate = (vendor) => {
         if (!vendor.records || vendor.records.length === 0) return new Date(0);
-        const latest = vendor.records.reduce((latest, r) => 
+        const latest = vendor.records.reduce((latest, r) =>
           new Date(r.createdAt) > new Date(latest.createdAt) ? r : latest
         );
         return new Date(latest.createdAt);
       };
-      
-      const dateA = getLatestDate(a);
-      const dateB = getLatestDate(b);
-      
-      return dateB - dateA;
+
+      return getLatestDate(b) - getLatestDate(a);
     });
   };
 
   const fetchVendors = useCallback(async () => {
-    setLoading(true);
     try {
       const response = await api.get('/credit/vendors');
-      console.log('📦 API Response:', response.data);
-      
+
       if (response.data.success) {
         const rawData = Array.isArray(response.data.data) ? response.data.data : [];
         const groupedVendors = groupVendorsByName(rawData);
-        
+
         const mappedVendors = groupedVendors.map(vendor => ({
           id: vendor.id,
           name: vendor.name,
@@ -187,30 +188,30 @@ const Credit = ({ darkMode }) => {
           productsList: vendor.productsList || [],
           records: vendor.records || [],
         }));
-        
+
         setVendors(mappedVendors);
-        
+
         const totalBalance = mappedVendors.reduce((sum, v) => sum + v.balanceAmount, 0);
         const totalAmount = mappedVendors.reduce((sum, v) => sum + v.totalAmount, 0);
         const totalPaid = mappedVendors.reduce((sum, v) => sum + v.paidAmount, 0);
-        
+
         setStatistics({
           totalVendors: mappedVendors.length,
-          totalBalance: totalBalance,
-          totalAmount: totalAmount,
-          totalPaid: totalPaid,
+          totalBalance,
+          totalAmount,
+          totalPaid,
           pending: mappedVendors.filter(v => v.balanceAmount > 0 && v.paidAmount === 0).length,
           partial: mappedVendors.filter(v => v.balanceAmount > 0 && v.paidAmount > 0).length,
           fullyPaid: mappedVendors.filter(v => v.balanceAmount === 0).length,
         });
-      } else {
-        toast.error(response.data.message || 'Failed to load vendors');
+        return true;
       }
+      toast.error(response.data.message || 'Failed to load vendors');
+      return false;
     } catch (error) {
-      console.error('❌ Error fetching vendors:', error);
+      console.error('Error fetching vendors:', error);
       toast.error(error.response?.data?.message || 'Failed to load vendors');
-    } finally {
-      setLoading(false);
+      return false;
     }
   }, []);
 
@@ -231,10 +232,25 @@ const Credit = ({ darkMode }) => {
     }
   }, []);
 
+  // Initial load (full-page loader)
   useEffect(() => {
-    fetchVendors();
-    fetchAllProducts();
+    const init = async () => {
+      setLoading(true);
+      await Promise.all([fetchVendors(), fetchAllProducts()]);
+      setLoading(false);
+    };
+    init();
   }, [fetchVendors, fetchAllProducts]);
+
+  // Refresh only this page's data (no browser reload)
+  const handleRefresh = async () => {
+    if (refreshing) return;
+    setRefreshing(true);
+    const ok = await fetchVendors();
+    await fetchAllProducts();
+    setRefreshing(false);
+    if (ok) toast.success('Data refreshed');
+  };
 
   const filteredVendors = vendors.filter(vendor =>
     vendor?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -246,6 +262,207 @@ const Credit = ({ darkMode }) => {
   const indexOfLastItem = currentPage * itemsPerPage;
   const indexOfFirstItem = indexOfLastItem - itemsPerPage;
   const currentVendors = filteredVendors.slice(indexOfFirstItem, indexOfLastItem);
+
+  // Export helpers (use the currently filtered vendors)
+  const handleExportExcel = () => {
+    if (filteredVendors.length === 0) {
+      toast.error('No data to export');
+      return;
+    }
+
+    try {
+      const wb = XLSX.utils.book_new();
+
+      const sumAmount = filteredVendors.reduce((s, v) => s + (v.totalAmount || 0), 0);
+      const sumPaid = filteredVendors.reduce((s, v) => s + (v.paidAmount || 0), 0);
+      const sumBalance = filteredVendors.reduce((s, v) => s + (v.balanceAmount || 0), 0);
+
+      // Sheet 1: Summary
+      const summarySheet = XLSX.utils.aoa_to_sheet([
+        ['Credit Report'],
+        ['Generated On', new Date().toLocaleString()],
+        [],
+        ['Metric', 'Value'],
+        ['Total Vendors', filteredVendors.length],
+        ['Total Amount (Rs.)', sumAmount],
+        ['Total Paid (Rs.)', sumPaid],
+        ['Total Balance (Rs.)', sumBalance]
+      ]);
+      summarySheet['!cols'] = [{ wch: 24 }, { wch: 22 }];
+      XLSX.utils.book_append_sheet(wb, summarySheet, 'Summary');
+
+      // Sheet 2: Vendors
+      const vendorRows = filteredVendors.map((v, i) => ({
+        '#': i + 1,
+        Vendor: v.name || 'N/A',
+        Products: v.products || 'N/A',
+        'Total Orders': v.records?.length || 0,
+        'Total Amount (Rs.)': v.totalAmount || 0,
+        'Total Paid (Rs.)': v.paidAmount || 0,
+        'Total Balance (Rs.)': v.balanceAmount || 0,
+        Status: (v.balanceAmount || 0) === 0 ? 'Paid' : (v.paidAmount || 0) > 0 ? 'Partial' : 'Pending'
+      }));
+      vendorRows.push({
+        '#': '',
+        Vendor: 'Total',
+        Products: '',
+        'Total Orders': filteredVendors.reduce((s, v) => s + (v.records?.length || 0), 0),
+        'Total Amount (Rs.)': sumAmount,
+        'Total Paid (Rs.)': sumPaid,
+        'Total Balance (Rs.)': sumBalance,
+        Status: ''
+      });
+      const vendorSheet = XLSX.utils.json_to_sheet(vendorRows);
+      vendorSheet['!cols'] = [
+        { wch: 5 }, { wch: 24 }, { wch: 36 }, { wch: 14 },
+        { wch: 20 }, { wch: 18 }, { wch: 20 }, { wch: 12 }
+      ];
+      XLSX.utils.book_append_sheet(wb, vendorSheet, 'Vendors');
+
+      // Sheet 3: Orders
+      const orderRows = filteredVendors.flatMap(v =>
+        (v.records || []).map(r => ({
+          Vendor: v.name || 'N/A',
+          'Invoice #': r.invoiceNumber || 'N/A',
+          Date: r.createdAt ? formatPakistanTime(r.createdAt).date : 'N/A',
+          Products: r.products || 'N/A',
+          'Total (Rs.)': r.totalAmount,
+          'Paid (Rs.)': r.paidAmount,
+          'Balance (Rs.)': r.balanceAmount
+        }))
+      );
+      const orderSheet = XLSX.utils.json_to_sheet(orderRows);
+      orderSheet['!cols'] = [
+        { wch: 24 }, { wch: 16 }, { wch: 14 }, { wch: 36 },
+        { wch: 14 }, { wch: 14 }, { wch: 14 }
+      ];
+      XLSX.utils.book_append_sheet(wb, orderSheet, 'Orders');
+
+      // Sheet 4: Payments
+      const paymentRows = filteredVendors.flatMap(v =>
+        (v.payments || []).map(p => {
+          const { date, time } = formatPakistanTime(p.date);
+          return {
+            Vendor: v.name || 'N/A',
+            Date: date,
+            Time: time,
+            'Amount (Rs.)': p.amount,
+            Note: p.note || '-',
+            'Created By': p.createdBy || 'System'
+          };
+        })
+      );
+      const paymentSheet = XLSX.utils.json_to_sheet(paymentRows);
+      paymentSheet['!cols'] = [
+        { wch: 24 }, { wch: 14 }, { wch: 14 }, { wch: 16 }, { wch: 30 }, { wch: 16 }
+      ];
+      XLSX.utils.book_append_sheet(wb, paymentSheet, 'Payments');
+
+      XLSX.writeFile(wb, `Credit_Report_${new Date().toISOString().slice(0, 10)}.xlsx`);
+      toast.success('Excel report downloaded');
+    } catch (err) {
+      console.error('Excel export error:', err);
+      toast.error('Failed to export Excel report');
+    }
+  };
+
+  const handleExportPDF = () => {
+    if (filteredVendors.length === 0) {
+      toast.error('No data to export');
+      return;
+    }
+
+    try {
+      const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' });
+      const pageWidth = doc.internal.pageSize.getWidth();
+
+      const sumAmount = filteredVendors.reduce((s, v) => s + (v.totalAmount || 0), 0);
+      const sumPaid = filteredVendors.reduce((s, v) => s + (v.paidAmount || 0), 0);
+      const sumBalance = filteredVendors.reduce((s, v) => s + (v.balanceAmount || 0), 0);
+
+      doc.setFontSize(18);
+      doc.text('Credit Report', 40, 40);
+      doc.setFontSize(10);
+      doc.setTextColor(120);
+      doc.text(`Generated on ${new Date().toLocaleString()}`, pageWidth - 40, 40, { align: 'right' });
+      doc.setTextColor(0);
+
+      // Summary
+      autoTable(doc, {
+        startY: 60,
+        head: [['Metric', 'Value']],
+        body: [
+          ['Total Vendors', filteredVendors.length],
+          ['Total Amount', formatMoney(sumAmount)],
+          ['Total Paid', formatMoney(sumPaid)],
+          ['Total Balance', formatMoney(sumBalance)]
+        ],
+        theme: 'grid',
+        headStyles: { fillColor: [245, 158, 11] },
+        styles: { fontSize: 10 },
+        tableWidth: 300,
+        margin: { left: 40 }
+      });
+
+      // Vendors table
+      autoTable(doc, {
+        startY: doc.lastAutoTable.finalY + 20,
+        head: [['#', 'Vendor', 'Products', 'Orders', 'Total Amount', 'Total Paid', 'Total Balance', 'Status']],
+        body: filteredVendors.map((v, i) => [
+          i + 1,
+          v.name || 'N/A',
+          v.products || 'N/A',
+          v.records?.length || 0,
+          formatMoney(v.totalAmount),
+          formatMoney(v.paidAmount),
+          formatMoney(v.balanceAmount),
+          (v.balanceAmount || 0) === 0 ? 'Paid' : (v.paidAmount || 0) > 0 ? 'Partial' : 'Pending'
+        ]),
+        foot: [[
+          '', 'Total', '',
+          filteredVendors.reduce((s, v) => s + (v.records?.length || 0), 0),
+          formatMoney(sumAmount),
+          formatMoney(sumPaid),
+          formatMoney(sumBalance),
+          ''
+        ]],
+        theme: 'striped',
+        headStyles: { fillColor: [217, 119, 6] },
+        footStyles: { fillColor: [31, 41, 55], textColor: 255 },
+        styles: { fontSize: 9, cellWidth: 'wrap' },
+        columnStyles: { 2: { cellWidth: 200 } },
+        margin: { left: 40, right: 40 }
+      });
+
+      // Payments table
+      const payments = filteredVendors.flatMap(v =>
+        (v.payments || []).map(p => ({ vendor: v.name || 'N/A', ...p }))
+      );
+      if (payments.length > 0) {
+        doc.addPage();
+        doc.setFontSize(14);
+        doc.text('Payment History', 40, 40);
+        autoTable(doc, {
+          startY: 55,
+          head: [['Vendor', 'Date', 'Time', 'Amount', 'Note', 'Created By']],
+          body: payments.map(p => {
+            const { date, time } = formatPakistanTime(p.date);
+            return [p.vendor, date, time, formatMoney(p.amount), p.note || '-', p.createdBy || 'System'];
+          }),
+          theme: 'striped',
+          headStyles: { fillColor: [5, 150, 105] },
+          styles: { fontSize: 9 },
+          margin: { left: 40, right: 40 }
+        });
+      }
+
+      doc.save(`Credit_Report_${new Date().toISOString().slice(0, 10)}.pdf`);
+      toast.success('PDF report downloaded');
+    } catch (err) {
+      console.error('PDF export error:', err);
+      toast.error('Failed to export PDF report');
+    }
+  };
 
   const handleSearch = (e) => {
     setSearchTerm(e.target.value);
@@ -292,22 +509,22 @@ const Credit = ({ darkMode }) => {
     setIsPaying(false);
   };
 
-  // ✅ Add product to selection with DUPLICATE CHECK
+  // Add product to selection with duplicate check
   const handleAddProductToSelection = (product) => {
     const existingById = selectedProducts.find(p => p.product_id === product.id);
     if (existingById) {
       toast.error('Product already added to this vendor!');
       return;
     }
-    
-    const existingByName = selectedProducts.find(p => 
+
+    const existingByName = selectedProducts.find(p =>
       p.product_name?.toLowerCase().trim() === product.name?.toLowerCase().trim()
     );
     if (existingByName) {
       toast.error(`"${product.name}" is already added to this vendor!`);
       return;
     }
-    
+
     setSelectedProducts([
       ...selectedProducts,
       {
@@ -342,7 +559,7 @@ const Credit = ({ darkMode }) => {
     setSelectedProducts(updated);
   };
 
-  // ✅ Filter products - only show products NOT already selected
+  // Only show products that are not already selected
   const filteredProducts = allProducts.filter(p =>
     p.name?.toLowerCase().includes(productSearch.toLowerCase()) &&
     !selectedProducts.find(sp => sp.product_id === p.id)
@@ -351,10 +568,10 @@ const Credit = ({ darkMode }) => {
   const handleSubmitVendor = async (e) => {
     e.preventDefault();
     const formData = new FormData(e.target);
-    
+
     const totalAmount = selectedProducts.reduce((sum, p) => sum + (p.purchase_price * p.quantity), 0);
     const paidAmount = parseFloat(formData.get('paidAmount')) || 0;
-    
+
     const vendorData = {
       vendor_name: formData.get('name'),
       products: selectedProducts.map(p => p.product_name).join(', '),
@@ -389,25 +606,25 @@ const Credit = ({ darkMode }) => {
     }
   };
 
-  // ✅ Edit submit with DOUBLE CLICK PROTECTION
+  // Edit submit with double click protection
   const handleEditSubmit = async (e) => {
     e.preventDefault();
-    
+
     if (isSubmitting) {
-      toast.warning('Please wait, payment is being processed...');
+      toast.error('Please wait, payment is being processed...');
       return;
     }
-    
+
     const formData = new FormData(e.target);
     const newPaymentAmount = parseFloat(formData.get('newPayment')) || 0;
     const currentPaidAmount = selectedVendor?.paidAmount || 0;
     const updatedPaidAmount = currentPaidAmount + newPaymentAmount;
-    
+
     if (newPaymentAmount > selectedVendor?.balanceAmount) {
       toast.error('Payment amount cannot exceed balance amount!');
       return;
     }
-    
+
     const vendorData = {
       vendor_name: formData.get('name'),
       products: formData.get('products'),
@@ -428,16 +645,16 @@ const Credit = ({ darkMode }) => {
       const response = await api.put(`/credit/vendors/${selectedVendor.id}`, vendorData);
       if (response.data.success) {
         if (newPaymentAmount > 0) {
-          toast.success(`✅ Payment of Rs. ${newPaymentAmount} recorded successfully!`);
+          toast.success(`Payment of Rs. ${newPaymentAmount} recorded successfully!`);
         } else {
-          toast.success('✅ Vendor updated successfully!');
+          toast.success('Vendor updated successfully!');
         }
         await fetchVendors();
         setIsModalOpen(false);
         setEditPayAmount('');
       }
     } catch (error) {
-      console.error('❌ Error updating vendor:', error);
+      console.error('Error updating vendor:', error);
       toast.error(error.response?.data?.message || 'Failed to update vendor');
     } finally {
       setIsSubmitting(false);
@@ -447,29 +664,29 @@ const Credit = ({ darkMode }) => {
     }
   };
 
-  // ✅ Payment submit with DOUBLE CLICK PROTECTION
+  // Payment submit with double click protection
   const handlePaymentSubmit = async (e) => {
     e.preventDefault();
-    
+
     if (isPaying) {
-      toast.warning('Please wait, payment is being processed...');
+      toast.error('Please wait, payment is being processed...');
       return;
     }
-    
+
     const formData = new FormData(e.target);
     const paymentAmount = parseFloat(formData.get('paymentAmount'));
     const paymentNote = formData.get('paymentNote') || 'Payment made';
-    
+
     if (!paymentAmount || paymentAmount <= 0) {
       toast.error('Please enter a valid payment amount');
       return;
     }
-    
+
     if (paymentAmount > selectedVendor.balanceAmount) {
       toast.error(`Payment amount cannot exceed balance amount: Rs. ${selectedVendor.balanceAmount}`);
       return;
     }
-    
+
     const paymentData = {
       vendor_id: selectedVendor.id,
       amount: paymentAmount,
@@ -491,7 +708,7 @@ const Credit = ({ darkMode }) => {
         toast.error(response.data.message || 'Failed to record payment');
       }
     } catch (error) {
-      console.error('❌ Error recording payment:', error);
+      console.error('Error recording payment:', error);
       toast.error(error.response?.data?.message || 'Failed to record payment');
     } finally {
       setIsPaying(false);
@@ -527,7 +744,7 @@ const Credit = ({ darkMode }) => {
     );
   }
 
-  // ✅ Calculate totals for stats cards
+  // Totals for the stats cards
   const totalAmount = vendors.reduce((sum, v) => sum + (v.totalAmount || 0), 0);
   const totalPaid = vendors.reduce((sum, v) => sum + (v.paidAmount || 0), 0);
   const totalBalance = vendors.reduce((sum, v) => sum + (v.balanceAmount || 0), 0);
@@ -536,14 +753,14 @@ const Credit = ({ darkMode }) => {
     <>
       <div className={`credit-container ${darkMode ? 'dark' : ''}`}>
         <div className={`credit-card ${darkMode ? 'dark' : ''}`}>
-          {/* Header - Amber Theme */}
+          {/* Header */}
           <div className="credit-header">
             <div className="credit-header-left">
               <FiList className="credit-header-icon" />
               <div>
                 <h3 className="credit-header-title">Credit Management</h3>
                 <p className="credit-header-subtitle">
-                  Total Vendors: {statistics.totalVendors || vendors.length} | 
+                  Total Vendors: {statistics.totalVendors || vendors.length} |
                   Total Balance: Rs. {(statistics.totalBalance || vendors.reduce((sum, v) => sum + (v?.balanceAmount || 0), 0)).toLocaleString()}
                   {statistics.pending > 0 && (
                     <span className="ml-2 px-2 py-0.5 bg-red-500/30 text-white rounded-full text-xs font-bold">
@@ -563,12 +780,36 @@ const Credit = ({ darkMode }) => {
                 </p>
               </div>
             </div>
-            <button onClick={handleAddVendor} className="credit-btn-add">
-              <FiPlus className="credit-btn-icon" /> Add Vendor
-            </button>
+            <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '10px' }}>
+              <button
+                onClick={handleRefresh}
+                disabled={refreshing}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed transition"
+              >
+                <FiRefreshCw className={refreshing ? 'animate-spin' : ''} />
+                Refresh
+              </button>
+              <button
+                onClick={handleExportExcel}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-green-300 bg-green-900/70 border border-green-700 hover:bg-green-800/80 transition"
+              >
+                <FiFileText />
+                Excel
+              </button>
+              <button
+                onClick={handleExportPDF}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-red-300 bg-red-900/70 border border-red-700 hover:bg-red-800/80 transition"
+              >
+                <FiDownload />
+                PDF
+              </button>
+              <button onClick={handleAddVendor} className="credit-btn-add">
+                <FiPlus className="credit-btn-icon" /> Add Vendor
+              </button>
+            </div>
           </div>
 
-          {/* ✅ 3 STATS CARDS - Amber Theme */}
+          {/* Stats cards */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4">
             <div className="bg-gradient-to-r from-amber-500 to-amber-600 rounded-2xl p-5 text-white shadow-lg">
               <div className="flex justify-between items-start">
@@ -580,7 +821,7 @@ const Credit = ({ darkMode }) => {
                 <FiDollarSign className="text-3xl opacity-50" />
               </div>
             </div>
-            
+
             <div className="bg-gradient-to-r from-emerald-500 to-emerald-600 rounded-2xl p-5 text-white shadow-lg">
               <div className="flex justify-between items-start">
                 <div>
@@ -591,7 +832,7 @@ const Credit = ({ darkMode }) => {
                 <FiCheckCircle className="text-3xl opacity-50" />
               </div>
             </div>
-            
+
             <div className="bg-gradient-to-r from-blue-500 to-blue-600 rounded-2xl p-5 text-white shadow-lg">
               <div className="flex justify-between items-start">
                 <div>
@@ -632,7 +873,7 @@ const Credit = ({ darkMode }) => {
                   <th>Actions</th>
                 </tr>
               </thead>
-            <tbody className={darkMode ? 'dark' : ''}>
+              <tbody className={darkMode ? 'dark' : ''}>
                 {currentVendors.length === 0 ? (
                   <tr>
                     <td colSpan="7" className="credit-empty">
@@ -696,7 +937,7 @@ const Credit = ({ darkMode }) => {
           {/* Pagination */}
           <div className="credit-pagination">
             <div className="credit-pagination-info">
-              Showing {indexOfFirstItem + 1} to {Math.min(indexOfLastItem, filteredVendors.length)} of {filteredVendors.length} entries
+              Showing {filteredVendors.length === 0 ? 0 : indexOfFirstItem + 1} to {Math.min(indexOfLastItem, filteredVendors.length)} of {filteredVendors.length} entries
             </div>
             <div className="credit-pagination-buttons">
               <button onClick={() => handlePageChange(currentPage - 1)} disabled={currentPage === 1} className="credit-pagination-btn">
@@ -731,7 +972,7 @@ const Credit = ({ darkMode }) => {
                   </button>
                 );
               })}
-              <button onClick={() => handlePageChange(currentPage + 1)} disabled={currentPage === totalPages} className="credit-pagination-btn">
+              <button onClick={() => handlePageChange(currentPage + 1)} disabled={currentPage === totalPages || totalPages === 0} className="credit-pagination-btn">
                 <FiChevronRight />
               </button>
             </div>
@@ -739,7 +980,7 @@ const Credit = ({ darkMode }) => {
         </div>
       </div>
 
-      {/* View History Modal - Amber Theme */}
+      {/* View History Modal */}
       {isViewModalOpen && selectedVendor && (
         <div className="credit-modal-overlay">
           <div className={`credit-modal ${darkMode ? 'dark' : ''}`}>
@@ -755,7 +996,7 @@ const Credit = ({ darkMode }) => {
               </button>
             </div>
             <div className="credit-modal-body">
-              {/* Vendor Summary - Amber Theme */}
+              {/* Vendor Summary */}
               <div className="credit-summary">
                 <div className="credit-summary-item">
                   <p className="credit-summary-label">Total Orders</p>
@@ -907,7 +1148,7 @@ const Credit = ({ darkMode }) => {
         </div>
       )}
 
-      {/* Pay Now Modal - Amber Theme */}
+      {/* Pay Now Modal */}
       {isPayModalOpen && selectedVendor && (
         <div className="credit-modal-overlay">
           <div className={`credit-modal ${darkMode ? 'dark' : ''}`}>
@@ -924,23 +1165,23 @@ const Credit = ({ darkMode }) => {
                 <p className="credit-payment-label">Vendor</p>
                 <p className="credit-payment-vendor">{selectedVendor?.name || 'N/A'}</p>
                 <p className="credit-payment-label">Total Amount</p>
-                <p className="credit-payment-balance" style={{color: '#111827'}}>Rs.{(selectedVendor?.totalAmount || 0).toLocaleString()}</p>
+                <p className="credit-payment-balance" style={{ color: '#111827' }}>Rs.{(selectedVendor?.totalAmount || 0).toLocaleString()}</p>
                 <p className="credit-payment-label">Already Paid</p>
-                <p className="credit-payment-balance" style={{color: '#16a34a'}}>Rs.{(selectedVendor?.paidAmount || 0).toLocaleString()}</p>
+                <p className="credit-payment-balance" style={{ color: '#16a34a' }}>Rs.{(selectedVendor?.paidAmount || 0).toLocaleString()}</p>
                 <p className="credit-payment-label">Remaining Balance</p>
                 <p className="credit-payment-balance">Rs.{(selectedVendor?.balanceAmount || 0).toLocaleString()}</p>
               </div>
               <div className="credit-form-group">
                 <label className={`credit-form-label ${darkMode ? 'dark' : ''}`}>Payment Amount (Rs.) *</label>
-                <input 
-                  type="number" 
-                  name="paymentAmount" 
-                  required 
-                  min="1" 
-                  max={selectedVendor?.balanceAmount || 0} 
-                  step="0.01" 
-                  className={`credit-form-input ${darkMode ? 'dark' : ''}`} 
-                  placeholder="Enter amount to pay" 
+                <input
+                  type="number"
+                  name="paymentAmount"
+                  required
+                  min="1"
+                  max={selectedVendor?.balanceAmount || 0}
+                  step="0.01"
+                  className={`credit-form-input ${darkMode ? 'dark' : ''}`}
+                  placeholder="Enter amount to pay"
                 />
                 <p className={`text-xs mt-1 font-medium ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
                   Maximum: Rs. {(selectedVendor?.balanceAmount || 0).toLocaleString()}
@@ -952,8 +1193,8 @@ const Credit = ({ darkMode }) => {
               </div>
               <div className="credit-form-actions">
                 <button type="button" onClick={handleCloseModal} className="credit-btn-cancel">Cancel</button>
-                <button 
-                  type="submit" 
+                <button
+                  type="submit"
                   className="credit-btn-pay-submit"
                   ref={paySubmitRef}
                   disabled={isPaying}
@@ -972,7 +1213,7 @@ const Credit = ({ darkMode }) => {
         </div>
       )}
 
-      {/* Edit Vendor Modal - Amber Theme */}
+      {/* Edit Vendor Modal */}
       {isModalOpen && selectedVendor && (
         <div className="credit-modal-overlay">
           <div className={`credit-modal ${darkMode ? 'dark' : ''}`}>
@@ -985,74 +1226,74 @@ const Credit = ({ darkMode }) => {
               </button>
             </div>
             <form onSubmit={handleEditSubmit} className="credit-modal-body">
-              {/* 🔒 Vendor Name - LOCKED */}
+              {/* Vendor Name - locked */}
               <div className="credit-form-group">
                 <label className={`credit-form-label ${darkMode ? 'dark' : ''}`}>Vendor Name *</label>
-                <input 
-                  type="text" 
-                  name="name" 
-                  required 
-                  defaultValue={selectedVendor?.name || ''} 
-                  className={`credit-form-input ${darkMode ? 'dark' : ''}`} 
-                  readOnly 
+                <input
+                  type="text"
+                  name="name"
+                  required
+                  defaultValue={selectedVendor?.name || ''}
+                  className={`credit-form-input ${darkMode ? 'dark' : ''}`}
+                  readOnly
                   style={lockedInputStyle}
                 />
               </div>
 
-              {/* 🔒 Products - LOCKED */}
+              {/* Products - locked */}
               <div className="credit-form-group">
                 <label className={`credit-form-label ${darkMode ? 'dark' : ''}`}>Products</label>
-                <input 
-                  type="text" 
-                  name="products" 
-                  required 
-                  defaultValue={selectedVendor?.products || ''} 
-                  className={`credit-form-input ${darkMode ? 'dark' : ''}`} 
-                  readOnly 
+                <input
+                  type="text"
+                  name="products"
+                  required
+                  defaultValue={selectedVendor?.products || ''}
+                  className={`credit-form-input ${darkMode ? 'dark' : ''}`}
+                  readOnly
                   style={lockedInputStyle}
                 />
               </div>
 
-              {/* 🔒 Stock Quantity - LOCKED */}
+              {/* Stock Quantity - locked */}
               <div className="credit-form-group">
                 <label className={`credit-form-label ${darkMode ? 'dark' : ''}`}>Stock Quantity</label>
-                <input 
-                  type="number" 
-                  name="stockQuantity" 
-                  min="0" 
-                  defaultValue={selectedVendor?.stockQuantity || 0} 
-                  className={`credit-form-input ${darkMode ? 'dark' : ''}`} 
-                  readOnly 
+                <input
+                  type="number"
+                  name="stockQuantity"
+                  min="0"
+                  defaultValue={selectedVendor?.stockQuantity || 0}
+                  className={`credit-form-input ${darkMode ? 'dark' : ''}`}
+                  readOnly
                   style={lockedInputStyle}
                 />
               </div>
 
-              {/* 🔒 Invoice Number - LOCKED */}
+              {/* Invoice Number - locked */}
               <div className="credit-form-group">
                 <label className={`credit-form-label ${darkMode ? 'dark' : ''}`}>Invoice Number *</label>
-                <input 
-                  type="text" 
-                  name="invoiceNumber" 
-                  required 
-                  defaultValue={selectedVendor?.invoiceNumber || ''} 
-                  className={`credit-form-input ${darkMode ? 'dark' : ''}`} 
-                  readOnly 
+                <input
+                  type="text"
+                  name="invoiceNumber"
+                  required
+                  defaultValue={selectedVendor?.invoiceNumber || ''}
+                  className={`credit-form-input ${darkMode ? 'dark' : ''}`}
+                  readOnly
                   style={lockedInputStyle}
                 />
               </div>
-              
-              {/* 🔒 Total Amount - LOCKED */}
+
+              {/* Total Amount - locked */}
               <div className="credit-form-group">
                 <label className={`credit-form-label ${darkMode ? 'dark' : ''}`}>Total Amount (Rs.)</label>
-                <input 
-                  type="number" 
-                  name="totalAmount" 
-                  required 
-                  min="0" 
-                  step="0.01" 
-                  defaultValue={selectedVendor?.totalAmount || 0} 
-                  className={`credit-form-input ${darkMode ? 'dark' : ''}`} 
-                  readOnly 
+                <input
+                  type="number"
+                  name="totalAmount"
+                  required
+                  min="0"
+                  step="0.01"
+                  defaultValue={selectedVendor?.totalAmount || 0}
+                  className={`credit-form-input ${darkMode ? 'dark' : ''}`}
+                  readOnly
                   style={lockedInputStyle}
                 />
                 <p className={`text-xs mt-1 font-medium ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
@@ -1062,29 +1303,29 @@ const Credit = ({ darkMode }) => {
 
               <div className="credit-form-group">
                 <label className={`credit-form-label ${darkMode ? 'dark' : ''}`}>Already Paid (Rs.)</label>
-                <input 
-                  type="number" 
-                  value={selectedVendor?.paidAmount || 0} 
-                  className={`credit-form-input ${darkMode ? 'dark' : ''}`} 
-                  readOnly 
+                <input
+                  type="number"
+                  value={selectedVendor?.paidAmount || 0}
+                  className={`credit-form-input ${darkMode ? 'dark' : ''}`}
+                  readOnly
                   style={lockedInputStyle}
                 />
                 <p className={`text-xs mt-1 font-bold ${darkMode ? 'text-green-400' : 'text-green-600'}`}>
-                  Total paid so far: Rs. {(selectedVendor?.paidAmount || 0).toLocaleString()} | 
+                  Total paid so far: Rs. {(selectedVendor?.paidAmount || 0).toLocaleString()} |
                   Balance: Rs. {(selectedVendor?.balanceAmount || 0).toLocaleString()}
                 </p>
               </div>
 
               <div className="credit-form-group">
                 <label className={`credit-form-label ${darkMode ? 'dark' : ''}`}>Pay Now (Rs.)</label>
-                <input 
-                  type="number" 
-                  name="newPayment" 
-                  min="0" 
-                  step="0.01" 
+                <input
+                  type="number"
+                  name="newPayment"
+                  min="0"
+                  step="0.01"
                   value={editPayAmount}
                   onChange={(e) => setEditPayAmount(e.target.value)}
-                  className={`credit-form-input ${darkMode ? 'dark' : ''}`} 
+                  className={`credit-form-input ${darkMode ? 'dark' : ''}`}
                   placeholder="Enter amount to pay now"
                 />
                 <p className={`text-xs mt-1 font-medium ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
@@ -1094,18 +1335,18 @@ const Credit = ({ darkMode }) => {
 
               <div className="credit-form-group">
                 <label className={`credit-form-label ${darkMode ? 'dark' : ''}`}>Payment Note (Optional)</label>
-                <input 
-                  type="text" 
-                  name="paymentNote" 
-                  className={`credit-form-input ${darkMode ? 'dark' : ''}`} 
+                <input
+                  type="text"
+                  name="paymentNote"
+                  className={`credit-form-input ${darkMode ? 'dark' : ''}`}
                   placeholder="Add note for this payment"
                 />
               </div>
 
               <div className="credit-form-actions">
                 <button type="button" onClick={handleCloseModal} className="credit-btn-cancel">Cancel</button>
-                <button 
-                  type="submit" 
+                <button
+                  type="submit"
                   className="credit-btn-update"
                   ref={editSubmitRef}
                   disabled={isSubmitting}
@@ -1124,7 +1365,7 @@ const Credit = ({ darkMode }) => {
         </div>
       )}
 
-      {/* Add Vendor Modal - Amber Theme */}
+      {/* Add Vendor Modal */}
       {isAddModalOpen && (
         <div className="credit-modal-overlay">
           <div className={`credit-modal ${darkMode ? 'dark' : ''}`}>
@@ -1141,7 +1382,7 @@ const Credit = ({ darkMode }) => {
                 <label className={`credit-form-label ${darkMode ? 'dark' : ''}`}>Vendor Name *</label>
                 <input type="text" name="name" required className={`credit-form-input ${darkMode ? 'dark' : ''}`} placeholder="Enter vendor name" />
               </div>
-              
+
               <div className="credit-form-group">
                 <label className={`credit-form-label ${darkMode ? 'dark' : ''}`}>Invoice Number *</label>
                 <input type="text" name="invoiceNumber" required className={`credit-form-input ${darkMode ? 'dark' : ''}`} placeholder="Enter invoice number" />
@@ -1170,7 +1411,7 @@ const Credit = ({ darkMode }) => {
                       <FiShoppingCart />
                     </button>
                   </div>
-                  
+
                   {showProductDropdown && (
                     <div className={`absolute z-10 mt-1 w-full max-h-48 overflow-y-auto rounded-lg border shadow-lg ${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
                       {filteredProducts.length === 0 ? (

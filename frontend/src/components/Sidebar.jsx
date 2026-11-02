@@ -12,6 +12,8 @@ import { HiMenu, HiX } from 'react-icons/hi';
 import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
 
+// ✅ darkMode prop is still accepted (so parent code doesn't break) but the sidebar ALWAYS stays dark
+// eslint-disable-next-line no-unused-vars
 const Sidebar = ({ activeMenu, setActiveMenu, isOpen, setIsOpen, darkMode }) => {
   const [logoExists, setLogoExists] = useState(false);
   const [isFinanceOpen, setIsFinanceOpen] = useState(false);
@@ -22,7 +24,7 @@ const Sidebar = ({ activeMenu, setActiveMenu, isOpen, setIsOpen, darkMode }) => 
   const [isAdmin, setIsAdmin] = useState(false);
   const navigate = useNavigate();
 
-  // Admin menu items - ✅ LEAVE ADDED, ✅ CASH IN HAND ADDED, ✅ INVENTORY HISTORY ADDED (Cash in Hand ke uppar)
+  // Admin menu items
   const adminMenuItems = [
     { id: 'all-data', label: 'Dashboard', icon: FiHome, path: '/dashboard' },
     { id: 'inventory', label: 'Inventory', icon: FiPackage, path: '/inventory' },
@@ -30,6 +32,7 @@ const Sidebar = ({ activeMenu, setActiveMenu, isOpen, setIsOpen, darkMode }) => 
     { id: 'cash-in-hand', label: 'Owner Capital', icon: FiBriefcase, path: '/cash-in-hand' },
     { id: 'finance', label: 'Finance', icon: FiDollarSign, hasSubmenu: true },
     { id: 'billing', label: 'Billing', icon: FiFileText, path: '/billing' },
+    { id: 'payment', label: 'Payment', icon: FiCreditCard, path: '/payment' },
     { id: 'reminders', label: 'Reminders', icon: FiBell, path: '/reminders', badge: reminderCount },
     { id: 'discarded', label: 'Draft', icon: FiClock, path: '/discarded', badge: discardedCount },
     { id: 'record', label: 'Records', icon: FiBarChart2, path: '/records' },
@@ -37,7 +40,7 @@ const Sidebar = ({ activeMenu, setActiveMenu, isOpen, setIsOpen, darkMode }) => 
     { id: 'users', label: 'Users', icon: FiUsers, path: '/users' },
   ];
 
-  // Employee menu items - ✅ LEAVE ADDED
+  // Employee menu items
   const employeeMenuItems = [
     { id: 'inventory', label: 'Inventory', icon: FiPackage, path: '/inventory' },
     { id: 'billing', label: 'Billing', icon: FiFileText, path: '/billing' },
@@ -134,7 +137,7 @@ const Sidebar = ({ activeMenu, setActiveMenu, isOpen, setIsOpen, darkMode }) => 
     return () => window.removeEventListener('resize', handleResize);
   }, [isOpen, setIsOpen]);
 
-  // ✅ Logo check with smaller size
+  // Logo check
   useEffect(() => {
     const img = new Image();
     img.src = '/change.png';
@@ -202,16 +205,15 @@ const Sidebar = ({ activeMenu, setActiveMenu, isOpen, setIsOpen, darkMode }) => 
 
   const allMenuItems = isAdmin ? adminMenuItems : employeeMenuItems;
 
-  // ✅ Dynamic sidebar classes based on darkMode
-  const sidebarBg = darkMode ? 'bg-gray-900' : 'bg-white';
-  const sidebarBorder = darkMode ? 'border-gray-800' : 'border-gray-200';
-  const textColor = darkMode ? 'text-white' : 'text-gray-900';
-  const textMuted = darkMode ? 'text-gray-400' : 'text-gray-500';
-  const hoverBg = darkMode ? 'hover:bg-gray-800' : 'hover:bg-gray-100';
-  const activeBg = darkMode ? 'bg-amber-500/20' : 'bg-amber-100';
+  // ✅ FIXED DARK THEME - sidebar never changes with the theme toggle
+  const sidebarBg = 'bg-gray-900';
+  const sidebarBorder = 'border-gray-800';
+  const textColor = 'text-white';
+  const textMuted = 'text-gray-400';
+  const hoverBg = 'hover:bg-gray-800';
+  const activeBg = 'bg-amber-500/20';
   const activeText = 'text-amber-500';
-  const iconColor = darkMode ? 'text-amber-400' : 'text-amber-500';
-  const dividerColor = darkMode ? 'border-gray-800' : 'border-gray-200';
+  const dividerColor = 'border-gray-800';
 
   return (
     <>
@@ -222,17 +224,17 @@ const Sidebar = ({ activeMenu, setActiveMenu, isOpen, setIsOpen, darkMode }) => 
         ${isMobile && isOpen ? 'left-0' : isMobile && !isOpen ? '-left-72' : ''}
         border-r ${sidebarBorder}
       `}>
-        {/* ✅ Logo Section - Full Width */}
-        <div className={`pt-4 pb-3 border-b ${dividerColor} flex justify-center`}>
-          <div className={`flex items-center justify-center overflow-hidden transition-all duration-300 ${isOpen ? 'w-full h-28' : 'w-12 h-12 rounded-full mx-auto'}`}>
+        {/* Logo Section - Full Width */}
+        <div className={`pt-4 pb-3 border-b ${dividerColor} ${sidebarBg} flex justify-center`}>
+          <div className={`flex items-center justify-center overflow-hidden transition-all duration-300 ${sidebarBg} ${isOpen ? 'w-full h-28' : 'w-12 h-12 rounded-full mx-auto'}`}>
             {logoExists ? (
               <img 
                 src="/change.png" 
                 alt="Fusix Logo" 
-                className="w-full h-full object-cover" 
+                className="w-full h-full object-contain" 
               />
             ) : (
-              <span className={`text-3xl ${darkMode ? 'text-white' : 'text-gray-900'}`}>❄️</span>
+              <span className="text-3xl text-white">❄️</span>
             )}
           </div>
         </div>
@@ -328,8 +330,8 @@ const Sidebar = ({ activeMenu, setActiveMenu, isOpen, setIsOpen, darkMode }) => 
           {isOpen ? (
             <div className="p-4">
               <div className="flex items-center gap-3">
-                <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${darkMode ? 'bg-amber-500/20' : 'bg-amber-100'}`}>
-                  <FiUser className={`text-xl ${darkMode ? 'text-amber-400' : 'text-amber-500'}`} />
+                <div className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 bg-amber-500/20">
+                  <FiUser className="text-xl text-amber-400" />
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className={`font-bold text-sm truncate ${textColor}`}>{user?.name || 'User'}</p>
@@ -343,7 +345,7 @@ const Sidebar = ({ activeMenu, setActiveMenu, isOpen, setIsOpen, darkMode }) => 
                 </div>
                 <button 
                   onClick={handleLogout}
-                  className={`p-2 rounded-lg transition flex-shrink-0 ${darkMode ? 'hover:bg-amber-500/20 text-gray-400 hover:text-amber-400' : 'hover:bg-amber-100 text-gray-500 hover:text-amber-500'}`}
+                  className="p-2 rounded-lg transition flex-shrink-0 hover:bg-amber-500/20 text-gray-400 hover:text-amber-400"
                   title="Logout"
                 >
                   <FiLogOut className="text-lg" />
@@ -353,11 +355,11 @@ const Sidebar = ({ activeMenu, setActiveMenu, isOpen, setIsOpen, darkMode }) => 
           ) : (
             <div className="p-2 flex justify-center">
               <div className="relative group">
-                <div className={`w-10 h-10 rounded-full flex items-center justify-center ${darkMode ? 'bg-amber-500/20' : 'bg-amber-100'}`}>
-                  <FiUser className={`text-xl ${darkMode ? 'text-amber-400' : 'text-amber-500'}`} />
+                <div className="w-10 h-10 rounded-full flex items-center justify-center bg-amber-500/20">
+                  <FiUser className="text-xl text-amber-400" />
                 </div>
                 {/* Tooltip on hover */}
-                <div className={`absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-1.5 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition whitespace-nowrap ${darkMode ? 'bg-gray-800' : 'bg-gray-700'}`}>
+                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-1.5 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition whitespace-nowrap bg-gray-800">
                   {user?.name || 'User'} ({user?.role || 'employee'})
                 </div>
                 <button 
@@ -375,7 +377,7 @@ const Sidebar = ({ activeMenu, setActiveMenu, isOpen, setIsOpen, darkMode }) => 
       {/* Mobile Menu Toggle Button */}
       <button 
         onClick={toggleSidebar} 
-        className={`lg:hidden fixed top-4 left-4 z-50 p-2.5 rounded-xl text-white shadow-lg transition-all duration-300 ${darkMode ? 'bg-gray-900 hover:bg-gray-800' : 'bg-gray-800 hover:bg-gray-700'}`}
+        className="lg:hidden fixed top-4 left-4 z-50 p-2.5 rounded-xl text-white shadow-lg transition-all duration-300 bg-gray-900 hover:bg-gray-800"
         style={{ 
           left: isOpen ? '260px' : '16px',
           transition: 'left 0.3s ease'
@@ -387,7 +389,7 @@ const Sidebar = ({ activeMenu, setActiveMenu, isOpen, setIsOpen, darkMode }) => 
       {/* Overlay for mobile */}
       {isMobile && isOpen && (
         <div 
-          className={`fixed inset-0 z-30 lg:hidden ${darkMode ? 'bg-black/70' : 'bg-black/50'}`}
+          className="fixed inset-0 z-30 lg:hidden bg-black/60"
           onClick={() => setIsOpen(false)}
         />
       )}

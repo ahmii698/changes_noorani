@@ -3,14 +3,17 @@
 import React, { useState, useEffect } from 'react';
 import {
   Calendar, User, FileText, Send, CheckCircle,
-  AlertCircle, Building, X
+  AlertCircle, Building, X, RefreshCw, FileSpreadsheet, Download
 } from 'lucide-react';
+import * as XLSX from 'xlsx';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import './LeaveApplication.css';
 import api from '../../services/api';
 import toast from 'react-hot-toast';
 
 // ============================================
-// ✅ TOASTER COMPONENT - Right Side Bottom
+// TOASTER COMPONENT - Bottom Right
 // ============================================
 const Toaster = ({ message, type, onClose, darkMode }) => {
   useEffect(() => {
@@ -113,6 +116,43 @@ const Toaster = ({ message, type, onClose, darkMode }) => {
   );
 };
 
+// ============================================
+// ACTION BUTTON STYLES (Refresh / Excel / PDF)
+// ============================================
+const actionBtnBase = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: '8px',
+  padding: '9px 18px',
+  borderRadius: '10px',
+  fontSize: '13px',
+  fontWeight: 700,
+  cursor: 'pointer',
+  border: '1px solid transparent',
+  transition: 'all 0.2s ease'
+};
+
+const actionBtnStyles = {
+  refresh: {
+    ...actionBtnBase,
+    background: '#2563eb',
+    color: '#ffffff',
+    borderColor: '#2563eb'
+  },
+  excel: {
+    ...actionBtnBase,
+    background: 'rgba(34, 197, 94, 0.15)',
+    color: '#22c55e',
+    borderColor: 'rgba(34, 197, 94, 0.35)'
+  },
+  pdf: {
+    ...actionBtnBase,
+    background: 'rgba(239, 68, 68, 0.15)',
+    color: '#ef4444',
+    borderColor: 'rgba(239, 68, 68, 0.35)'
+  }
+};
+
 const LeaveApplication = ({ darkMode }) => {
   const [employees, setEmployees] = useState([]);
   const [loadingEmployees, setLoadingEmployees] = useState(true);
@@ -127,15 +167,12 @@ const LeaveApplication = ({ darkMode }) => {
   const [submitting, setSubmitting] = useState(false);
   const [recentLeaves, setRecentLeaves] = useState([]);
   const [loadingRecent, setLoadingRecent] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
   // ============================================
-  // ✅ TOASTER STATE
+  // TOASTER STATE
   // ============================================
   const [toaster, setToaster] = useState({ message: '', type: 'info', show: false });
-
-  const showToaster = (message, type = 'info') => {
-    setToaster({ message, type, show: true });
-  };
 
   const hideToaster = () => {
     setToaster({ message: '', type: 'info', show: false });
@@ -150,14 +187,13 @@ const LeaveApplication = ({ darkMode }) => {
     fetchRecentLeaves();
   }, []);
 
-  // ✅ Using api service instead of fetch
   const fetchEmployees = async () => {
     setLoadingEmployees(true);
     try {
       const response = await api.get('/users', {
         params: { paginate: 0 }
       });
-      
+
       let list = [];
       if (response.data?.success && Array.isArray(response.data.data)) {
         list = response.data.data;
@@ -177,12 +213,11 @@ const LeaveApplication = ({ darkMode }) => {
     setLoadingEmployees(false);
   };
 
-  // ✅ Using api service instead of fetch
   const fetchRecentLeaves = async () => {
     setLoadingRecent(true);
     try {
       const response = await api.get('/leaves');
-      
+
       if (response.data?.success) {
         setRecentLeaves(response.data.data || []);
       } else if (Array.isArray(response.data)) {
@@ -197,6 +232,16 @@ const LeaveApplication = ({ darkMode }) => {
     setLoadingRecent(false);
   };
 
+  // ============================================
+  // REFRESH - reloads only this page's data
+  // ============================================
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await Promise.all([fetchEmployees(), fetchRecentLeaves()]);
+    setRefreshing(false);
+    toast.success('Data refreshed');
+  };
+
   const getBranchScopedEmployees = () => {
     if (userBranch) {
       return employees.filter(emp => parseInt(emp.branch_id) === parseInt(userBranch));
@@ -204,27 +249,29 @@ const LeaveApplication = ({ darkMode }) => {
     return employees;
   };
 
-  const getBranchScopedRecentLeaves = () => {
-    let list = recentLeaves;
+  // All leave records for the user's branch (used for reports)
+  const getBranchScopedLeaves = () => {
     if (userBranch) {
-      list = list.filter(leave => parseInt(leave.employee?.branch_id) === parseInt(userBranch));
+      return recentLeaves.filter(
+        leave => parseInt(leave.employee?.branch_id) === parseInt(userBranch)
+      );
     }
-    return list.slice(0, 4);
+    return recentLeaves;
   };
 
   const filteredEmployees = getBranchScopedEmployees();
-  const filteredRecentLeaves = getBranchScopedRecentLeaves();
+  const allBranchLeaves = getBranchScopedLeaves();
+  const filteredRecentLeaves = allBranchLeaves.slice(0, 4);
 
   const handleChange = (field, value) => {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
-  // ✅ Using api service instead of fetch
   const handleSubmit = async (e) => {
     e.preventDefault();
 
     if (!formData.user_id || !formData.leave_date || !formData.reason.trim()) {
-      toast.warning('Please select employee, date and enter reason.');
+      toast.error('Please select an employee, a date and enter a reason.');
       return;
     }
 
@@ -255,6 +302,100 @@ const LeaveApplication = ({ darkMode }) => {
     });
   };
 
+  // ============================================
+  // REPORT HELPERS
+  // ============================================
+  const buildReportRows = () =>
+    allBranchLeaves.map((leave, index) => ({
+      no: index + 1,
+      employee: leave.employee?.name || 'Unknown',
+      branch: leave.employee?.branch_id ? `Branch ${leave.employee.branch_id}` : '-',
+      date: formatDate(leave.leave_date),
+      reason: leave.reason || '-'
+    }));
+
+  const getFileStamp = () => new Date().toISOString().slice(0, 10);
+
+  // ============================================
+  // EXCEL EXPORT
+  // ============================================
+  const handleExportExcel = () => {
+    const rows = buildReportRows();
+    if (rows.length === 0) {
+      toast.error('No leave records to export.');
+      return;
+    }
+
+    try {
+      const sheetData = rows.map(r => ({
+        '#': r.no,
+        'Employee': r.employee,
+        'Branch': r.branch,
+        'Leave Date': r.date,
+        'Reason': r.reason
+      }));
+
+      const worksheet = XLSX.utils.json_to_sheet(sheetData);
+      worksheet['!cols'] = [
+        { wch: 6 },
+        { wch: 26 },
+        { wch: 14 },
+        { wch: 16 },
+        { wch: 50 }
+      ];
+
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Leave Report');
+      XLSX.writeFile(workbook, `leave-report-${getFileStamp()}.xlsx`);
+      toast.success('Excel report downloaded');
+    } catch (error) {
+      console.error('Error exporting Excel:', error);
+      toast.error('Failed to create Excel report.');
+    }
+  };
+
+  // ============================================
+  // PDF EXPORT
+  // ============================================
+  const handleExportPDF = () => {
+    const rows = buildReportRows();
+    if (rows.length === 0) {
+      toast.error('No leave records to export.');
+      return;
+    }
+
+    try {
+      const doc = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'a4' });
+
+      doc.setFontSize(18);
+      doc.text('Leave Report', 40, 45);
+
+      doc.setFontSize(10);
+      doc.setTextColor(110);
+      doc.text(`Generated: ${formatDate(new Date())}`, 40, 63);
+      doc.text(`Total records: ${rows.length}`, 40, 77);
+
+      autoTable(doc, {
+        startY: 92,
+        head: [['#', 'Employee', 'Branch', 'Leave Date', 'Reason']],
+        body: rows.map(r => [r.no, r.employee, r.branch, r.date, r.reason]),
+        styles: { fontSize: 9, cellPadding: 6 },
+        headStyles: { fillColor: [37, 99, 235], textColor: 255 },
+        alternateRowStyles: { fillColor: [245, 247, 250] },
+        columnStyles: {
+          0: { cellWidth: 30 },
+          4: { cellWidth: 200 }
+        }
+      });
+
+      doc.save(`leave-report-${getFileStamp()}.pdf`);
+      toast.success('PDF report downloaded');
+    } catch (error) {
+      console.error('Error exporting PDF:', error);
+      toast.error('Failed to create PDF report.');
+    }
+  };
+
   return (
     <div className={`leaveapp-page ${darkMode ? 'dark' : ''}`}>
       {/* ===== TOASTER ===== */}
@@ -267,9 +408,58 @@ const LeaveApplication = ({ darkMode }) => {
         />
       )}
 
-      <div className="leaveapp-page-header">
-        <h2 className={darkMode ? 'dark' : ''}>Record Leave</h2>
-        <p className={darkMode ? 'dark' : ''}>Record a leave day for an employee</p>
+      <div
+        className="leaveapp-page-header"
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: '12px'
+        }}
+      >
+        <div>
+          <h2 className={darkMode ? 'dark' : ''}>Record Leave</h2>
+          <p className={darkMode ? 'dark' : ''}>Record a leave day for an employee</p>
+        </div>
+
+        {/* ===== ACTION BUTTONS ===== */}
+        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            onClick={handleRefresh}
+            disabled={refreshing}
+            style={{ ...actionBtnStyles.refresh, opacity: refreshing ? 0.7 : 1 }}
+          >
+            <RefreshCw
+              size={16}
+              style={refreshing ? { animation: 'leaveappSpin 0.8s linear infinite' } : undefined}
+            />
+            Refresh
+          </button>
+          <button
+            type="button"
+            onClick={handleExportExcel}
+            style={actionBtnStyles.excel}
+          >
+            <FileSpreadsheet size={16} />
+            Excel
+          </button>
+          <button
+            type="button"
+            onClick={handleExportPDF}
+            style={actionBtnStyles.pdf}
+          >
+            <Download size={16} />
+            PDF
+          </button>
+        </div>
+        <style>{`
+          @keyframes leaveappSpin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+          }
+        `}</style>
       </div>
 
       <div className="leaveapp-content-grid">
@@ -313,7 +503,7 @@ const LeaveApplication = ({ darkMode }) => {
               <label className={darkMode ? 'dark' : ''}>
                 <FileText size={16} /> Reason
               </label>
-              {/* ✅ rows 4 se 7 kar diya taake dono cards ki height match ho */}
+              {/* Rows set to 7 so both cards have a matching height */}
               <textarea
                 value={formData.reason}
                 onChange={(e) => handleChange('reason', e.target.value)}
@@ -323,9 +513,9 @@ const LeaveApplication = ({ darkMode }) => {
               />
             </div>
 
-            <button 
-              type="submit" 
-              className={`leaveapp-submit-btn ${darkMode ? 'dark' : ''}`} 
+            <button
+              type="submit"
+              className={`leaveapp-submit-btn ${darkMode ? 'dark' : ''}`}
               disabled={submitting}
             >
               <Send size={16} />

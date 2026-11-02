@@ -166,22 +166,6 @@ const CustomerForm = ({ onCustomerSubmit, initialData, darkMode }) => {
           </div>
           <p className={`text-sm font-medium ${darkMode ? 'text-gray-300' : 'text-gray-500'} mt-1`}>All fields are optional - Just click Continue to proceed</p>
         </div>
-        <div className="text-right">
-          <p className={`text-xs font-semibold ${darkMode ? 'text-gray-300' : 'text-gray-500'} flex items-center gap-1 justify-end`}>
-            <FiCalendar className="text-xs" /> Date
-            <FiLock className="text-xs text-amber-400" />
-          </p>
-          {/* 🔒 Locked date (editable nahi) */}
-          <input
-            type="text"
-            value={getLocalDateDisplay(now)}
-            readOnly
-            disabled
-            tabIndex={-1}
-            title="Date automatic hai - change nahi ho sakti"
-            className="px-3 py-1.5 rounded-lg text-sm font-medium border border-gray-300 dark:border-gray-600 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 focus:outline-none w-40 cursor-not-allowed select-none"
-          />
-        </div>
       </div>
       
       <form onSubmit={handleSubmit} className="p-6">

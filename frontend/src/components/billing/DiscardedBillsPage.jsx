@@ -1,13 +1,12 @@
 // src/components/billing/DiscardedBillsPage.jsx
 
 import React, { useState, useEffect } from 'react';
-import { 
-  FiTrash2, 
-  FiRefreshCw, 
-  FiClock, 
-  FiUser, 
-  FiPhone, 
-  FiMail, 
+import {
+  FiTrash2,
+  FiRefreshCw,
+  FiUser,
+  FiPhone,
+  FiMail,
   FiTruck,
   FiPackage,
   FiDollarSign,
@@ -15,13 +14,18 @@ import {
   FiTool,
   FiArrowLeft,
   FiArchive,
-  FiEye
+  FiEye,
+  FiFileText,
+  FiDownload
 } from 'react-icons/fi';
-import { 
-  getDiscardedCarts, 
-  restoreCart, 
-  deleteDiscardedCart, 
-  clearAllDiscarded 
+import * as XLSX from 'xlsx';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
+import {
+  getDiscardedCarts,
+  restoreCart,
+  deleteDiscardedCart,
+  clearAllDiscarded
 } from '../../services/api';
 import toast from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
@@ -29,11 +33,13 @@ import { useNavigate } from 'react-router-dom';
 const DiscardedBillsPage = ({ darkMode, onRestore }) => {
   const [discardedBills, setDiscardedBills] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [selectedBill, setSelectedBill] = useState(null);
   const navigate = useNavigate();
 
-  const fetchDiscardedBills = async () => {
-    setLoading(true);
+  // Fetch discarded bills (silent = no full-page loader)
+  const fetchDiscardedBills = async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
       const response = await getDiscardedCarts();
       if (response.success) {
@@ -46,7 +52,7 @@ const DiscardedBillsPage = ({ darkMode, onRestore }) => {
       toast.error('Failed to load discarded bills');
       setDiscardedBills([]);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
@@ -54,12 +60,21 @@ const DiscardedBillsPage = ({ darkMode, onRestore }) => {
     fetchDiscardedBills();
   }, []);
 
+  // Refresh button: reloads only this page's data
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await fetchDiscardedBills(true);
+    setRefreshing(false);
+    toast.success('Drafted bills refreshed');
+  };
+
   const handleRestore = async (cartId) => {
     try {
       const response = await restoreCart(cartId);
       if (response.success) {
-        const restoredData = response.data;
-        
+        // Attach draft_id so BillingInvoice knows which draft to delete
+        const restoredData = { ...response.data, draft_id: cartId };
+
         if (onRestore) {
           onRestore(restoredData);
         } else {
@@ -71,14 +86,15 @@ const DiscardedBillsPage = ({ darkMode, onRestore }) => {
             customer_car_number: restoredData.customer_car_number || '',
             customer_car_model: restoredData.customer_car_model || '',
             customer_birthday: restoredData.customer_birthday || '',
-            cart_summary: restoredData.cart_summary || {}
+            cart_summary: restoredData.cart_summary || {},
+            draft_id: cartId
           }));
         }
-        
+
         toast.success('✅ Bill restored! Redirecting to billing...');
         setDiscardedBills(prev => prev.filter(c => c.id !== cartId));
         window.dispatchEvent(new Event('discarded-update'));
-        
+
         setTimeout(() => {
           navigate('/billing');
         }, 500);
@@ -158,10 +174,157 @@ const DiscardedBillsPage = ({ darkMode, onRestore }) => {
     }
   };
 
+  // ===== Export helpers =====
+  const noData = discardedBills.length === 0;
+
+  const getFileDate = () => new Date().toISOString().slice(0, 10);
+
+  const getReportTimestamp = () =>
+    new Date().toLocaleString('en-US', {
+      month: '2-digit',
+      day: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true,
+      timeZone: 'Asia/Karachi'
+    });
+
+  const getItemsText = (cartItems) => {
+    if (!cartItems || !Array.isArray(cartItems)) return '';
+    return cartItems.map(item => `${item.name} x${item.quantity || 0}`).join(', ');
+  };
+
+  const grandTotal = discardedBills.reduce((sum, b) => sum + getTotalAmount(b.cart_summary), 0);
+  const grandQty = discardedBills.reduce((sum, b) => sum + getTotalItems(b.cart_items), 0);
+
+  // Excel report
+  const handleExportExcel = () => {
+    if (noData) {
+      toast.error('No data to export');
+      return;
+    }
+    try {
+      const rows = discardedBills.map((b, i) => ({
+        '#': i + 1,
+        'Draft ID': b.id,
+        'Discarded At': formatDate(b.discarded_at),
+        'Customer': b.customer_name || 'N/A',
+        'Phone': b.customer_phone || 'N/A',
+        'Email': b.customer_email || 'N/A',
+        'Car Number': b.customer_car_number || 'N/A',
+        'Car Model': b.customer_car_model || 'N/A',
+        'Items': getItemsText(b.cart_items),
+        'Item Count': getItemCount(b.cart_items),
+        'Total Qty': getTotalItems(b.cart_items),
+        'Subtotal (Rs.)': b.cart_summary?.subtotal || 0,
+        'Discount (Rs.)': b.cart_summary?.discount || 0,
+        'Total (Rs.)': getTotalAmount(b.cart_summary),
+      }));
+
+      rows.push({
+        '#': '',
+        'Draft ID': '',
+        'Discarded At': '',
+        'Customer': 'TOTAL',
+        'Phone': '',
+        'Email': '',
+        'Car Number': '',
+        'Car Model': '',
+        'Items': '',
+        'Item Count': '',
+        'Total Qty': grandQty,
+        'Subtotal (Rs.)': '',
+        'Discount (Rs.)': '',
+        'Total (Rs.)': grandTotal,
+      });
+
+      const worksheet = XLSX.utils.json_to_sheet(rows);
+      worksheet['!cols'] = [
+        { wch: 5 }, { wch: 10 }, { wch: 22 }, { wch: 22 }, { wch: 16 },
+        { wch: 26 }, { wch: 14 }, { wch: 16 }, { wch: 50 }, { wch: 11 },
+        { wch: 10 }, { wch: 15 }, { wch: 15 }, { wch: 14 },
+      ];
+
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Drafted Bills');
+      XLSX.writeFile(workbook, `Drafted_Bills_${getFileDate()}.xlsx`);
+      toast.success('Excel report downloaded');
+    } catch (error) {
+      console.error('Excel export error:', error);
+      toast.error('Failed to create Excel report');
+    }
+  };
+
+  // PDF report
+  const handleExportPDF = () => {
+    if (noData) {
+      toast.error('No data to export');
+      return;
+    }
+    try {
+      const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' });
+      const pageWidth = doc.internal.pageSize.getWidth();
+
+      doc.setFontSize(18);
+      doc.setFont('helvetica', 'bold');
+      doc.text('Drafted Bills Report', pageWidth / 2, 40, { align: 'center' });
+
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'normal');
+      doc.text(`Generated: ${getReportTimestamp()}`, pageWidth / 2, 58, { align: 'center' });
+      doc.text(
+        `Total Drafts: ${discardedBills.length}   |   Total Qty: ${grandQty}   |   Total Amount: Rs. ${grandTotal.toLocaleString()}`,
+        pageWidth / 2,
+        74,
+        { align: 'center' }
+      );
+
+      autoTable(doc, {
+        startY: 90,
+        head: [['#', 'Draft ID', 'Discarded At', 'Customer', 'Phone', 'Car No.', 'Items', 'Qty', 'Total (Rs.)']],
+        body: discardedBills.map((b, i) => [
+          i + 1,
+          b.id,
+          formatDate(b.discarded_at),
+          b.customer_name || 'N/A',
+          b.customer_phone || 'N/A',
+          b.customer_car_number || 'N/A',
+          getItemsText(b.cart_items) || 'N/A',
+          getTotalItems(b.cart_items),
+          getTotalAmount(b.cart_summary).toLocaleString(),
+        ]),
+        foot: [['', '', '', 'TOTAL', '', '', '', grandQty, grandTotal.toLocaleString()]],
+        theme: 'grid',
+        headStyles: { fillColor: [245, 158, 11], textColor: [17, 24, 39], fontStyle: 'bold' },
+        footStyles: { fillColor: [243, 244, 246], textColor: [17, 24, 39], fontStyle: 'bold' },
+        styles: { fontSize: 9, cellPadding: 5, overflow: 'linebreak' },
+        columnStyles: {
+          0: { halign: 'center', cellWidth: 28 },
+          1: { halign: 'center', cellWidth: 45 },
+          6: { cellWidth: 190 },
+          7: { halign: 'center', cellWidth: 35 },
+          8: { halign: 'right', cellWidth: 70 },
+        },
+        didDrawPage: () => {
+          const pageHeight = doc.internal.pageSize.getHeight();
+          doc.setFontSize(9);
+          doc.text(`Page ${doc.internal.getNumberOfPages()}`, pageWidth - 40, pageHeight - 20, { align: 'right' });
+        },
+      });
+
+      doc.save(`Drafted_Bills_${getFileDate()}.pdf`);
+      toast.success('PDF report downloaded');
+    } catch (error) {
+      console.error('PDF export error:', error);
+      toast.error('Failed to create PDF report');
+    }
+  };
+
   return (
     <div className={`min-h-screen ${darkMode ? 'bg-gray-950' : 'bg-gray-100'} p-6`}>
       <div className="max-w-6xl mx-auto">
-        {/* Header - Amber Theme */}
+        {/* Header */}
         <div className={`${darkMode ? 'bg-gray-900' : 'bg-white'} rounded-xl shadow-xl p-6 border ${darkMode ? 'border-gray-800' : 'border-gray-200'} mb-6`}>
           <div className="flex items-center justify-between flex-wrap gap-4">
             <div>
@@ -176,27 +339,66 @@ const DiscardedBillsPage = ({ darkMode, onRestore }) => {
                 Bills that were discarded and can be restored
               </p>
             </div>
-            <button
-              onClick={() => navigate('/billing')}
-              className={`px-5 py-2.5 rounded-lg text-sm font-bold transition flex items-center gap-2 ${
-                darkMode 
-                  ? 'bg-amber-400 text-gray-900 hover:bg-amber-300' 
-                  : 'bg-amber-400 text-gray-900 hover:bg-amber-300'
-              } shadow-md`}
-            >
-              <FiArrowLeft className="text-base" /> Back to Billing
-            </button>
+
+            {/* Action buttons: Refresh, Excel, PDF, Back */}
+            <div className="flex items-center gap-2 flex-wrap">
+              <button
+                onClick={handleRefresh}
+                disabled={refreshing}
+                className={`px-4 py-2.5 rounded-lg text-sm font-bold transition flex items-center gap-2 shadow-md ${
+                  refreshing
+                    ? 'bg-blue-600/60 text-white cursor-not-allowed'
+                    : 'bg-blue-600 hover:bg-blue-500 text-white'
+                }`}
+              >
+                <FiRefreshCw className={refreshing ? 'animate-spin' : ''} />
+                {refreshing ? 'Refreshing...' : 'Refresh'}
+              </button>
+
+              <button
+                onClick={handleExportExcel}
+                disabled={noData}
+                className={`px-4 py-2.5 rounded-lg text-sm font-bold transition flex items-center gap-2 ${
+                  darkMode
+                    ? 'bg-green-700/40 text-green-300 hover:bg-green-700/60'
+                    : 'bg-green-100 text-green-700 hover:bg-green-200'
+                } ${noData ? 'opacity-50 cursor-not-allowed' : ''}`}
+              >
+                <FiFileText />
+                Excel
+              </button>
+
+              <button
+                onClick={handleExportPDF}
+                disabled={noData}
+                className={`px-4 py-2.5 rounded-lg text-sm font-bold transition flex items-center gap-2 ${
+                  darkMode
+                    ? 'bg-red-700/40 text-red-300 hover:bg-red-700/60'
+                    : 'bg-red-100 text-red-700 hover:bg-red-200'
+                } ${noData ? 'opacity-50 cursor-not-allowed' : ''}`}
+              >
+                <FiDownload />
+                PDF
+              </button>
+
+              <button
+                onClick={() => navigate('/billing')}
+                className="px-5 py-2.5 rounded-lg text-sm font-bold transition flex items-center gap-2 bg-amber-400 text-gray-900 hover:bg-amber-300 shadow-md"
+              >
+                <FiArrowLeft className="text-base" /> Back to Billing
+              </button>
+            </div>
           </div>
         </div>
 
-        {/* Body - Amber Theme */}
+        {/* Body */}
         <div className={`${darkMode ? 'bg-gray-900' : 'bg-white'} rounded-xl shadow-xl p-6 border ${darkMode ? 'border-gray-800' : 'border-gray-200'}`}>
           {loading ? (
             <div className="text-center py-12">
               <div className="animate-spin text-amber-400 text-4xl mb-4">⏳</div>
               <p className={`text-base font-bold ${darkMode ? 'text-gray-300' : 'text-gray-500'}`}>Loading discarded bills...</p>
             </div>
-          ) : discardedBills.length === 0 ? (
+          ) : noData ? (
             <div className="text-center py-16">
               <div className="text-6xl mb-4">📭</div>
               <p className={`text-lg font-bold ${darkMode ? 'text-gray-300' : 'text-gray-500'}`}>No discarded bills</p>
@@ -214,15 +416,15 @@ const DiscardedBillsPage = ({ darkMode, onRestore }) => {
                 const hasCustomer = bill.customer_name || bill.customer_phone;
 
                 return (
-                  <div 
-                    key={bill.id} 
+                  <div
+                    key={bill.id}
                     className={`p-5 rounded-xl border transition-all duration-200 ${
-                      darkMode 
-                        ? `bg-gray-800 border-gray-700 ${isExpanded ? 'border-amber-500 ring-2 ring-amber-500/50' : 'hover:border-amber-500/40'}` 
+                      darkMode
+                        ? `bg-gray-800 border-gray-700 ${isExpanded ? 'border-amber-500 ring-2 ring-amber-500/50' : 'hover:border-amber-500/40'}`
                         : `bg-gray-50 border-gray-200 ${isExpanded ? 'border-amber-400 ring-2 ring-amber-400/50' : 'hover:border-amber-400/60'}`
                     }`}
                   >
-                    <div 
+                    <div
                       className="cursor-pointer"
                       onClick={() => toggleBillDetails(bill.id)}
                     >
@@ -247,7 +449,7 @@ const DiscardedBillsPage = ({ darkMode, onRestore }) => {
                             )}
                           </div>
 
-                          {/* Quick Stats - Bold */}
+                          {/* Quick Stats */}
                           <div className="mt-2 flex items-center gap-4 flex-wrap text-sm">
                             <span className={`flex items-center gap-1.5 font-semibold ${darkMode ? 'text-gray-300' : 'text-gray-500'}`}>
                               <FiPackage size={14} />
@@ -285,7 +487,7 @@ const DiscardedBillsPage = ({ darkMode, onRestore }) => {
                           )}
                         </div>
 
-                        {/* Action Buttons - Amber Theme */}
+                        {/* Row Action Buttons */}
                         <div className="flex items-center gap-2 ml-4 flex-shrink-0">
                           <button
                             onClick={(e) => {
@@ -293,8 +495,8 @@ const DiscardedBillsPage = ({ darkMode, onRestore }) => {
                               handleRestore(bill.id);
                             }}
                             className={`p-2 rounded-lg transition font-bold ${
-                              darkMode 
-                                ? 'bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400' 
+                              darkMode
+                                ? 'bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400'
                                 : 'bg-emerald-100 hover:bg-emerald-200 text-emerald-600'
                             }`}
                             title="Restore this bill"
@@ -307,8 +509,8 @@ const DiscardedBillsPage = ({ darkMode, onRestore }) => {
                               handleDelete(bill.id);
                             }}
                             className={`p-2 rounded-lg transition font-bold ${
-                              darkMode 
-                                ? 'bg-red-500/20 hover:bg-red-500/30 text-red-400' 
+                              darkMode
+                                ? 'bg-red-500/20 hover:bg-red-500/30 text-red-400'
                                 : 'bg-red-100 hover:bg-red-200 text-red-600'
                             }`}
                             title="Delete this bill permanently"
@@ -321,8 +523,8 @@ const DiscardedBillsPage = ({ darkMode, onRestore }) => {
                               toggleBillDetails(bill.id);
                             }}
                             className={`p-2 rounded-lg transition font-bold ${
-                              darkMode 
-                                ? 'hover:bg-gray-700 text-gray-400' 
+                              darkMode
+                                ? 'hover:bg-gray-700 text-gray-400'
                                 : 'hover:bg-gray-200 text-gray-500'
                             }`}
                             title={isExpanded ? 'Collapse' : 'Expand'}
@@ -377,11 +579,11 @@ const DiscardedBillsPage = ({ darkMode, onRestore }) => {
                           </p>
                           <div className="flex flex-wrap gap-1.5">
                             {bill.cart_items && Array.isArray(bill.cart_items) && bill.cart_items.map((item, idx) => (
-                              <span 
-                                key={idx} 
+                              <span
+                                key={idx}
                                 className={`px-2.5 py-1 rounded text-sm flex items-center gap-1.5 font-semibold ${
-                                  darkMode 
-                                    ? 'bg-gray-700 text-white border border-gray-600' 
+                                  darkMode
+                                    ? 'bg-gray-700 text-white border border-gray-600'
                                     : 'bg-white text-gray-700 border border-gray-200'
                                 }`}
                               >
@@ -408,7 +610,7 @@ const DiscardedBillsPage = ({ darkMode, onRestore }) => {
                               Subtotal: Rs. {(bill.cart_summary.subtotal || 0).toLocaleString()}
                             </span>
                             {bill.cart_summary.discount > 0 && (
-                              <span className={`font-semibold text-red-400`}>
+                              <span className="font-semibold text-red-400">
                                 Discount: -Rs. {(bill.cart_summary.discount || 0).toLocaleString()}
                               </span>
                             )}
@@ -429,30 +631,19 @@ const DiscardedBillsPage = ({ darkMode, onRestore }) => {
           )}
         </div>
 
-        {/* Footer Actions - Amber Theme */}
-        {discardedBills.length > 0 && (
-          <div className={`${darkMode ? 'bg-gray-900' : 'bg-white'} rounded-xl shadow-xl p-4 border ${darkMode ? 'border-gray-800' : 'border-gray-200'} mt-6 flex justify-between items-center flex-wrap gap-3`}>
+        {/* Footer Actions */}
+        {!noData && (
+          <div className={`${darkMode ? 'bg-gray-900' : 'bg-white'} rounded-xl shadow-xl p-4 border ${darkMode ? 'border-gray-800' : 'border-gray-200'} mt-6 flex justify-start items-center flex-wrap gap-3`}>
             <button
               onClick={handleClearAll}
               className={`px-4 py-2 rounded-lg text-sm font-bold transition flex items-center gap-2 ${
-                darkMode 
-                  ? 'bg-red-500/20 text-red-400 hover:bg-red-500/30' 
+                darkMode
+                  ? 'bg-red-500/20 text-red-400 hover:bg-red-500/30'
                   : 'bg-red-100 text-red-600 hover:bg-red-200'
               }`}
             >
               <FiTrash2 size={16} />
               Clear All ({discardedBills.length})
-            </button>
-            <button
-              onClick={fetchDiscardedBills}
-              className={`px-4 py-2 rounded-lg text-sm font-bold transition flex items-center gap-2 ${
-                darkMode 
-                  ? 'bg-gray-800 text-white hover:bg-gray-700' 
-                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-              }`}
-            >
-              <FiRefreshCw size={16} />
-              Refresh
             </button>
           </div>
         )}

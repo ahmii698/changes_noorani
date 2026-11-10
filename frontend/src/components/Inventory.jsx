@@ -1986,7 +1986,7 @@ const Inventory = ({ darkMode }) => {
                           onFocus={() => setShowVendorDropdown(true)}
                           onBlur={() => setTimeout(() => setShowVendorDropdown(false), 150)}
                           className={modalInputCls(darkMode)}
-                          placeholder="e.g. Ahmed Malik"
+                          placeholder="e.g. xyz"
                           autoComplete="off"
                           disabled={isSubmitting}
                         />

@@ -46,6 +46,7 @@ const COLUMNS = [
   { label: "Details", align: "left" },
   { label: "Product", align: "left" },
   { label: "Price", align: "right" },
+  { label: "Receivable Payment", align: "right" },
   { label: "Quantity", align: "right" },
   { label: "Cash In", align: "right" },
   { label: "Cash Out", align: "right" },
@@ -53,8 +54,9 @@ const COLUMNS = [
   { label: "Cash Inventory", align: "right" },
   { label: "Cash IN Hand", align: "right" },
   { label: "Total Inventory Cost", align: "right" },
-  { label: "Expense", align: "right" },
   { label: "Profit", align: "right" },
+  { label: "Expense", align: "right" },
+  { label: "Net Profit", align: "right" },
 ];
 
 const alignCls = { left: "text-left", right: "text-right" };
@@ -401,7 +403,7 @@ const PageBtn = ({ children, onClick, disabled, active, title }) => (
 
 const plainNum = (n) => Number(n || 0);
 
-const exportFileName = () => `Inventory_History_${new Date().toISOString().slice(0, 10)}`;
+const exportFileName = () => `Balance_Sheet_${new Date().toISOString().slice(0, 10)}`;
 
 export default function InventoryHistory() {
   const [showSidebar, setShowSidebar] = useState(false);
@@ -444,7 +446,7 @@ export default function InventoryHistory() {
       });
       jumpedToLast.current = false;
     } catch (e) {
-      console.error("Inventory history load error:", e);
+      console.error("Balance sheet load error:", e);
       setError("Failed to load data. Please try again.");
     } finally {
       setLoading(false);
@@ -473,6 +475,9 @@ export default function InventoryHistory() {
         vendorPay: e.isVendor ? payable : 0,
         ownerCapital: owner,
         inventoryCost: invCost,
+        /* Placeholders - logic will be added later */
+        receivable: e.receivable || 0,
+        netProfit: e.netProfit || 0,
       };
     });
   }, [raw]);
@@ -483,6 +488,8 @@ export default function InventoryHistory() {
       cashOut: rows.reduce((s, r) => s + r.cashOut, 0),
       expense: rows.reduce((s, r) => s + (r.expense || 0), 0),
       profit: rows.reduce((s, r) => s + (r.profit || 0), 0),
+      receivable: rows.reduce((s, r) => s + (r.receivable || 0), 0),
+      netProfit: rows.reduce((s, r) => s + (r.netProfit || 0), 0),
       vendorPay: rows.reduce((s, r) => s + r.payableDelta, 0),
       ownerCapital: rows.length ? rows[rows.length - 1].ownerCapital : 0,
       inventoryCost: rows.length ? rows[rows.length - 1].inventoryCost : 0,
@@ -505,6 +512,7 @@ export default function InventoryHistory() {
         r.details,
         r.product || "-",
         plainNum(r.price),
+        plainNum(r.receivable),
         plainNum(r.qty),
         plainNum(r.cashIn),
         plainNum(r.cashOut),
@@ -512,33 +520,38 @@ export default function InventoryHistory() {
         plainNum(r.ownerCapital),
         plainNum(r.cashInHand),
         plainNum(r.inventoryCost),
-        plainNum(r.expense),
         plainNum(r.profit),
+        plainNum(r.expense),
+        plainNum(r.netProfit),
       ];
     });
 
     const totalRow = [
-      "", "", "", "", "", "",
+      "", "", "", "", "",
       "GRAND TOTAL",
+      plainNum(totals.receivable),
+      "",
       plainNum(totals.cashIn),
       plainNum(totals.cashOut),
       plainNum(totals.vendorPay),
       plainNum(totals.ownerCapital),
       plainNum(totals.cashInHand),
       plainNum(totals.inventoryCost),
-      plainNum(totals.expense),
       plainNum(totals.profit),
+      plainNum(totals.expense),
+      plainNum(totals.netProfit),
     ];
 
     const ws = XLSX.utils.aoa_to_sheet([header, ...body, totalRow]);
     ws["!cols"] = [
       { wch: 7 }, { wch: 22 }, { wch: 16 }, { wch: 28 }, { wch: 26 },
-      { wch: 14 }, { wch: 12 }, { wch: 14 }, { wch: 14 }, { wch: 24 },
-      { wch: 16 }, { wch: 16 }, { wch: 22 }, { wch: 14 }, { wch: 14 },
+      { wch: 14 }, { wch: 20 }, { wch: 12 }, { wch: 14 }, { wch: 14 },
+      { wch: 24 }, { wch: 16 }, { wch: 16 }, { wch: 22 }, { wch: 14 },
+      { wch: 14 }, { wch: 14 },
     ];
 
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Inventory History");
+    XLSX.utils.book_append_sheet(wb, ws, "Balance Sheet");
     XLSX.writeFile(wb, `${exportFileName()}.xlsx`);
   };
 
@@ -549,7 +562,7 @@ export default function InventoryHistory() {
     const doc = new jsPDF({ orientation: "landscape", unit: "pt", format: "a3" });
 
     doc.setFontSize(16);
-    doc.text("Inventory History - Balance Sheet", 40, 36);
+    doc.text("Balance Sheet", 40, 36);
     doc.setFontSize(9);
     doc.text(`Generated on ${new Date().toLocaleString("en-GB")}`, 40, 52);
 
@@ -564,6 +577,7 @@ export default function InventoryHistory() {
         r.details,
         r.product || "-",
         r.price ? num(r.price) : "-",
+        r.receivable ? num(r.receivable) : "-",
         r.qty || "-",
         r.cashIn ? num(r.cashIn) : "-",
         r.cashOut ? num(r.cashOut) : "-",
@@ -571,22 +585,26 @@ export default function InventoryHistory() {
         num(r.ownerCapital),
         num(r.cashInHand),
         num(r.inventoryCost),
-        r.expense ? num(r.expense) : "-",
         r.profit ? num(r.profit) : "-",
+        r.expense ? num(r.expense) : "-",
+        r.netProfit ? num(r.netProfit) : "-",
       ];
     });
 
     const foot = [
       [
-        { content: "GRAND TOTAL", colSpan: 7, styles: { halign: "right" } },
+        { content: "GRAND TOTAL", colSpan: 6, styles: { halign: "right" } },
+        num(totals.receivable),
+        "",
         num(totals.cashIn),
         num(totals.cashOut),
         num(totals.vendorPay),
         num(totals.ownerCapital),
         num(totals.cashInHand),
         num(totals.inventoryCost),
-        num(totals.expense),
         num(totals.profit),
+        num(totals.expense),
+        num(totals.netProfit),
       ],
     ];
 
@@ -612,6 +630,8 @@ export default function InventoryHistory() {
         12: { halign: "right" },
         13: { halign: "right" },
         14: { halign: "right" },
+        15: { halign: "right" },
+        16: { halign: "right" },
       },
       didParseCell: (data) => {
         if (data.section === "head" && data.column.index >= 5) {
@@ -671,8 +691,7 @@ export default function InventoryHistory() {
             <History className="text-amber-400" size={18} />
           </div>
           <div className="flex-1">
-            <h1 className="text-lg font-bold leading-tight text-white">Inventory History</h1>
-            <p className="text-xs text-slate-500">Balance Sheet</p>
+            <h1 className="text-lg font-bold leading-tight text-white">Balance Sheet</h1>
           </div>
 
           <button
@@ -711,7 +730,7 @@ export default function InventoryHistory() {
             {loading && rows.length === 0 ? (
               <div className="flex h-full items-center justify-center gap-3 text-slate-400">
                 <Loader2 className="animate-spin text-amber-400" size={22} />
-                Loading history...
+                Loading balance sheet...
               </div>
             ) : error ? (
               <div className="flex h-full flex-col items-center justify-center gap-3 text-slate-400">
@@ -724,7 +743,7 @@ export default function InventoryHistory() {
                 </button>
               </div>
             ) : (
-              <table className="w-full min-w-[1700px] border-collapse text-sm">
+              <table className="w-full min-w-[2000px] border-collapse text-sm">
                 <thead className="sticky top-0 z-10 bg-[#0b1220]">
                   <tr className="border-b border-slate-700 text-xs uppercase tracking-wide text-slate-400">
                     {COLUMNS.map((c) => (
@@ -763,6 +782,9 @@ export default function InventoryHistory() {
                             {r.product || "-"}
                           </td>
                           <td className="border-r border-slate-800/60 px-4 py-3 text-right">{money(r.price)}</td>
+                          <td className="border-r border-slate-800/60 px-4 py-3 text-right font-semibold text-yellow-300">
+                            {money(r.receivable)}
+                          </td>
                           <td className="border-r border-slate-800/60 px-4 py-3 text-right">{r.qty || "-"}</td>
                           <td className="border-r border-slate-800/60 px-4 py-3 text-right font-semibold text-emerald-400">
                             {money(r.cashIn)}
@@ -782,11 +804,14 @@ export default function InventoryHistory() {
                           <td className="border-r border-slate-800/60 px-4 py-3 text-right font-semibold text-cyan-400">
                             {money(r.inventoryCost)}
                           </td>
+                          <td className="border-r border-slate-800/60 px-4 py-3 text-right font-semibold text-lime-400">
+                            {money(r.profit)}
+                          </td>
                           <td className="border-r border-slate-800/60 px-4 py-3 text-right font-semibold text-orange-400">
                             {money(r.expense)}
                           </td>
-                          <td className="px-4 py-3 text-right font-semibold text-lime-400">
-                            {money(r.profit)}
+                          <td className="px-4 py-3 text-right font-semibold text-teal-300">
+                            {money(r.netProfit)}
                           </td>
                         </tr>
                       );
@@ -796,17 +821,20 @@ export default function InventoryHistory() {
 
                 <tfoot className="sticky bottom-0 bg-[#0b1220]">
                   <tr className="border-t-2 border-slate-600 text-sm font-bold">
-                    <td colSpan={7} className="px-4 py-3.5 text-right uppercase tracking-wide text-slate-400">
+                    <td colSpan={6} className="px-4 py-3.5 text-right uppercase tracking-wide text-slate-400">
                       Grand Total
                     </td>
+                    <td className="px-4 py-3.5 text-right text-yellow-300">{money(totals.receivable)}</td>
+                    <td className="px-4 py-3.5"></td>
                     <td className="px-4 py-3.5 text-right text-emerald-400">{money(totals.cashIn)}</td>
                     <td className="px-4 py-3.5 text-right text-rose-400">{money(totals.cashOut)}</td>
                     <td className="px-4 py-3.5 text-right text-purple-300">{money(totals.vendorPay)}</td>
                     <td className="px-4 py-3.5 text-right text-blue-400">{money(totals.ownerCapital)}</td>
                     <td className="px-4 py-3.5 text-right text-white">{money(totals.cashInHand)}</td>
                     <td className="px-4 py-3.5 text-right text-cyan-400">{money(totals.inventoryCost)}</td>
-                    <td className="px-4 py-3.5 text-right text-orange-400">{money(totals.expense)}</td>
                     <td className="px-4 py-3.5 text-right text-lime-400">{money(totals.profit)}</td>
+                    <td className="px-4 py-3.5 text-right text-orange-400">{money(totals.expense)}</td>
+                    <td className="px-4 py-3.5 text-right text-teal-300">{money(totals.netProfit)}</td>
                   </tr>
                 </tfoot>
               </table>

@@ -4,9 +4,9 @@ import React, { useState, useEffect } from 'react';
 import { 
   FiPackage, FiDollarSign, FiFileText, FiBarChart2, 
   FiChevronDown, FiChevronUp, FiList, FiPieChart, 
-  FiTrendingUp, FiHome, FiBell, FiUser, FiUsers, 
-  FiLogOut, FiCreditCard, FiClock, FiSettings, FiCalendar,
-  FiBriefcase, FiRotateCcw
+  FiTrendingUp, FiHome, FiUser, FiUsers, 
+  FiLogOut, FiCreditCard, FiClock, FiCalendar,
+  FiBriefcase, FiBookOpen, FiArrowDownCircle
 } from 'react-icons/fi';
 import { HiMenu, HiX } from 'react-icons/hi';
 import { useNavigate } from 'react-router-dom';
@@ -28,12 +28,12 @@ const Sidebar = ({ activeMenu, setActiveMenu, isOpen, setIsOpen, darkMode }) => 
   const adminMenuItems = [
     { id: 'all-data', label: 'Dashboard', icon: FiHome, path: '/dashboard' },
     { id: 'inventory', label: 'Inventory', icon: FiPackage, path: '/inventory' },
-    { id: 'inventory-history', label: 'Inventory History', icon: FiRotateCcw, path: '/inventory-history' },
+    { id: 'inventory-history', label: 'Balance Sheet', icon: FiBookOpen, path: '/inventory-history' },
     { id: 'cash-in-hand', label: 'Owner Capital', icon: FiBriefcase, path: '/cash-in-hand' },
     { id: 'finance', label: 'Finance', icon: FiDollarSign, hasSubmenu: true },
     { id: 'billing', label: 'Billing', icon: FiFileText, path: '/billing' },
     { id: 'payment', label: 'Payment', icon: FiCreditCard, path: '/payment' },
-    { id: 'reminders', label: 'Reminders', icon: FiBell, path: '/reminders', badge: reminderCount },
+    { id: 'reminders', label: 'Receivable Payment', icon: FiArrowDownCircle, path: '/reminders', badge: reminderCount },
     { id: 'discarded', label: 'Draft', icon: FiClock, path: '/discarded', badge: discardedCount },
     { id: 'record', label: 'Records', icon: FiBarChart2, path: '/records' },
     { id: 'leave', label: 'Leave', icon: FiCalendar, path: '/leave' },
@@ -44,7 +44,7 @@ const Sidebar = ({ activeMenu, setActiveMenu, isOpen, setIsOpen, darkMode }) => 
   const employeeMenuItems = [
     { id: 'inventory', label: 'Inventory', icon: FiPackage, path: '/inventory' },
     { id: 'billing', label: 'Billing', icon: FiFileText, path: '/billing' },
-    { id: 'reminders', label: 'Reminders', icon: FiBell, path: '/reminders', badge: reminderCount },
+    { id: 'reminders', label: 'Receivable Payment', icon: FiArrowDownCircle, path: '/reminders', badge: reminderCount },
     { id: 'discarded', label: 'Discarded', icon: FiClock, path: '/discarded', badge: discardedCount },
     { id: 'leave', label: 'Leave', icon: FiCalendar, path: '/leave' },
   ];

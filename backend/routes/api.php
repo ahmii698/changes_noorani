@@ -22,6 +22,8 @@ use App\Http\Controllers\LeaveController;
 use App\Http\Controllers\EmployeeLoanController;
 // ✅ CASH IN HAND CONTROLLER - NEW
 use App\Http\Controllers\CashInHandController;
+// <-- NAYA (Super Admin)
+use App\Http\Controllers\SuperAdminAuthController;
 
 /*
 |--------------------------------------------------------------------------
@@ -36,6 +38,9 @@ Route::post('/login', [AuthController::class, 'login']);
 Route::post('/forgot-password', [AuthController::class, 'forgotPassword']);
 Route::post('/verify-otp', [AuthController::class, 'verifyOtp']);
 Route::post('/reset-password', [AuthController::class, 'resetPassword']);
+
+// <-- NAYA (Super Admin): super admin ka alag login
+Route::post('/super-admin/login', [SuperAdminAuthController::class, 'login'])->middleware('throttle:10,1');
 
 // Sanctum login fallback
 Route::get('/login', function() {
@@ -275,7 +280,16 @@ Route::middleware(['auth:sanctum'])->group(function () {
     });
 });
 
+// ==================== <-- NAYA (Super Admin): protected routes ====================
+// Ye 'auth:sanctum' group ke BAHAR hain, aur sirf super_admins table ke token chalte hain.
+Route::middleware('auth:super_admin')->prefix('super-admin')->group(function () {
+    Route::post('/logout', [SuperAdminAuthController::class, 'logout']);
+    Route::get('/me', [SuperAdminAuthController::class, 'me']);
+    // yahan aage subscriptions ke routes aayenge
+});
+
 // ==================== FALLBACK ROUTE (404) ====================
+// NOTE: fallback hamesha sabse last mein rehna chahiye
 Route::fallback(function() {
     return response()->json([
         'success' => false,

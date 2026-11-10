@@ -10,6 +10,10 @@ import { Toaster } from 'react-hot-toast';
 import Login from './components/Login';
 import Dashboard from './components/Dashboard';
 
+// <-- NAYA (Super Admin)
+import SuperAdminLogin from './pages/super-admin/SuperAdminLogin';
+import SuperAdminDashboard from './pages/super-admin/SuperAdminDashboard';
+
 // Ye sab pages Dashboard ke andar render hote hain
 const DASHBOARD_PATHS = [
   '/dashboard',
@@ -99,6 +103,10 @@ function App() {
             </PublicRoute>
           }
         />
+
+        {/* <-- NAYA (Super Admin) */}
+        <Route path="/super-admin" element={<SuperAdminLogin />} />
+        <Route path="/super-admin/dashboard" element={<SuperAdminDashboard />} />
 
         {/* Saare pages Dashboard ke through */}
         {DASHBOARD_PATHS.map((path) => (

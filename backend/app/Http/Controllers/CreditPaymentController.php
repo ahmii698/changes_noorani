@@ -2,56 +2,53 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\CreditVendor;
-use App\Models\CreditPayment;
+use App\Http\Controllers\Concerns\CompanyAware;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Validation\Rule;
 
 class CreditPaymentController extends Controller
 {
-    /**
-     * ✅ Helper function to get logged-in user name
-     */
+    use CompanyAware;
+
+    // Login user ka naam (created_by ke liye)
     private function getCreatedBy()
     {
         $createdBy = 'System';
-        
+
         try {
             if (auth()->guard('sanctum')->check()) {
                 $user = auth()->guard('sanctum')->user();
-                $createdBy = $user->name ?? $user->email ?? 'Admin';
-                return $createdBy;
+                return $user->name ?? $user->email ?? 'Admin';
             }
-            
+
             if (auth()->guard('web')->check()) {
                 $user = auth()->guard('web')->user();
-                $createdBy = $user->name ?? $user->email ?? 'Admin';
-                return $createdBy;
+                return $user->name ?? $user->email ?? 'Admin';
             }
-            
+
             if (auth()->check()) {
                 $user = auth()->user();
-                $createdBy = $user->name ?? $user->email ?? 'Admin';
-                return $createdBy;
+                return $user->name ?? $user->email ?? 'Admin';
             }
-            
         } catch (\Exception $e) {
             Log::error('Auth check error: ' . $e->getMessage());
         }
-        
+
         return $createdBy;
     }
 
     /**
-     * Make a payment
      * POST /api/credit/payments
      */
     public function store(Request $request)
     {
+        $cid = $this->cid();
+
         $validator = Validator::make($request->all(), [
-            'vendor_id' => 'required|exists:credit_vendors,id',
+            'vendor_id' => ['required', Rule::exists('credit_vendors', 'id')->where('company_id', $cid)],
             'amount' => 'required|numeric|min:1',
             'note' => 'nullable|string|max:500',
         ]);
@@ -66,9 +63,13 @@ class CreditPaymentController extends Controller
         try {
             DB::beginTransaction();
 
-            $vendor = DB::table('credit_vendors')->where('id', $request->vendor_id)->first();
+            $vendor = DB::table('credit_vendors')
+                ->where('company_id', $cid)
+                ->where('id', $request->vendor_id)
+                ->first();
 
             if (!$vendor) {
+                DB::rollBack();
                 return response()->json([
                     'success' => false,
                     'message' => 'Vendor not found',
@@ -76,6 +77,7 @@ class CreditPaymentController extends Controller
             }
 
             if ($request->amount > $vendor->balance_amount) {
+                DB::rollBack();
                 return response()->json([
                     'success' => false,
                     'message' => 'Payment amount cannot exceed balance amount',
@@ -84,8 +86,8 @@ class CreditPaymentController extends Controller
 
             $createdBy = $this->getCreatedBy();
 
-            // ✅ Create payment
             DB::table('credit_payments')->insert([
+                'company_id' => $cid,
                 'vendor_id' => $vendor->id,
                 'amount' => $request->amount,
                 'payment_date' => now(),
@@ -93,11 +95,11 @@ class CreditPaymentController extends Controller
                 'created_by' => $createdBy,
             ]);
 
-            // ✅ Update vendor balance
             $newPaidAmount = $vendor->paid_amount + $request->amount;
             $newBalanceAmount = $vendor->total_amount - $newPaidAmount;
 
             DB::table('credit_vendors')
+                ->where('company_id', $cid)
                 ->where('id', $vendor->id)
                 ->update([
                     'paid_amount' => $newPaidAmount,
@@ -107,7 +109,6 @@ class CreditPaymentController extends Controller
 
             DB::commit();
 
-            // ✅ Get updated vendor
             $updatedVendor = DB::table('credit_vendors')->where('id', $vendor->id)->first();
 
             return response()->json([
@@ -134,13 +135,14 @@ class CreditPaymentController extends Controller
     }
 
     /**
-     * Get payments for a vendor
      * GET /api/credit/payments/vendor/{vendorId}
      */
     public function getVendorPayments($vendorId)
     {
+        $cid = $this->cid();
+
         try {
-            $vendor = DB::table('credit_vendors')->where('id', $vendorId)->first();
+            $vendor = DB::table('credit_vendors')->where('company_id', $cid)->where('id', $vendorId)->first();
 
             if (!$vendor) {
                 return response()->json([
@@ -150,6 +152,7 @@ class CreditPaymentController extends Controller
             }
 
             $payments = DB::table('credit_payments')
+                ->where('company_id', $cid)
                 ->where('vendor_id', $vendorId)
                 ->orderBy('payment_date', 'desc')
                 ->get();
@@ -188,20 +191,19 @@ class CreditPaymentController extends Controller
     }
 
     /**
-     * Get all payments with filters
      * GET /api/credit/payments
      */
     public function index(Request $request)
     {
-        try {
-            $query = DB::table('credit_payments');
+        $cid = $this->cid();
 
-            // Filter by vendor
+        try {
+            $query = DB::table('credit_payments')->where('company_id', $cid);
+
             if ($request->has('vendor_id') && !empty($request->vendor_id)) {
                 $query->where('vendor_id', $request->vendor_id);
             }
 
-            // Filter by date range
             if ($request->has('from_date') && !empty($request->from_date)) {
                 $query->whereDate('payment_date', '>=', $request->from_date);
             }
@@ -209,13 +211,11 @@ class CreditPaymentController extends Controller
                 $query->whereDate('payment_date', '<=', $request->to_date);
             }
 
-            // Filter current month
             if ($request->has('current_month') && $request->current_month) {
                 $query->whereMonth('payment_date', now()->month)
                       ->whereYear('payment_date', now()->year);
             }
 
-            // Filter today
             if ($request->has('today') && $request->today) {
                 $query->whereDate('payment_date', now()->toDateString());
             }
@@ -239,13 +239,75 @@ class CreditPaymentController extends Controller
     }
 
     /**
-     * Delete payment (revert vendor balance)
-     * DELETE /api/credit/payments/{id}
+     * GET /api/credit/payments/{id}
+     */
+    public function show($id)
+    {
+        $cid = $this->cid();
+
+        $payment = DB::table('credit_payments')->where('company_id', $cid)->where('id', $id)->first();
+
+        if (!$payment) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Payment not found',
+            ], 404);
+        }
+
+        return response()->json([
+            'success' => true,
+            'data' => $payment,
+        ]);
+    }
+
+    /**
+     * PUT /api/credit/payments/{id}  (sirf note badalta hai, amount nahi)
+     */
+    public function update(Request $request, $id)
+    {
+        $cid = $this->cid();
+
+        $validator = Validator::make($request->all(), [
+            'note' => 'nullable|string|max:500',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'errors' => $validator->errors(),
+            ], 422);
+        }
+
+        $updated = DB::table('credit_payments')
+            ->where('company_id', $cid)
+            ->where('id', $id)
+            ->update(['note' => $request->input('note')]);
+
+        $payment = DB::table('credit_payments')->where('company_id', $cid)->where('id', $id)->first();
+
+        if (!$payment) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Payment not found',
+            ], 404);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Payment updated successfully',
+            'data' => $payment,
+        ]);
+    }
+
+    /**
+     * DELETE /api/credit/payments/{id}  (vendor ka balance wapis theek karta hai)
      */
     public function destroy($id)
     {
+        $cid = $this->cid();
+
         try {
-            $payment = DB::table('credit_payments')->where('id', $id)->first();
+            $payment = DB::table('credit_payments')->where('company_id', $cid)->where('id', $id)->first();
 
             if (!$payment) {
                 return response()->json([
@@ -256,13 +318,17 @@ class CreditPaymentController extends Controller
 
             DB::beginTransaction();
 
-            $vendor = DB::table('credit_vendors')->where('id', $payment->vendor_id)->first();
+            $vendor = DB::table('credit_vendors')
+                ->where('company_id', $cid)
+                ->where('id', $payment->vendor_id)
+                ->first();
 
             if ($vendor) {
                 $newPaidAmount = $vendor->paid_amount - $payment->amount;
                 $newBalanceAmount = $vendor->total_amount - $newPaidAmount;
 
                 DB::table('credit_vendors')
+                    ->where('company_id', $cid)
                     ->where('id', $vendor->id)
                     ->update([
                         'paid_amount' => $newPaidAmount,
@@ -271,7 +337,7 @@ class CreditPaymentController extends Controller
                     ]);
             }
 
-            DB::table('credit_payments')->where('id', $id)->delete();
+            DB::table('credit_payments')->where('company_id', $cid)->where('id', $id)->delete();
 
             DB::commit();
 
@@ -291,33 +357,33 @@ class CreditPaymentController extends Controller
     }
 
     /**
-     * Get payment statistics
      * GET /api/credit/payments/statistics
      */
     public function statistics(Request $request)
     {
-        try {
-            $query = DB::table('credit_payments');
+        $cid = $this->cid();
 
+        try {
+            $base = fn() => DB::table('credit_payments')->where('company_id', $cid);
+
+            $query = $base();
             if ($request->has('vendor_id') && !empty($request->vendor_id)) {
                 $query->where('vendor_id', $request->vendor_id);
             }
 
-            $totalPayments = $query->count();
-            $totalAmount = $query->sum('amount') ?? 0;
-            
-            $currentMonth = DB::table('credit_payments')
+            $totalPayments = (clone $query)->count();
+            $totalAmount = (clone $query)->sum('amount') ?? 0;
+
+            $currentMonth = $base()
                 ->whereMonth('payment_date', now()->month)
                 ->whereYear('payment_date', now()->year)
                 ->sum('amount') ?? 0;
-            
-            $currentWeek = DB::table('credit_payments')
-                ->whereBetween('payment_date', [
-                    now()->startOfWeek(),
-                    now()->endOfWeek()
-                ])->sum('amount') ?? 0;
-            
-            $today = DB::table('credit_payments')
+
+            $currentWeek = $base()
+                ->whereBetween('payment_date', [now()->startOfWeek(), now()->endOfWeek()])
+                ->sum('amount') ?? 0;
+
+            $today = $base()
                 ->whereDate('payment_date', now()->toDateString())
                 ->sum('amount') ?? 0;
 

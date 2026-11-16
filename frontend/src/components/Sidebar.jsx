@@ -6,7 +6,7 @@ import {
   FiChevronDown, FiChevronUp, FiList, FiPieChart, 
   FiTrendingUp, FiHome, FiUser, FiUsers, 
   FiLogOut, FiCreditCard, FiClock, FiCalendar,
-  FiBriefcase, FiBookOpen, FiArrowDownCircle
+  FiBriefcase, FiBookOpen, FiArrowDownCircle, FiRepeat
 } from 'react-icons/fi';
 import { HiMenu, HiX } from 'react-icons/hi';
 import { useNavigate } from 'react-router-dom';
@@ -32,8 +32,8 @@ const Sidebar = ({ activeMenu, setActiveMenu, isOpen, setIsOpen, darkMode }) => 
     { id: 'cash-in-hand', label: 'Owner Capital', icon: FiBriefcase, path: '/cash-in-hand' },
     { id: 'finance', label: 'Finance', icon: FiDollarSign, hasSubmenu: true },
     { id: 'billing', label: 'Billing', icon: FiFileText, path: '/billing' },
-    { id: 'payment', label: 'Payment', icon: FiCreditCard, path: '/payment' },
     { id: 'reminders', label: 'Receivable Payment', icon: FiArrowDownCircle, path: '/reminders', badge: reminderCount },
+    { id: 'amounts', label: 'Amounts', icon: FiRepeat, path: '/amounts' },
     { id: 'discarded', label: 'Draft', icon: FiClock, path: '/discarded', badge: discardedCount },
     { id: 'record', label: 'Records', icon: FiBarChart2, path: '/records' },
     { id: 'leave', label: 'Leave', icon: FiCalendar, path: '/leave' },

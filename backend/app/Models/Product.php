@@ -13,14 +13,14 @@ class Product extends Model
     use HasFactory;
 
     protected $table = 'products';
-    
+
     protected $fillable = [
-        'name', 
-        'purchase_price', 
-        'selling_price', 
-        'quantity', 
+        'name',
+        'purchase_price',
+        'selling_price',
+        'quantity',
         'low_stock_threshold',
-        'category', // ✅ ADDED - for battery category
+        'category',
         'date_added',
         'last_low_stock_notification',
         'vendor_id',
@@ -36,34 +36,25 @@ class Product extends Model
         'is_credit_purchase' => 'boolean',
         'is_hidden' => 'boolean',
         'low_stock_threshold' => 'integer',
-        'category' => 'string', // ✅ ADDED
+        'category' => 'string',
     ];
 
     public $timestamps = true;
 
     // ============================================================
-    // ✅ CREDIT RELATIONSHIPS
+    // CREDIT RELATIONSHIPS
     // ============================================================
 
-    /**
-     * Get the vendor who supplied this product on credit
-     */
     public function creditVendor()
     {
         return $this->belongsTo(CreditVendor::class, 'vendor_id');
     }
 
-    /**
-     * Get the credit product links for this product
-     */
     public function creditLinks()
     {
         return $this->hasMany(CreditProductLink::class);
     }
 
-    /**
-     * Get all vendors associated with this product through credit purchases
-     */
     public function creditVendors()
     {
         return $this->belongsToMany(CreditVendor::class, 'credit_product_links')
@@ -72,28 +63,19 @@ class Product extends Model
     }
 
     // ============================================================
-    // ✅ CREDIT ACCESSORS & HELPERS
+    // CREDIT ACCESSORS & HELPERS
     // ============================================================
 
-    /**
-     * Check if product was purchased on credit
-     */
     public function isCreditPurchase(): bool
     {
         return (bool) $this->is_credit_purchase;
     }
 
-    /**
-     * Check if product is hidden
-     */
     public function isHidden(): bool
     {
         return (bool) $this->is_hidden;
     }
 
-    /**
-     * Get vendor name or null
-     */
     public function getVendorNameAttribute()
     {
         if ($this->creditVendor) {
@@ -102,34 +84,22 @@ class Product extends Model
         return null;
     }
 
-    /**
-     * Get total credit quantity for this product
-     */
     public function getTotalCreditQuantityAttribute(): int
     {
         return (int) $this->creditLinks()->sum('quantity');
     }
 
-    /**
-     * Get total credit purchase amount for this product
-     */
     public function getTotalCreditAmountAttribute(): float
     {
         return (float) $this->creditLinks()->sum(DB::raw('quantity * purchase_price'));
     }
 
-    /**
-     * Check if product is low stock
-     */
     public function isLowStock(): bool
     {
         $threshold = $this->low_stock_threshold ?? 5;
         return $this->quantity < $threshold;
     }
 
-    /**
-     * Get stock status label
-     */
     public function getStockStatusAttribute(): string
     {
         $threshold = $this->low_stock_threshold ?? 5;
@@ -145,9 +115,6 @@ class Product extends Model
         }
     }
 
-    /**
-     * Get stock status color
-     */
     public function getStockStatusColorAttribute(): string
     {
         $threshold = $this->low_stock_threshold ?? 5;
@@ -163,49 +130,31 @@ class Product extends Model
         }
     }
 
-    /**
-     * Get formatted purchase price
-     */
     public function getFormattedPurchasePriceAttribute(): string
     {
         return 'Rs. ' . number_format($this->purchase_price, 2);
     }
 
-    /**
-     * Get formatted selling price
-     */
     public function getFormattedSellingPriceAttribute(): string
     {
         return 'Rs. ' . number_format($this->selling_price, 2);
     }
 
-    /**
-     * Get profit per unit
-     */
     public function getProfitPerUnitAttribute(): float
     {
         return (float) ($this->selling_price - $this->purchase_price);
     }
 
-    /**
-     * Get total stock value (purchase price)
-     */
     public function getTotalStockValueAttribute(): float
     {
         return (float) ($this->quantity * $this->purchase_price);
     }
 
-    /**
-     * Get total stock value (selling price)
-     */
     public function getTotalSellingValueAttribute(): float
     {
         return (float) ($this->quantity * $this->selling_price);
     }
 
-    /**
-     * Get profit margin percentage
-     */
     public function getProfitMarginAttribute(): float
     {
         if ($this->purchase_price == 0) return 0;
@@ -213,28 +162,19 @@ class Product extends Model
     }
 
     // ============================================================
-    // ✅ SCOPES
+    // SCOPES
     // ============================================================
 
-    /**
-     * Scope to get only credit purchase products
-     */
     public function scopeCreditPurchases($query)
     {
         return $query->where('is_credit_purchase', true);
     }
 
-    /**
-     * Scope to get only normal purchase products
-     */
     public function scopeNormalPurchases($query)
     {
         return $query->where('is_credit_purchase', false);
     }
 
-    /**
-     * Scope to get low stock products
-     */
     public function scopeLowStock($query, $threshold = null)
     {
         if ($threshold === null) {
@@ -243,108 +183,71 @@ class Product extends Model
         return $query->where('quantity', '<', $threshold);
     }
 
-    /**
-     * Scope to get out of stock products
-     */
     public function scopeOutOfStock($query)
     {
         return $query->where('quantity', '<=', 0);
     }
 
-    /**
-     * Scope to get products by vendor
-     */
     public function scopeByVendor($query, $vendorId)
     {
         return $query->where('vendor_id', $vendorId);
     }
 
-    /**
-     * Scope to search products
-     */
     public function scopeSearch($query, $search)
     {
         return $query->where('name', 'LIKE', "%{$search}%");
     }
 
-    /**
-     * Scope to get only non-hidden products (active)
-     */
     public function scopeActive($query)
     {
         return $query->where('is_hidden', 0);
     }
 
-    /**
-     * Scope to get only hidden products
-     */
     public function scopeHidden($query)
     {
         return $query->where('is_hidden', 1);
     }
 
-    /**
-     * Scope to get only battery products
-     */
+    // OR condition ko group kiya taake company filter ke saath na toote
     public function scopeBattery($query)
     {
-        return $query->where('category', 'Battery')
-                     ->orWhere('name', 'LIKE', '%Battery%');
+        return $query->where(function ($q) {
+            $q->where('category', 'Battery')
+              ->orWhere('name', 'LIKE', '%Battery%');
+        });
     }
 
     // ============================================================
-    // ✅ STATIC METHODS
+    // STATIC METHODS
     // ============================================================
 
-    /**
-     * Get total stock value of all products
-     */
     public static function getTotalStockValue(): float
     {
         return (float) self::sum(DB::raw('quantity * purchase_price'));
     }
 
-    /**
-     * Get total selling value of all products
-     */
     public static function getTotalSellingValue(): float
     {
         return (float) self::sum(DB::raw('quantity * selling_price'));
     }
 
-    /**
-     * Get total profit potential
-     */
     public static function getTotalProfitPotential(): float
     {
         return (float) self::sum(DB::raw('quantity * (selling_price - purchase_price)'));
     }
 
-    /**
-     * Get product statistics
-     */
     public static function getStatistics()
     {
-        $totalProducts = self::count();
-        $totalQuantity = self::sum('quantity');
-        $lowStockCount = self::lowStock()->count();
-        $outOfStockCount = self::outOfStock()->count();
-        $creditProducts = self::creditPurchases()->count();
-        $normalProducts = self::normalPurchases()->count();
-        $hiddenProducts = self::hidden()->count();
-        $activeProducts = self::active()->count();
-        $batteryProducts = self::battery()->count(); // ✅ Added battery count
-
         return [
-            'total_products' => $totalProducts,
-            'total_quantity' => (int) $totalQuantity,
-            'low_stock_count' => $lowStockCount,
-            'out_of_stock_count' => $outOfStockCount,
-            'credit_products' => $creditProducts,
-            'normal_products' => $normalProducts,
-            'hidden_products' => $hiddenProducts,
-            'active_products' => $activeProducts,
-            'battery_products' => $batteryProducts, // ✅ Added
+            'total_products' => self::count(),
+            'total_quantity' => (int) self::sum('quantity'),
+            'low_stock_count' => self::lowStock()->count(),
+            'out_of_stock_count' => self::outOfStock()->count(),
+            'credit_products' => self::creditPurchases()->count(),
+            'normal_products' => self::normalPurchases()->count(),
+            'hidden_products' => self::hidden()->count(),
+            'active_products' => self::active()->count(),
+            'battery_products' => self::battery()->count(),
             'total_stock_value' => (float) self::getTotalStockValue(),
             'total_selling_value' => (float) self::getTotalSellingValue(),
             'total_profit_potential' => (float) self::getTotalProfitPotential(),
@@ -352,12 +255,9 @@ class Product extends Model
     }
 
     // ============================================================
-    // ✅ LOW STOCK EMAIL (unchanged)
+    // BOOT + LOW STOCK EMAIL
     // ============================================================
 
-    /**
-     * Boot the model
-     */
     protected static function booted()
     {
         static::updated(function ($product) {
@@ -365,7 +265,7 @@ class Product extends Model
             if ($product->quantity < $threshold) {
                 self::sendLowStockEmail($product);
             }
-            
+
             if ($product->wasChanged()) {
                 \Log::info('Product updated', [
                     'product_id' => $product->id,
@@ -374,19 +274,19 @@ class Product extends Model
                 ]);
             }
         });
-        
+
         static::created(function ($product) {
             $threshold = $product->low_stock_threshold ?? 5;
             if ($product->quantity < $threshold) {
                 self::sendLowStockEmail($product);
             }
-            
+
             \Log::info('Product created', [
                 'product_id' => $product->id,
                 'name' => $product->name,
                 'quantity' => $product->quantity,
                 'low_stock_threshold' => $product->low_stock_threshold,
-                'category' => $product->category, // ✅ Added
+                'category' => $product->category,
                 'is_credit_purchase' => $product->is_credit_purchase,
                 'is_hidden' => $product->is_hidden,
             ]);
@@ -399,15 +299,17 @@ class Product extends Model
             ]);
         });
     }
-    
+
     /**
-     * Send low stock email
+     * Low stock email: sirf is product ki apni company ke admin ko jati hai.
      */
-    protected static function sendLowStockEmail($product)
+    public static function sendLowStockEmail($product)
     {
         try {
-            $admin = User::where('role', 'admin')->first();
-            
+            $admin = User::where('role', 'admin')
+                ->where('company_id', $product->company_id)
+                ->first();
+
             if ($admin) {
                 $threshold = $product->low_stock_threshold ?? 5;
 
@@ -478,13 +380,13 @@ class Product extends Model
                     </div>
                 </body>
                 </html>';
-                
-                Mail::send([], [], function($message) use ($admin, $html, $product) {
+
+                Mail::send([], [], function ($message) use ($admin, $html, $product) {
                     $message->to($admin->email)
                             ->subject('⚠️ Low Stock Alert - ' . $product->name)
                             ->html($html);
                 });
-                
+
                 \Log::info('Low stock email sent for: ' . $product->name . ' (Stock: ' . $product->quantity . ', Threshold: ' . $threshold . ')');
             } else {
                 \Log::warning('No admin user found to send low stock alert');

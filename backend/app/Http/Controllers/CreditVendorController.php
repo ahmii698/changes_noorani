@@ -2,73 +2,73 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Concerns\CompanyAware;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Validation\Rule;
 
 class CreditVendorController extends Controller
 {
-    /**
-     * ✅ Helper function to get logged-in user name
-     */
+    use CompanyAware;
+
+    // Login user ka naam (created_by ke liye)
     private function getCreatedBy()
     {
         $createdBy = 'System';
-        
+
         try {
             if (auth()->guard('sanctum')->check()) {
                 $user = auth()->guard('sanctum')->user();
-                $createdBy = $user->name ?? $user->email ?? 'Admin';
-                return $createdBy;
+                return $user->name ?? $user->email ?? 'Admin';
             }
-            
+
             if (auth()->guard('web')->check()) {
                 $user = auth()->guard('web')->user();
-                $createdBy = $user->name ?? $user->email ?? 'Admin';
-                return $createdBy;
+                return $user->name ?? $user->email ?? 'Admin';
             }
-            
+
             if (auth()->check()) {
                 $user = auth()->user();
-                $createdBy = $user->name ?? $user->email ?? 'Admin';
-                return $createdBy;
+                return $user->name ?? $user->email ?? 'Admin';
             }
-            
         } catch (\Exception $e) {
             Log::error('Auth check error: ' . $e->getMessage());
         }
-        
+
         return $createdBy;
     }
 
+    // Vendor ke saath uski payments aur products attach karta hai (sirf isi company ki)
+    private function attachDetails($vendor, int $cid)
+    {
+        $vendor->payments = DB::table('credit_payments')
+            ->where('company_id', $cid)
+            ->where('vendor_id', $vendor->id)
+            ->get();
+
+        $vendor->productsList = DB::table('credit_product_links')
+            ->join('products', 'credit_product_links.product_id', '=', 'products.id')
+            ->where('credit_product_links.company_id', $cid)
+            ->where('credit_product_links.vendor_id', $vendor->id)
+            ->select('products.*', 'credit_product_links.quantity as pivot_quantity', 'credit_product_links.purchase_price as pivot_purchase_price')
+            ->get();
+
+        return $vendor;
+    }
+
     /**
-     * Get all vendors with their payments and products
      * GET /api/credit/vendors
      */
     public function index(Request $request)
     {
+        $cid = $this->cid();
+
         try {
-            Log::info('CreditVendorController@index called');
-            
-            $vendors = DB::table('credit_vendors')->get();
-            
-            $vendorsWithPayments = $vendors->map(function($vendor) {
-                $payments = DB::table('credit_payments')
-                    ->where('vendor_id', $vendor->id)
-                    ->get();
-                
-                $products = DB::table('credit_product_links')
-                    ->join('products', 'credit_product_links.product_id', '=', 'products.id')
-                    ->where('credit_product_links.vendor_id', $vendor->id)
-                    ->select('products.*', 'credit_product_links.quantity as pivot_quantity', 'credit_product_links.purchase_price as pivot_purchase_price')
-                    ->get();
-                
-                $vendor->payments = $payments;
-                $vendor->productsList = $products;
-                
-                return $vendor;
-            });
+            $vendors = DB::table('credit_vendors')->where('company_id', $cid)->get();
+
+            $vendorsWithPayments = $vendors->map(fn($vendor) => $this->attachDetails($vendor, $cid));
 
             return response()->json([
                 'success' => true,
@@ -84,7 +84,7 @@ class CreditVendorController extends Controller
                     'fully_paid' => $vendorsWithPayments->where('balance_amount', '<=', 0)->count(),
                 ],
             ]);
-            
+
         } catch (\Exception $e) {
             Log::error('Error in index: ' . $e->getMessage());
             return response()->json([
@@ -95,13 +95,14 @@ class CreditVendorController extends Controller
     }
 
     /**
-     * Get single vendor with details
      * GET /api/credit/vendors/{id}
      */
     public function show($id)
     {
+        $cid = $this->cid();
+
         try {
-            $vendor = DB::table('credit_vendors')->where('id', $id)->first();
+            $vendor = DB::table('credit_vendors')->where('company_id', $cid)->where('id', $id)->first();
 
             if (!$vendor) {
                 return response()->json([
@@ -110,9 +111,10 @@ class CreditVendorController extends Controller
                 ], 404);
             }
 
-            $payments = DB::table('credit_payments')->where('vendor_id', $id)->get();
+            $payments = DB::table('credit_payments')->where('company_id', $cid)->where('vendor_id', $id)->get();
             $products = DB::table('credit_product_links')
                 ->join('products', 'credit_product_links.product_id', '=', 'products.id')
+                ->where('credit_product_links.company_id', $cid)
                 ->where('credit_product_links.vendor_id', $id)
                 ->select('products.*', 'credit_product_links.quantity as pivot_quantity', 'credit_product_links.purchase_price as pivot_purchase_price')
                 ->get();
@@ -144,22 +146,27 @@ class CreditVendorController extends Controller
     }
 
     /**
-     * Create new vendor with products
      * POST /api/credit/vendors
      */
     public function store(Request $request)
     {
-        Log::info('CreditVendorController@store called');
+        $cid = $this->cid();
 
         $validator = Validator::make($request->all(), [
             'vendor_name' => 'required|string|max:255',
             'products' => 'nullable|string',
-            'invoice_number' => 'required|string|max:100|unique:credit_vendors,invoice_number',
+            'invoice_number' => [
+                'required', 'string', 'max:100',
+                Rule::unique('credit_vendors', 'invoice_number')->where('company_id', $cid),
+            ],
             'total_amount' => 'required|numeric|min:0',
             'paid_amount' => 'nullable|numeric|min:0',
             'stock_quantity' => 'nullable|integer|min:0',
             'product_ids' => 'nullable|array',
-            'product_ids.*.product_id' => 'required_with:product_ids|exists:products,id',
+            'product_ids.*.product_id' => [
+                'required_with:product_ids',
+                Rule::exists('products', 'id')->where('company_id', $cid),
+            ],
             'product_ids.*.product_name' => 'nullable|string',
             'product_ids.*.quantity' => 'required_with:product_ids|integer|min:1',
             'product_ids.*.purchase_price' => 'required_with:product_ids|numeric|min:0',
@@ -180,6 +187,7 @@ class CreditVendorController extends Controller
             $balanceAmount = $totalAmount - $paidAmount;
 
             if ($paidAmount > $totalAmount) {
+                DB::rollBack();
                 return response()->json([
                     'success' => false,
                     'message' => 'Paid amount cannot exceed total amount',
@@ -193,7 +201,10 @@ class CreditVendorController extends Controller
                     if (!empty($item['product_name'])) {
                         $productNames[] = $item['product_name'];
                     } else {
-                        $product = DB::table('products')->where('id', $item['product_id'])->first();
+                        $product = DB::table('products')
+                            ->where('company_id', $cid)
+                            ->where('id', $item['product_id'])
+                            ->first();
                         if ($product) {
                             $productNames[] = $product->name;
                         }
@@ -205,6 +216,7 @@ class CreditVendorController extends Controller
             $createdBy = $this->getCreatedBy();
 
             $vendorId = DB::table('credit_vendors')->insertGetId([
+                'company_id' => $cid,
                 'vendor_name' => $request->vendor_name,
                 'products' => $productsString ?: $request->products ?? 'No products',
                 'invoice_number' => $request->invoice_number,
@@ -219,36 +231,28 @@ class CreditVendorController extends Controller
 
             Log::info('Vendor created:', ['vendor_id' => $vendorId]);
 
-            // Link products and update stock
+            // Products link karo aur stock update karo
             if ($request->has('product_ids') && !empty($request->product_ids)) {
                 foreach ($request->product_ids as $item) {
-                    $product = DB::table('products')->where('id', $item['product_id'])->first();
-                    
+                    $product = DB::table('products')
+                        ->where('company_id', $cid)
+                        ->where('id', $item['product_id'])
+                        ->first();
+
                     if ($product) {
-                        $newQuantity = $product->quantity + $item['quantity'];
                         DB::table('products')
+                            ->where('company_id', $cid)
                             ->where('id', $item['product_id'])
                             ->update([
-                                'quantity' => $newQuantity,
+                                'quantity' => $product->quantity + $item['quantity'],
                                 'vendor_id' => $vendorId,
                                 'is_credit_purchase' => 1,
                                 'updated_at' => now(),
                             ]);
-                    } else {
-                        $productId = DB::table('products')->insertGetId([
-                            'name' => $item['product_name'] ?? 'Unknown Product',
-                            'purchase_price' => $item['purchase_price'],
-                            'selling_price' => $item['purchase_price'] * 1.3,
-                            'quantity' => $item['quantity'],
-                            'date_added' => now(),
-                            'vendor_id' => $vendorId,
-                            'is_credit_purchase' => 1,
-                            'created_at' => now(),
-                            'updated_at' => now(),
-                        ]);
                     }
 
                     DB::table('credit_product_links')->insert([
+                        'company_id' => $cid,
                         'vendor_id' => $vendorId,
                         'product_id' => $item['product_id'],
                         'quantity' => $item['quantity'],
@@ -257,9 +261,10 @@ class CreditVendorController extends Controller
                 }
             }
 
-            // Record initial payment
+            // Initial payment record
             if ($paidAmount > 0) {
                 DB::table('credit_payments')->insert([
+                    'company_id' => $cid,
                     'vendor_id' => $vendorId,
                     'amount' => $paidAmount,
                     'payment_date' => now(),
@@ -289,13 +294,14 @@ class CreditVendorController extends Controller
     }
 
     /**
-     * ✅ FIXED: Update vendor with payment record
      * PUT /api/credit/vendors/{id}
      */
     public function update(Request $request, $id)
     {
+        $cid = $this->cid();
+
         try {
-            $vendor = DB::table('credit_vendors')->where('id', $id)->first();
+            $vendor = DB::table('credit_vendors')->where('company_id', $cid)->where('id', $id)->first();
 
             if (!$vendor) {
                 return response()->json([
@@ -307,7 +313,10 @@ class CreditVendorController extends Controller
             $validator = Validator::make($request->all(), [
                 'vendor_name' => 'sometimes|required|string|max:255',
                 'products' => 'sometimes|required|string',
-                'invoice_number' => 'sometimes|required|string|max:100|unique:credit_vendors,invoice_number,' . $id,
+                'invoice_number' => [
+                    'sometimes', 'required', 'string', 'max:100',
+                    Rule::unique('credit_vendors', 'invoice_number')->where('company_id', $cid)->ignore($id),
+                ],
                 'total_amount' => 'sometimes|required|numeric|min:0',
                 'paid_amount' => 'nullable|numeric|min:0',
                 'stock_quantity' => 'nullable|integer|min:0',
@@ -325,7 +334,7 @@ class CreditVendorController extends Controller
             DB::beginTransaction();
 
             $updateData = [];
-            
+
             if ($request->has('vendor_name')) {
                 $updateData['vendor_name'] = $request->vendor_name;
             }
@@ -349,7 +358,7 @@ class CreditVendorController extends Controller
             if ($newPayment > 0) {
                 $newPaidAmount = $currentPaidAmount + $newPayment;
                 $newBalance = $totalAmount - $newPaidAmount;
-                
+
                 if ($newPaidAmount > $totalAmount) {
                     DB::rollBack();
                     return response()->json([
@@ -357,13 +366,13 @@ class CreditVendorController extends Controller
                         'message' => 'Paid amount cannot exceed total amount',
                     ], 422);
                 }
-                
+
                 $updateData['paid_amount'] = $newPaidAmount;
                 $updateData['balance_amount'] = $newBalance;
             } elseif ($request->has('paid_amount')) {
                 $paidAmount = $request->paid_amount;
                 $balanceAmount = $totalAmount - $paidAmount;
-                
+
                 if ($paidAmount > $totalAmount) {
                     DB::rollBack();
                     return response()->json([
@@ -371,25 +380,24 @@ class CreditVendorController extends Controller
                         'message' => 'Paid amount cannot exceed total amount',
                     ], 422);
                 }
-                
+
                 $updateData['paid_amount'] = $paidAmount;
                 $updateData['balance_amount'] = $balanceAmount;
             }
 
             $updateData['updated_at'] = now();
 
-            DB::table('credit_vendors')->where('id', $id)->update($updateData);
+            DB::table('credit_vendors')->where('company_id', $cid)->where('id', $id)->update($updateData);
 
             $createdBy = $this->getCreatedBy();
 
-            // ✅ Create payment record if new payment was made
             if ($newPayment > 0) {
-                $paymentNote = $request->input('payment_note', 'Payment via edit');
                 DB::table('credit_payments')->insert([
+                    'company_id' => $cid,
                     'vendor_id' => $id,
                     'amount' => $newPayment,
                     'payment_date' => now(),
-                    'note' => $paymentNote,
+                    'note' => $request->input('payment_note', 'Payment via edit'),
                     'created_by' => $createdBy,
                 ]);
             }
@@ -400,8 +408,8 @@ class CreditVendorController extends Controller
 
             return response()->json([
                 'success' => true,
-                'message' => $newPayment > 0 
-                    ? "Vendor updated successfully! Payment of Rs. {$newPayment} recorded!" 
+                'message' => $newPayment > 0
+                    ? "Vendor updated successfully! Payment of Rs. {$newPayment} recorded!"
                     : 'Vendor updated successfully',
                 'data' => $updatedVendor,
                 'payment_recorded' => $newPayment > 0,
@@ -419,13 +427,14 @@ class CreditVendorController extends Controller
     }
 
     /**
-     * Delete vendor
      * DELETE /api/credit/vendors/{id}
      */
     public function destroy($id)
     {
+        $cid = $this->cid();
+
         try {
-            $vendor = DB::table('credit_vendors')->where('id', $id)->first();
+            $vendor = DB::table('credit_vendors')->where('company_id', $cid)->where('id', $id)->first();
 
             if (!$vendor) {
                 return response()->json([
@@ -436,16 +445,23 @@ class CreditVendorController extends Controller
 
             DB::beginTransaction();
 
-            $productLinks = DB::table('credit_product_links')->where('vendor_id', $id)->get();
+            $productLinks = DB::table('credit_product_links')
+                ->where('company_id', $cid)
+                ->where('vendor_id', $id)
+                ->get();
 
             foreach ($productLinks as $link) {
-                $product = DB::table('products')->where('id', $link->product_id)->first();
+                $product = DB::table('products')
+                    ->where('company_id', $cid)
+                    ->where('id', $link->product_id)
+                    ->first();
+
                 if ($product) {
-                    $newQuantity = max(0, $product->quantity - $link->quantity);
                     DB::table('products')
+                        ->where('company_id', $cid)
                         ->where('id', $link->product_id)
                         ->update([
-                            'quantity' => $newQuantity,
+                            'quantity' => max(0, $product->quantity - $link->quantity),
                             'vendor_id' => null,
                             'is_credit_purchase' => 0,
                             'updated_at' => now(),
@@ -453,9 +469,9 @@ class CreditVendorController extends Controller
                 }
             }
 
-            DB::table('credit_product_links')->where('vendor_id', $id)->delete();
-            DB::table('credit_payments')->where('vendor_id', $id)->delete();
-            DB::table('credit_vendors')->where('id', $id)->delete();
+            DB::table('credit_product_links')->where('company_id', $cid)->where('vendor_id', $id)->delete();
+            DB::table('credit_payments')->where('company_id', $cid)->where('vendor_id', $id)->delete();
+            DB::table('credit_vendors')->where('company_id', $cid)->where('id', $id)->delete();
 
             DB::commit();
 
@@ -474,30 +490,23 @@ class CreditVendorController extends Controller
     }
 
     /**
-     * Get vendor statistics
      * GET /api/credit/vendors/statistics
      */
     public function statistics()
     {
+        $cid = $this->cid();
+
         try {
-            $totalVendors = DB::table('credit_vendors')->count();
-            $totalBalance = DB::table('credit_vendors')->sum('balance_amount') ?? 0;
-            $totalPaid = DB::table('credit_vendors')->sum('paid_amount') ?? 0;
-            $totalAmount = DB::table('credit_vendors')->sum('total_amount') ?? 0;
-            
-            $pending = DB::table('credit_vendors')
-                ->where('paid_amount', 0)
-                ->where('balance_amount', '>', 0)
-                ->count();
-                
-            $fullyPaid = DB::table('credit_vendors')
-                ->where('balance_amount', '<=', 0)
-                ->count();
-                
-            $partial = DB::table('credit_vendors')
-                ->where('paid_amount', '>', 0)
-                ->where('balance_amount', '>', 0)
-                ->count();
+            $base = fn() => DB::table('credit_vendors')->where('company_id', $cid);
+
+            $totalVendors = $base()->count();
+            $totalBalance = $base()->sum('balance_amount') ?? 0;
+            $totalPaid = $base()->sum('paid_amount') ?? 0;
+            $totalAmount = $base()->sum('total_amount') ?? 0;
+
+            $pending = $base()->where('paid_amount', 0)->where('balance_amount', '>', 0)->count();
+            $fullyPaid = $base()->where('balance_amount', '<=', 0)->count();
+            $partial = $base()->where('paid_amount', '>', 0)->where('balance_amount', '>', 0)->count();
 
             return response()->json([
                 'success' => true,
@@ -522,13 +531,14 @@ class CreditVendorController extends Controller
     }
 
     /**
-     * Get vendor summary
      * GET /api/credit/vendors/{id}/summary
      */
     public function summary($id)
     {
+        $cid = $this->cid();
+
         try {
-            $vendor = DB::table('credit_vendors')->where('id', $id)->first();
+            $vendor = DB::table('credit_vendors')->where('company_id', $cid)->where('id', $id)->first();
 
             if (!$vendor) {
                 return response()->json([
@@ -537,12 +547,11 @@ class CreditVendorController extends Controller
                 ], 404);
             }
 
-            $paymentsCount = DB::table('credit_payments')->where('vendor_id', $id)->count();
-            $totalPaid = DB::table('credit_payments')->where('vendor_id', $id)->sum('amount') ?? 0;
-            $lastPayment = DB::table('credit_payments')
-                ->where('vendor_id', $id)
-                ->orderBy('payment_date', 'desc')
-                ->first();
+            $payments = fn() => DB::table('credit_payments')->where('company_id', $cid)->where('vendor_id', $id);
+
+            $paymentsCount = $payments()->count();
+            $totalPaid = $payments()->sum('amount') ?? 0;
+            $lastPayment = $payments()->orderBy('payment_date', 'desc')->first();
 
             return response()->json([
                 'success' => true,

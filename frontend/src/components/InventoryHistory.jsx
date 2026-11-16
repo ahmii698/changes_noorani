@@ -22,9 +22,30 @@ const SIDEBAR_WIDTH = 288;
 
 const money = (n) => (n ? `Rs. ${Number(n).toLocaleString("en-PK")}` : "-");
 
+/* Net profit can be negative or zero - always show the value */
+const netMoney = (n) => {
+  const v = Number(n || 0);
+  return `${v < 0 ? "-" : ""}Rs. ${Math.abs(v).toLocaleString("en-PK")}`;
+};
+
 const toTime = (v) => {
   const t = new Date(v).getTime();
   return isNaN(t) ? 0 : t;
+};
+
+/*
+  Expense / salary dates are usually stored as a DATE only (no time -> 12:00 AM),
+  which pushes them to the top of the sheet. When the entry was created around
+  that same day, use the real creation time so it shows in the correct sequence.
+  If the user deliberately back-dated the entry, keep the date they chose.
+*/
+const DAY_MS = 24 * 60 * 60 * 1000;
+const resolveTime = (dateValue, createdValue) => {
+  const d = toTime(dateValue);
+  const c = toTime(createdValue);
+  if (!c) return d;
+  if (!d) return c;
+  return Math.abs(c - d) <= 1.5 * DAY_MS ? c : d;
 };
 
 const fmtDate = (d) => {
@@ -108,6 +129,7 @@ const buildEntries = ({
   products,
   vendors,
   invoices,
+  histories = {},
   cashEntries,
   manualCash,
   expenses = [],
@@ -150,7 +172,7 @@ const buildEntries = ({
         price,
         qty,
         cashIn: 0,
-        cashOut: 0,
+        cashOut: qty * price, // purchase paid in cash = Cash Out
         ownerDelta: qty * price,
         costDelta: qty * price,
         payableDelta: 0,
@@ -208,7 +230,7 @@ const buildEntries = ({
       price: qty ? total / qty : total,
       qty,
       cashIn: 0,
-      cashOut: 0,
+      cashOut: initialPaid, // amount actually paid to the vendor now = Cash Out
       ownerDelta: initialPaid,
       costDelta: total,
       payableDelta: total - initialPaid,
@@ -216,12 +238,32 @@ const buildEntries = ({
     });
   });
 
-  /* 3) INVENTORY SELL (billing invoices) */
+  /* 3) INVENTORY SELL (billing invoices) + RECEIVABLE PAYMENTS */
   invoices.forEach((inv) => {
+    const invNo = inv.invoice_no || inv.invoice_number || `#${inv.id}`;
+    const invTime = toTime(inv.invoice_date || inv.created_at);
+
+    /* Later payments (from Reminders / Pending Payments) - initial payment is skipped */
+    const laterPays = (histories[inv.invoice_no] || []).filter((p) => {
+      const t = toTime(p.paid_at || p.created_at);
+      return !(invTime && t && Math.abs(t - invTime) <= 5000);
+    });
+    const laterSum = laterPays.reduce((s, p) => s + (parseFloat(p.amount) || 0), 0);
+
+    const totalAmt = parseFloat(inv.total_amount) || 0;
+    const initialPaid = Math.max(0, (parseFloat(inv.paid_amount) || 0) - laterSum);
+    const ratio = totalAmt > 0 ? Math.min(1, initialPaid / totalAmt) : 1;
+
+    let recovered = 0; // how much of the cost has been recovered so far
+    let receivableTotal = 0; // total still pending on this invoice right after the sale
+    let totalCost = 0;
+    const names = [];
+
     (inv.items || []).forEach((item, idx) => {
       const qty = parseInt(item.quantity || 1) || 0;
       const unit = parseFloat(item.price ?? item.unit_price ?? item.selling_price) || 0;
       const key = (item.service_name || "").toLowerCase().trim();
+      names.push(item.service_name);
 
       /* Service item = service_category is present and is not "Product" */
       const cat = String(item.service_category || "").trim().toLowerCase();
@@ -245,44 +287,94 @@ const buildEntries = ({
         item.cost_price != null ||
         purchaseByName[key] !== undefined;
 
-      /* Service: whole amount is profit. Product: selling - purchase. */
-      const profit = isService ? unit * qty : knownCost ? unit * qty - cost : 0;
+      const revenue = unit * qty;
+      const paidShare = revenue * ratio; // received so far
+      const receivable = revenue - paidShare; // still pending
+      /* Part of the received money that returns the purchase cost (comes out of Cash Inventory) */
+      const costBack = isService ? 0 : Math.min(paidShare, cost);
+      /* Service: whatever is received is profit.
+         Product: profit only starts AFTER the purchase cost is recovered
+         (received money that returns cost is NOT a loss, it is cost recovery). */
+      const profit = isService ? paidShare : knownCost ? paidShare - costBack : 0;
+
+      recovered += costBack;
+      totalCost += cost;
+      receivableTotal += receivable;
 
       entries.push({
         key: `inv-${inv.id}-${idx}`,
         rank: RANK.sell,
         id: Number(inv.id) * 1000 + idx,
-        ts: toTime(inv.invoice_date || inv.created_at),
+        ts: invTime,
         date: inv.invoice_date || inv.created_at,
-        invoiceNo: inv.invoice_no || inv.invoice_number || `#${inv.id}`,
+        invoiceNo: invNo,
         details: isService ? "Service Sell" : "Inventory Sell",
         product: item.service_name,
         price: unit,
         qty,
-        cashIn: cost,
+        cashIn: paidShare, // full amount received in cash
         cashOut: 0,
         profit,
+        receivable,
+        receivableShow: receivable, // pending amount shown in the column
         ownerDelta: 0,
-        ownerReturn: cost,
+        ownerReturn: costBack, // only the cost part is cut from Cash Inventory
+        unrecoveredDelta: isService ? 0 : Math.max(0, cost - costBack), // cost not yet recovered (shown as temporary minus in Net Profit)
         costDelta: -cost,
+        payableDelta: 0,
+        isVendor: false,
+      });
+    });
+
+    /* Payments received later (Reminders / Pending Payments) */
+    let pendingLeft = receivableTotal; // what is still to be received after each payment
+    laterPays.forEach((p, i) => {
+      const amount = parseFloat(p.amount) || 0;
+      if (amount <= 0) return;
+      pendingLeft = Math.max(0, pendingLeft - amount);
+      const costPart = Math.min(amount, Math.max(0, totalCost - recovered));
+      recovered += costPart;
+      const date = p.paid_at || p.created_at;
+
+      entries.push({
+        key: `recv-${inv.id}-${p.id ?? i}`,
+        rank: RANK.sell + 0.5,
+        id: Number(p.id) || i,
+        ts: toTime(date),
+        date,
+        invoiceNo: invNo,
+        details: "Receivable Payment",
+        product: names.join(", ") || "-",
+        price: 0,
+        qty: 0,
+        cashIn: amount, // full amount received (e.g. 2000)
+        cashOut: 0,
+        profit: amount - costPart,
+        receivable: -amount, // used for the Grand Total (outstanding)
+        receivableShow: pendingLeft, // remaining pending shown in the column
+        ownerDelta: 0,
+        ownerReturn: costPart, // cost part cut from Cash Inventory (e.g. 1000)
+        unrecoveredDelta: -costPart, // this much cost is now recovered
+        costDelta: 0,
         payableDelta: 0,
         isVendor: false,
       });
     });
   });
 
-  /* 3b) EXPENSES - fixed + monthly/extra */
+  /* 3b) EXPENSES - fixed + monthly/extra
+      Time is resolved from created_at so the expense appears exactly where it happened */
   expenses.forEach((ex) => {
     const amount = parseFloat(ex.amount) || 0;
     if (amount <= 0) return;
-    const date = ex.expense_date || ex.date || ex.created_at;
+    const ts = resolveTime(ex.expense_date || ex.date, ex.created_at);
     const isFixed = FIXED_CATEGORIES.includes(ex.category);
     entries.push({
       key: `exp-${ex.id}`,
       rank: RANK.expense,
       id: Number(ex.id) || 0,
-      ts: toTime(date),
-      date,
+      ts,
+      date: ts,
       invoiceNo: "-",
       details: isFixed ? "Fixed Expense" : "Extra Expense",
       product: ex.description ? `${ex.description} (${ex.category || "General"})` : ex.category || "-",
@@ -297,18 +389,18 @@ const buildEntries = ({
     });
   });
 
-  /* 3c) EMPLOYEE SALARY - each payment on its own date */
+  /* 3c) EMPLOYEE SALARY - each payment on its own date/time */
   employees.forEach((emp) => {
     (Array.isArray(emp.payments) ? emp.payments : []).forEach((p) => {
       const amount = parseFloat(p.amount) || 0;
       if (amount <= 0) return;
-      const date = p.payment_date || p.created_at;
+      const ts = resolveTime(p.payment_date, p.created_at);
       entries.push({
         key: `sal-${emp.id}-${p.id}`,
         rank: RANK.expense,
         id: Number(p.id) || 0,
-        ts: toTime(date),
-        date,
+        ts,
+        date: ts,
         invoiceNo: "-",
         details: "Salary",
         product: emp.name || "-",
@@ -413,6 +505,7 @@ export default function InventoryHistory() {
     products: [],
     vendors: [],
     invoices: [],
+    histories: {},
     cashEntries: [],
     manualCash: 0,
     expenses: [],
@@ -435,10 +528,29 @@ export default function InventoryHistory() {
         api.get("/expenses").catch(() => null),
         api.get("/employees").catch(() => null),
       ]);
+
+      const invoices = toArray(invRes);
+
+      /* Payment history for every invoice (initial + later Reminders payments) */
+      const histories = {};
+      await Promise.all(
+        invoices
+          .filter((i) => i.invoice_no)
+          .map(async (inv) => {
+            try {
+              const r = await api.get(`/payment-history/${inv.invoice_no}`);
+              histories[inv.invoice_no] = Array.isArray(r?.data?.data) ? r.data.data : [];
+            } catch {
+              histories[inv.invoice_no] = [];
+            }
+          })
+      );
+
       setRaw({
         products: toArray(prodRes),
         vendors: toArray(vendRes),
-        invoices: toArray(invRes),
+        invoices,
+        histories,
         cashEntries: cashRes ? parseCashEntries(cashRes) : [],
         manualCash: cashRes ? parseManualCash(cashRes) : 0,
         expenses: expRes ? toArray(expRes) : [],
@@ -463,8 +575,14 @@ export default function InventoryHistory() {
     let payable = 0;
     let owner = 0;
     let invCost = 0;
+    let profitSum = 0;
+    let expenseSum = 0;
+    let unrecovered = 0; // sold-item cost not yet returned by customer payments
     return entries.map((e, i) => {
-      cash += e.cashIn - e.cashOut - e.ownerDelta;
+      cash += e.cashIn - e.cashOut; // purchases are now in cashOut, so ownerDelta is not subtracted again
+      profitSum += e.profit || 0;
+      expenseSum += e.expense || 0;
+      unrecovered += e.unrecoveredDelta || 0;
       payable += e.payableDelta;
       owner = Math.max(0, owner + e.ownerDelta - (e.ownerReturn || 0));
       invCost += e.costDelta || 0;
@@ -474,10 +592,11 @@ export default function InventoryHistory() {
         cashInHand: cash,
         vendorPay: e.isVendor ? payable : 0,
         ownerCapital: owner,
+        ownerReturn: e.ownerReturn || 0,
         inventoryCost: invCost,
-        /* Placeholders - logic will be added later */
         receivable: e.receivable || 0,
-        netProfit: e.netProfit || 0,
+        receivableShow: e.receivableShow || 0,
+        netProfit: profitSum - expenseSum - unrecovered, // running: profit - expense - cost still to be recovered (can be negative)
       };
     });
   }, [raw]);
@@ -489,7 +608,7 @@ export default function InventoryHistory() {
       expense: rows.reduce((s, r) => s + (r.expense || 0), 0),
       profit: rows.reduce((s, r) => s + (r.profit || 0), 0),
       receivable: rows.reduce((s, r) => s + (r.receivable || 0), 0),
-      netProfit: rows.reduce((s, r) => s + (r.netProfit || 0), 0),
+      netProfit: rows.length ? rows[rows.length - 1].netProfit : 0,
       vendorPay: rows.reduce((s, r) => s + r.payableDelta, 0),
       ownerCapital: rows.length ? rows[rows.length - 1].ownerCapital : 0,
       inventoryCost: rows.length ? rows[rows.length - 1].inventoryCost : 0,
@@ -512,7 +631,7 @@ export default function InventoryHistory() {
         r.details,
         r.product || "-",
         plainNum(r.price),
-        plainNum(r.receivable),
+        plainNum(r.receivableShow),
         plainNum(r.qty),
         plainNum(r.cashIn),
         plainNum(r.cashOut),
@@ -577,7 +696,7 @@ export default function InventoryHistory() {
         r.details,
         r.product || "-",
         r.price ? num(r.price) : "-",
-        r.receivable ? num(r.receivable) : "-",
+        r.receivableShow ? num(r.receivableShow) : "-",
         r.qty || "-",
         r.cashIn ? num(r.cashIn) : "-",
         r.cashOut ? num(r.cashOut) : "-",
@@ -587,7 +706,7 @@ export default function InventoryHistory() {
         num(r.inventoryCost),
         r.profit ? num(r.profit) : "-",
         r.expense ? num(r.expense) : "-",
-        r.netProfit ? num(r.netProfit) : "-",
+        num(r.netProfit),
       ];
     });
 
@@ -783,7 +902,7 @@ export default function InventoryHistory() {
                           </td>
                           <td className="border-r border-slate-800/60 px-4 py-3 text-right">{money(r.price)}</td>
                           <td className="border-r border-slate-800/60 px-4 py-3 text-right font-semibold text-yellow-300">
-                            {money(r.receivable)}
+                            {money(r.receivableShow)}
                           </td>
                           <td className="border-r border-slate-800/60 px-4 py-3 text-right">{r.qty || "-"}</td>
                           <td className="border-r border-slate-800/60 px-4 py-3 text-right font-semibold text-emerald-400">
@@ -796,7 +915,16 @@ export default function InventoryHistory() {
                             {r.isVendor ? money(r.vendorPay) : "-"}
                           </td>
                           <td className="border-r border-slate-800/60 px-4 py-3 text-right font-semibold text-blue-400">
-                            {money(r.ownerCapital)}
+                            {r.ownerReturn > 0 ? (
+                              <>
+                                <div>Rs. {Number(r.ownerCapital).toLocaleString("en-PK")}</div>
+                                <div className="text-xs font-semibold text-rose-400">
+                                  − Rs. {Number(r.ownerReturn).toLocaleString("en-PK")}
+                                </div>
+                              </>
+                            ) : (
+                              money(r.ownerCapital)
+                            )}
                           </td>
                           <td className="border-r border-slate-800/60 px-4 py-3 text-right font-bold text-white">
                             {money(r.cashInHand)}
@@ -810,8 +938,12 @@ export default function InventoryHistory() {
                           <td className="border-r border-slate-800/60 px-4 py-3 text-right font-semibold text-orange-400">
                             {money(r.expense)}
                           </td>
-                          <td className="px-4 py-3 text-right font-semibold text-teal-300">
-                            {money(r.netProfit)}
+                          <td
+                            className={`px-4 py-3 text-right font-semibold ${
+                              r.netProfit < 0 ? "text-rose-400" : "text-teal-300"
+                            }`}
+                          >
+                            {netMoney(r.netProfit)}
                           </td>
                         </tr>
                       );
@@ -834,7 +966,13 @@ export default function InventoryHistory() {
                     <td className="px-4 py-3.5 text-right text-cyan-400">{money(totals.inventoryCost)}</td>
                     <td className="px-4 py-3.5 text-right text-lime-400">{money(totals.profit)}</td>
                     <td className="px-4 py-3.5 text-right text-orange-400">{money(totals.expense)}</td>
-                    <td className="px-4 py-3.5 text-right text-teal-300">{money(totals.netProfit)}</td>
+                    <td
+                      className={`px-4 py-3.5 text-right ${
+                        totals.netProfit < 0 ? "text-rose-400" : "text-teal-300"
+                      }`}
+                    >
+                      {netMoney(totals.netProfit)}
+                    </td>
                   </tr>
                 </tfoot>
               </table>

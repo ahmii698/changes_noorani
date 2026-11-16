@@ -17,12 +17,25 @@ const api = axios.create({
 api.interceptors.request.use(
     (config) => {
         console.log(`[API Request] ${config.method?.toUpperCase()} ${config.url}`);
-        
+
+        // ✅ FIX: FormData (file upload) ho to JSON Content-Type hata do.
+        // Warna axios FormData ko JSON bana deta hai aur File khali object {} ban jati hai
+        // ("The qr field must be a file"). Browser khud
+        // "multipart/form-data; boundary=..." set karega.
+        if (typeof FormData !== 'undefined' && config.data instanceof FormData) {
+            if (typeof config.headers?.delete === 'function') {
+                config.headers.delete('Content-Type'); // axios 1.x
+            }
+            delete config.headers['Content-Type'];     // purane axios ke liye
+        }
+
         const token = localStorage.getItem('token');
-        if (token) {
+        // Only add the normal app token if the request does not already carry its own
+        // Authorization header (super admin pages send their own sa_token)
+        if (token && !config.headers.Authorization) {
             config.headers.Authorization = `Bearer ${token}`;
         }
-        
+
         return config;
     },
     (error) => {
@@ -35,7 +48,7 @@ api.interceptors.request.use(
 api.interceptors.response.use(
     (response) => {
         console.log(`[API Response] ${response.status} ${response.config.url}`);
-        
+
         if (typeof response.data === 'string') {
             try {
                 let cleanData = response.data.trim();
@@ -48,35 +61,40 @@ api.interceptors.response.use(
                 console.error('Error parsing response:', e);
             }
         }
-        
+
         return response;
     },
     (error) => {
         if (error.response) {
             const status = error.response.status;
             const data = error.response.data;
-            
+
             console.error('[API Error]', {
                 status: status,
                 url: error.config?.url,
                 message: data?.message,
                 data: data
             });
-            
+
             if (status === 401) {
+                // Super admin pages handle their own 401 (they redirect to /super-admin/login)
+                if (error.config?.url?.includes('/super-admin')) {
+                    return Promise.reject(error);
+                }
+
                 localStorage.removeItem('token');
                 localStorage.removeItem('user');
                 localStorage.removeItem('isLoggedIn');
-                
+
                 if (!error.config?.url?.includes('/login')) {
                     window.location.href = '/';
                 }
             }
-            
+
             if (status === 500) {
                 console.error('[Server Error]', data?.message || 'Internal server error');
             }
-            
+
             if (status === 422) {
                 console.error('[Validation Error]', data?.errors);
             }
@@ -85,7 +103,7 @@ api.interceptors.response.use(
         } else {
             console.error('[Error]', error.message);
         }
-        
+
         return Promise.reject(error);
     }
 );
@@ -95,12 +113,12 @@ export const getErrorMessage = (error) => {
     if (error.response) {
         const status = error.response.status;
         const message = error.response.data?.message;
-        
+
         switch (status) {
             case 401:
                 return message || 'Unauthorized. Please login again.';
             case 403:
-                return 'You do not have permission to perform this action.';
+                return message || 'You do not have permission to perform this action.';
             case 404:
                 return 'Resource not found.';
             case 422:
@@ -245,7 +263,7 @@ export const getBatteries = async () => {
         products = response.data;
     }
     // Filter only battery products
-    const batteries = products.filter(p => 
+    const batteries = products.filter(p =>
         p.name?.toLowerCase().includes('battery') ||
         p.category?.toLowerCase().includes('battery')
     );
@@ -320,8 +338,8 @@ export const getBatteryStats = async () => {
         invoices = response.data;
     }
     // Filter battery sales
-    const batterySales = invoices.filter(inv => 
-        inv.items?.some(item => 
+    const batterySales = invoices.filter(inv =>
+        inv.items?.some(item =>
             item.service_category?.toLowerCase().includes('battery') ||
             item.service_name?.toLowerCase().includes('battery')
         )
@@ -364,9 +382,9 @@ export const deleteLeaveApplication = async (id) => {
 
 // Update leave application status (Approve/Reject)
 export const updateLeaveStatus = async (id, status, reason = null) => {
-    const response = await api.patch(`/leave-applications/${id}/status`, { 
+    const response = await api.patch(`/leave-applications/${id}/status`, {
         status: status,
-        reason: reason 
+        reason: reason
     });
     return response.data;
 };
@@ -404,14 +422,14 @@ export const apiService = {
     verifyOtp: (data) => api.post('/verify-otp', data),
     resetPassword: (data) => api.post('/reset-password', data),
     getMe: () => api.get('/me'),
-    
+
     // Products
     getProducts: () => api.get('/products'),
     getProduct: (id) => api.get(`/products/${id}`),
     createProduct: (data) => api.post('/products', data),
     updateProduct: (id, data) => api.put(`/products/${id}`, data),
     deleteProduct: (id) => api.delete(`/products/${id}`),
-    
+
     // ✅ Battery specific
     getBatteries: getBatteries,
     addBattery: addBattery,
@@ -419,34 +437,34 @@ export const apiService = {
     deleteBattery: deleteBattery,
     sellBattery: sellBattery,
     getBatteryStats: getBatteryStats,
-    
+
     // Services
     getServices: () => api.get('/services'),
-    
+
     // Invoices
     getInvoices: () => api.get('/invoices'),
     getInvoice: (id) => api.get(`/invoices/${id}`),
     createInvoice: (data) => api.post('/invoices', data),
     updateInvoice: (id, data) => api.put(`/invoices/${id}`, data),
     deleteInvoice: (id) => api.delete(`/invoices/${id}`),
-    
+
     // Expenses
     getExpenses: () => api.get('/expenses'),
     createExpense: (data) => api.post('/expenses', data),
     updateExpense: (id, data) => api.put(`/expenses/${id}`, data),
     deleteExpense: (id) => api.delete(`/expenses/${id}`),
-    
+
     // Reminders
     getReminders: () => api.get('/reminders'),
     createReminder: (data) => api.post('/reminders', data),
     updateReminder: (id, data) => api.put(`/reminders/${id}`, data),
     deleteReminder: (id) => api.delete(`/reminders/${id}`),
-    
+
     // Dashboard
     getDashboardStats: () => api.get('/dashboard/stats'),
     getRecentInvoices: () => api.get('/dashboard/recent-invoices'),
     getLowStockProducts: () => api.get('/dashboard/low-stock'),
-    
+
     // Discarded Bills (Saved Carts)
     getDiscardedCarts: () => api.get('/saved-carts'),
     getDiscardedCount: () => api.get('/saved-carts/count'),
@@ -454,7 +472,7 @@ export const apiService = {
     restoreCart: (id) => api.post(`/saved-carts/${id}/restore`),
     deleteDiscardedCart: (id) => api.delete(`/saved-carts/${id}`),
     clearAllDiscarded: () => api.delete('/saved-carts/clear-all'),
-    
+
     // ✅ Estimates
     getEstimates: () => api.get('/estimates'),
     getEstimate: (id) => api.get(`/estimates/${id}`),
@@ -463,7 +481,7 @@ export const apiService = {
     deleteEstimate: (id) => api.delete(`/estimates/${id}`),
     getEstimateCount: () => api.get('/estimates/count'),
     convertEstimateToInvoice: (id) => api.post(`/estimates/${id}/convert`),
-    
+
     // ✅ Estimate Records
     getEstimateStats: getEstimateStats,
     getEstimateByNumber: getEstimateByNumber,
@@ -474,7 +492,7 @@ export const apiService = {
     searchEstimates: searchEstimates,
     duplicateEstimate: duplicateEstimate,
     updateEstimateStatus: updateEstimateStatus,
-    
+
     // ✅ Leave Application
     getLeaveApplications: getLeaveApplications,
     getLeaveApplication: getLeaveApplication,

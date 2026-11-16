@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Customer;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Validation\Rule;
 
 class CustomerController extends Controller
 {
@@ -34,12 +35,12 @@ class CustomerController extends Controller
         }
     }
 
-    // ✅ Get customer by phone number (for auto-fill)
+    // Phone number se customer (auto-fill ke liye)
     public function getByPhone($phone)
     {
         try {
             $customer = Customer::where('phone', $phone)->first();
-            
+
             if ($customer) {
                 return response()->json([
                     'id' => $customer->id,
@@ -48,12 +49,12 @@ class CustomerController extends Controller
                     'email' => $customer->email,
                     'car_number' => $customer->car_number,
                     'car_model' => $customer->car_model,
-                    'birthday' => $customer->birthday, // ✅ Birthday from customer table
+                    'birthday' => $customer->birthday,
                     'created_at' => $customer->created_at,
                     'updated_at' => $customer->updated_at
                 ]);
             }
-            
+
             return response()->json(null, 404);
         } catch (\Exception $e) {
             Log::error('Error fetching customer by phone: ' . $e->getMessage());
@@ -66,9 +67,14 @@ class CustomerController extends Controller
     public function store(Request $request)
     {
         try {
+            $companyId = $request->user()->company_id;
+
             $validated = $request->validate([
                 'name' => 'required|string|max:255',
-                'phone' => 'required|string|max:20|unique:customers,phone',
+                'phone' => [
+                    'required', 'string', 'max:20',
+                    Rule::unique('customers', 'phone')->where('company_id', $companyId),
+                ],
                 'email' => 'nullable|email|max:255',
                 'car_number' => 'nullable|string|max:50',
                 'car_model' => 'nullable|string|max:100',
@@ -76,7 +82,7 @@ class CustomerController extends Controller
             ]);
 
             $customer = Customer::create($validated);
-            
+
             return response()->json([
                 'success' => true,
                 'message' => 'Customer created successfully',
@@ -98,11 +104,15 @@ class CustomerController extends Controller
     public function update(Request $request, $id)
     {
         try {
+            $companyId = $request->user()->company_id;
             $customer = Customer::findOrFail($id);
-            
+
             $validated = $request->validate([
                 'name' => 'sometimes|string|max:255',
-                'phone' => 'sometimes|string|max:20|unique:customers,phone,' . $id,
+                'phone' => [
+                    'sometimes', 'string', 'max:20',
+                    Rule::unique('customers', 'phone')->where('company_id', $companyId)->ignore($id),
+                ],
                 'email' => 'nullable|email|max:255',
                 'car_number' => 'nullable|string|max:50',
                 'car_model' => 'nullable|string|max:100',
@@ -110,7 +120,7 @@ class CustomerController extends Controller
             ]);
 
             $customer->update($validated);
-            
+
             return response()->json([
                 'success' => true,
                 'message' => 'Customer updated successfully',
@@ -142,7 +152,7 @@ class CustomerController extends Controller
 
             $customer = Customer::findOrFail($id);
             $customer->update(['birthday' => $validated['birthday']]);
-            
+
             return response()->json([
                 'success' => true,
                 'message' => 'Birthday updated successfully!',
@@ -165,7 +175,7 @@ class CustomerController extends Controller
         try {
             $customer = Customer::findOrFail($id);
             $customer->delete();
-            
+
             return response()->json([
                 'success' => true,
                 'message' => 'Customer deleted successfully'

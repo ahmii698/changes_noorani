@@ -11,7 +11,7 @@ import {
   FiAlertCircle, FiClock, FiArrowRight, FiLoader, FiUsers,
   FiCreditCard, FiCalendar, FiGift, FiChevronDown, FiChevronUp, FiFile,
   FiBattery, FiArchive, FiMoreVertical, FiBell, FiBriefcase, FiRotateCcw,
-  FiRefreshCw, FiDownload
+  FiRefreshCw, FiDownload, FiRepeat
 } from 'react-icons/fi';
 import { 
   LineChart, Line, BarChart, Bar, AreaChart, Area,
@@ -41,6 +41,9 @@ const EstimateRecords = lazy(() => import('./EstimateRecords'));
 const LeaveApplication = lazy(() => import('./leave/LeaveApplication'));
 // Payment page
 const Payment = lazy(() => import('./Payment'));
+// Subscription pages
+const Amounts = lazy(() => import('./amounts'));
+const AmountProof = lazy(() => import('./amountproof'));
 
 // Opening cash on hand when the business started. Currently 0.
 const OPENING_CASH = 0;
@@ -775,6 +778,8 @@ const Dashboard = () => {
       'finance-credit': 'Credit Management',
       billing: 'Billing System',
       payment: 'Payment',
+      amounts: 'Amounts',
+      'amount-proof': 'Upload Payment Proof',
       estimate: 'Estimate / Quotation',
       'estimate-records': 'Estimate Records',
       battery: 'Battery Sale',
@@ -801,6 +806,8 @@ const Dashboard = () => {
       'finance-credit': 'Manage vendor credits, payments and history',
       billing: 'Create bills, print invoices, export data',
       payment: 'View subscription details and pay your monthly fee',
+      amounts: 'Pay your monthly subscription fee here',
+      'amount-proof': 'Upload a screenshot of your payment confirmation',
       estimate: 'Create and print customer estimates / quotations',
       'estimate-records': 'View all estimate records with search and filters',
       battery: 'Sell batteries with trade-in option',
@@ -827,6 +834,8 @@ const Dashboard = () => {
       'finance-credit': <FiCreditCard className="text-2xl" />,
       billing: <FiFileText className="text-2xl" />,
       payment: <FiCreditCard className="text-2xl" />,
+      amounts: <FiRepeat className="text-2xl" />,
+      'amount-proof': <FiCreditCard className="text-2xl" />,
       estimate: <FiFile className="text-2xl" />,
       'estimate-records': <FiArchive className="text-2xl" />,
       battery: <FiBattery className="text-2xl" />,
@@ -1639,6 +1648,14 @@ const Dashboard = () => {
               {/* Payment page - Admin only */}
               {activeMenu === 'payment' && userRole === 'admin' && (
                 <Payment darkMode={darkMode} />
+              )}
+
+              {/* Subscription pages - Admin only */}
+              {activeMenu === 'amounts' && userRole === 'admin' && (
+                <Amounts darkMode={darkMode} setActiveMenu={setActiveMenu} />
+              )}
+              {activeMenu === 'amount-proof' && userRole === 'admin' && (
+                <AmountProof darkMode={darkMode} setActiveMenu={setActiveMenu} />
               )}
 
               {activeMenu === 'estimate' && (

@@ -2,8 +2,8 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Concerns\CompanyAware;
 use App\Models\Invoice;
-use App\Models\InvoiceItem;
 use App\Models\Customer;
 use App\Models\Product;
 use Illuminate\Http\Request;
@@ -13,28 +13,12 @@ use Carbon\Carbon;
 
 class InvoiceController extends Controller
 {
+    use CompanyAware;
+
     /**
-     * ✅ FIX (timezone): Parse an incoming date string as Asia/Karachi local
-     * time, WITHOUT re-interpreting/shifting it.
-     *
-     * Handles TWO input shapes correctly:
-     *  1) Plain "Y-m-d H:i:s" strings (no timezone info) — these are treated
-     *     as ALREADY being Asia/Karachi wall-clock time, via createFromFormat().
-     *  2) ISO 8601 strings WITH an explicit timezone/UTC marker, e.g.
-     *     "2026-08-22T13:36:00.000Z" (what JS `.toISOString()` sends).
-     *     Carbon::parse() correctly resolves these to the right ABSOLUTE
-     *     instant using the string's own timezone (UTC), but the resulting
-     *     Carbon object's *display* timezone stays UTC unless we explicitly
-     *     call ->setTimezone(). Previously we passed 'Asia/Karachi' as the
-     *     second arg to Carbon::parse(), but PHP's DateTime constructor
-     *     IGNORES that second timezone argument whenever the string itself
-     *     already carries explicit tz info — so the object silently stayed
-     *     in UTC, and ->format('Y-m-d H:i:s') printed raw UTC wall-clock
-     *     values (5 hours behind Karachi) into the database.
-     *
-     * Fix: always finish with ->setTimezone('Asia/Karachi') so the object's
-     * displayed/formatted time is guaranteed to be Karachi local time,
-     * regardless of what timezone info the input string carried.
+     * Incoming date ko Asia/Karachi local time ki tarah parse karta hai.
+     * - "Y-m-d H:i:s" (tz ke baghair) = pehle se Karachi time
+     * - ISO 8601 with Z/offset (JS toISOString) = sahi instant parse karke Karachi mein convert
      */
     private function parseAsKarachiTime($dateString)
     {
@@ -42,17 +26,9 @@ class InvoiceController extends Controller
             return Carbon::now('Asia/Karachi');
         }
 
-        // Expected format from the frontend: "Y-m-d H:i:s" (no tz info —
-        // treat it as already being Karachi local time)
         try {
             return Carbon::createFromFormat('Y-m-d H:i:s', $dateString, 'Asia/Karachi');
         } catch (\Exception $e) {
-            // Fallback for any other format (e.g. ISO 8601 with offset/Z,
-            // like JS's toISOString()). Parse it as its own timezone first
-            // (resolves the correct absolute instant), THEN convert the
-            // display timezone to Asia/Karachi — do NOT rely on the second
-            // Carbon::parse() argument, it's ignored when the string has
-            // explicit tz info.
             try {
                 return Carbon::parse($dateString)->setTimezone('Asia/Karachi');
             } catch (\Exception $e2) {
@@ -62,53 +38,52 @@ class InvoiceController extends Controller
         }
     }
 
+    // Invoice ko API response format mein badalta hai (relations: items, creator, customer load honi chahiye)
+    private function formatInvoice($invoice)
+    {
+        return [
+            'id' => $invoice->id,
+            'invoice_no' => $invoice->invoice_no,
+            'invoice_date' => $invoice->invoice_date,
+            'subtotal' => $invoice->subtotal ?? 0,
+            'discount' => $invoice->discount ?? 0,
+            'discount_note' => $invoice->discount_note,
+            'total_amount' => $invoice->total_amount,
+            'paid_amount' => $invoice->paid_amount,
+            'remaining_amount' => $invoice->remaining_amount,
+            'payment_method' => $invoice->payment_method,
+            'paid_at' => $invoice->paid_at,
+            'status' => $invoice->status,
+            'customer_name' => $invoice->customer_name,
+            'customer_phone' => $invoice->customer_phone,
+            'customer_email' => $invoice->customer_email,
+            'customer_car_number' => $invoice->customer_car_number,
+            'customer_car_model' => $invoice->customer_car_model,
+            'customer_birthday' => $invoice->customer ? $invoice->customer->birthday : null,
+            'created_by' => $invoice->created_by,
+            'creator_name' => $invoice->creator ? $invoice->creator->name : 'System',
+            'creator_role' => $invoice->creator ? $invoice->creator->role : 'system',
+            'items' => $invoice->items->map(function ($item) {
+                return [
+                    'id' => $item->id,
+                    'service_id' => $item->service_id,
+                    'service_name' => $item->service_name,
+                    'service_category' => $item->service_category,
+                    'mileage' => $item->mileage,
+                    'quantity' => $item->quantity,
+                    'price' => $item->price,
+                    'total' => $item->total
+                ];
+            })
+        ];
+    }
+
     public function index()
     {
         try {
             $invoices = Invoice::with(['items', 'creator', 'customer'])->orderBy('id', 'desc')->get();
-            
-            $transformedInvoices = $invoices->map(function($invoice) {
-                // ✅ Get birthday from customer relationship
-                $birthday = $invoice->customer ? $invoice->customer->birthday : null;
-                
-                return [
-                    'id' => $invoice->id,
-                    'invoice_no' => $invoice->invoice_no,
-                    'invoice_date' => $invoice->invoice_date,
-                    'subtotal' => $invoice->subtotal ?? 0,
-                    'discount' => $invoice->discount ?? 0,
-                    'discount_note' => $invoice->discount_note,
-                    'total_amount' => $invoice->total_amount,
-                    'paid_amount' => $invoice->paid_amount,
-                    'remaining_amount' => $invoice->remaining_amount,
-                    'payment_method' => $invoice->payment_method,
-                    'paid_at' => $invoice->paid_at,
-                    'status' => $invoice->status,
-                    'customer_name' => $invoice->customer_name,
-                    'customer_phone' => $invoice->customer_phone,
-                    'customer_email' => $invoice->customer_email,
-                    'customer_car_number' => $invoice->customer_car_number,
-                    'customer_car_model' => $invoice->customer_car_model,
-                    'customer_birthday' => $birthday,
-                    'created_by' => $invoice->created_by,
-                    'creator_name' => $invoice->creator ? $invoice->creator->name : 'System',
-                    'creator_role' => $invoice->creator ? $invoice->creator->role : 'system',
-                    'items' => $invoice->items->map(function($item) {
-                        return [
-                            'id' => $item->id,
-                            'service_id' => $item->service_id,
-                            'service_name' => $item->service_name,
-                            'service_category' => $item->service_category,
-                            'mileage' => $item->mileage,
-                            'quantity' => $item->quantity,
-                            'price' => $item->price,
-                            'total' => $item->total
-                        ];
-                    })
-                ];
-            });
-            
-            return response()->json($transformedInvoices);
+
+            return response()->json($invoices->map(fn($invoice) => $this->formatInvoice($invoice)));
         } catch (\Exception $e) {
             Log::error('Error fetching invoices: ' . $e->getMessage());
             return response()->json([
@@ -121,47 +96,8 @@ class InvoiceController extends Controller
     {
         try {
             $invoice = Invoice::with(['items', 'creator', 'customer'])->findOrFail($id);
-            
-            // ✅ Get birthday from customer relationship
-            $birthday = $invoice->customer ? $invoice->customer->birthday : null;
-            
-            $transformedInvoice = [
-                'id' => $invoice->id,
-                'invoice_no' => $invoice->invoice_no,
-                'invoice_date' => $invoice->invoice_date,
-                'subtotal' => $invoice->subtotal ?? 0,
-                'discount' => $invoice->discount ?? 0,
-                'discount_note' => $invoice->discount_note,
-                'total_amount' => $invoice->total_amount,
-                'paid_amount' => $invoice->paid_amount,
-                'remaining_amount' => $invoice->remaining_amount,
-                'payment_method' => $invoice->payment_method,
-                'paid_at' => $invoice->paid_at,
-                'status' => $invoice->status,
-                'customer_name' => $invoice->customer_name,
-                'customer_phone' => $invoice->customer_phone,
-                'customer_email' => $invoice->customer_email,
-                'customer_car_number' => $invoice->customer_car_number,
-                'customer_car_model' => $invoice->customer_car_model,
-                'customer_birthday' => $birthday,
-                'created_by' => $invoice->created_by,
-                'creator_name' => $invoice->creator ? $invoice->creator->name : 'System',
-                'creator_role' => $invoice->creator ? $invoice->creator->role : 'system',
-                'items' => $invoice->items->map(function($item) {
-                    return [
-                        'id' => $item->id,
-                        'service_id' => $item->service_id,
-                        'service_name' => $item->service_name,
-                        'service_category' => $item->service_category,
-                        'mileage' => $item->mileage,
-                        'quantity' => $item->quantity,
-                        'price' => $item->price,
-                        'total' => $item->total
-                    ];
-                })
-            ];
-            
-            return response()->json($transformedInvoice);
+
+            return response()->json($this->formatInvoice($invoice));
         } catch (\Exception $e) {
             Log::error('Error fetching invoice: ' . $e->getMessage());
             return response()->json(['error' => 'Invoice not found'], 404);
@@ -170,6 +106,8 @@ class InvoiceController extends Controller
 
     public function store(Request $request)
     {
+        $companyId = $this->cid();
+
         try {
             DB::beginTransaction();
 
@@ -199,11 +137,11 @@ class InvoiceController extends Controller
                 'items.*.quantity' => 'required|integer|min:1'
             ]);
 
-            // Save or update customer
+            // Customer save/update (sirf isi company ke customers mein dhoondta hai)
             $customer = null;
             if (!empty($validated['customer_phone'])) {
                 $customer = Customer::where('phone', $validated['customer_phone'])->first();
-                
+
                 if (!$customer) {
                     $customer = Customer::create([
                         'name' => $validated['customer_name'],
@@ -212,7 +150,7 @@ class InvoiceController extends Controller
                         'car_number' => $validated['customer_car_number'] ?? null,
                         'car_model' => $validated['customer_car_model'] ?? null,
                     ]);
-                    Log::info('✅ New customer created: ID ' . $customer->id);
+                    Log::info('New customer created: ID ' . $customer->id);
                 } else {
                     $customer->update([
                         'name' => $validated['customer_name'] ?? $customer->name,
@@ -220,14 +158,14 @@ class InvoiceController extends Controller
                         'car_number' => $validated['customer_car_number'] ?? $customer->car_number,
                         'car_model' => $validated['customer_car_model'] ?? $customer->car_model,
                     ]);
-                    Log::info('✅ Customer updated: ID ' . $customer->id);
+                    Log::info('Customer updated: ID ' . $customer->id);
                 }
             }
 
             $paidAmount = $validated['paid_amount'] ?? 0;
             $totalAmount = $validated['total_amount'];
             $remainingAmount = $validated['remaining_amount'] ?? ($totalAmount - $paidAmount);
-            
+
             if ($paidAmount >= $totalAmount) {
                 $status = 'Paid';
             } elseif ($paidAmount > 0) {
@@ -236,11 +174,10 @@ class InvoiceController extends Controller
                 $status = 'Pending';
             }
 
-            // ✅ FIX (timezone): Parse invoice date as Asia/Karachi local time
-            // directly — no implicit UTC assumption, no extra shift.
             $invoiceDateTime = $this->parseAsKarachiTime($validated['invoice_date'] ?? null);
 
             $invoiceId = DB::table('invoices')->insertGetId([
+                'company_id' => $companyId,
                 'invoice_no' => $validated['invoice_no'],
                 'customer_id' => $customer ? $customer->id : null,
                 'customer_name' => $validated['customer_name'],
@@ -262,12 +199,13 @@ class InvoiceController extends Controller
                 'updated_at' => Carbon::now('Asia/Karachi')
             ]);
 
-            Log::info('✅ Invoice created: ID ' . $invoiceId . ' by user: ' . auth()->id());
+            Log::info('Invoice created: ID ' . $invoiceId . ' by user: ' . auth()->id());
 
-            // ✅ Save initial payment history if paid_amount > 0
+            // Initial payment history
             if ($paidAmount > 0) {
                 try {
                     DB::table('payment_histories')->insert([
+                        'company_id' => $companyId,
                         'invoice_id' => $invoiceId,
                         'invoice_no' => $validated['invoice_no'],
                         'amount' => $paidAmount,
@@ -277,7 +215,6 @@ class InvoiceController extends Controller
                         'created_at' => Carbon::now('Asia/Karachi'),
                         'updated_at' => Carbon::now('Asia/Karachi')
                     ]);
-                    Log::info('✅ Initial payment history saved for invoice: ' . $validated['invoice_no'] . ' | Amount: ' . $paidAmount);
                 } catch (\Exception $e) {
                     Log::warning('Initial payment history save skipped: ' . $e->getMessage());
                 }
@@ -285,6 +222,7 @@ class InvoiceController extends Controller
 
             foreach ($validated['items'] as $item) {
                 DB::table('invoice_items')->insert([
+                    'company_id' => $companyId,
                     'invoice_id' => $invoiceId,
                     'service_name' => $item['service_name'],
                     'service_category' => $item['service_category'] ?? 'Service',
@@ -322,7 +260,7 @@ class InvoiceController extends Controller
                 'customer_car_number' => $invoice->customer_car_number,
                 'customer_car_model' => $invoice->customer_car_model,
                 'created_by' => $invoice->created_by,
-                'items' => $items->map(function($item) {
+                'items' => $items->map(function ($item) {
                     return [
                         'id' => $item->id,
                         'service_name' => $item->service_name,
@@ -337,7 +275,7 @@ class InvoiceController extends Controller
 
         } catch (\Illuminate\Validation\ValidationException $e) {
             DB::rollBack();
-            Log::error('❌ Validation error:', $e->errors());
+            Log::error('Validation error:', $e->errors());
             return response()->json([
                 'success' => false,
                 'message' => 'Validation failed',
@@ -345,7 +283,7 @@ class InvoiceController extends Controller
             ], 422);
         } catch (\Exception $e) {
             DB::rollBack();
-            Log::error('❌ Invoice creation error: ' . $e->getMessage());
+            Log::error('Invoice creation error: ' . $e->getMessage());
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to create invoice: ' . $e->getMessage()
@@ -353,7 +291,6 @@ class InvoiceController extends Controller
         }
     }
 
-    // ✅ ==================== UPDATE INVOICE ====================
     public function update(Request $request, $id)
     {
         try {
@@ -374,7 +311,6 @@ class InvoiceController extends Controller
 
             $invoice = Invoice::findOrFail($id);
 
-            // Update invoice
             $invoice->update([
                 'subtotal' => $validated['subtotal'] ?? $invoice->subtotal,
                 'discount' => $validated['discount'] ?? $invoice->discount,
@@ -389,47 +325,19 @@ class InvoiceController extends Controller
 
             DB::commit();
 
-            Log::info('✅ Invoice updated: ID ' . $invoice->id);
+            Log::info('Invoice updated: ID ' . $invoice->id);
 
-            // Fetch updated invoice with items
-            $updatedInvoice = Invoice::with('items')->find($id);
+            $updatedInvoice = Invoice::with(['items', 'creator', 'customer'])->find($id);
 
             return response()->json([
                 'success' => true,
                 'message' => 'Invoice updated successfully',
-                'data' => [
-                    'id' => $updatedInvoice->id,
-                    'invoice_no' => $updatedInvoice->invoice_no,
-                    'invoice_date' => $updatedInvoice->invoice_date,
-                    'subtotal' => $updatedInvoice->subtotal ?? 0,
-                    'discount' => $updatedInvoice->discount ?? 0,
-                    'discount_note' => $updatedInvoice->discount_note,
-                    'total_amount' => $updatedInvoice->total_amount,
-                    'paid_amount' => $updatedInvoice->paid_amount,
-                    'remaining_amount' => $updatedInvoice->remaining_amount,
-                    'payment_method' => $updatedInvoice->payment_method,
-                    'status' => $updatedInvoice->status,
-                    'customer_name' => $updatedInvoice->customer_name,
-                    'customer_phone' => $updatedInvoice->customer_phone,
-                    'customer_car_number' => $updatedInvoice->customer_car_number,
-                    'customer_car_model' => $updatedInvoice->customer_car_model,
-                    'items' => $updatedInvoice->items->map(function($item) {
-                        return [
-                            'id' => $item->id,
-                            'service_name' => $item->service_name,
-                            'service_category' => $item->service_category,
-                            'mileage' => $item->mileage,
-                            'quantity' => $item->quantity,
-                            'price' => $item->price,
-                            'total' => $item->total
-                        ];
-                    })
-                ]
+                'data' => $this->formatInvoice($updatedInvoice)
             ]);
 
         } catch (\Illuminate\Validation\ValidationException $e) {
             DB::rollBack();
-            Log::error('❌ Validation error:', $e->errors());
+            Log::error('Validation error:', $e->errors());
             return response()->json([
                 'success' => false,
                 'message' => 'Validation failed',
@@ -443,7 +351,7 @@ class InvoiceController extends Controller
             ], 404);
         } catch (\Exception $e) {
             DB::rollBack();
-            Log::error('❌ Invoice update error: ' . $e->getMessage());
+            Log::error('Invoice update error: ' . $e->getMessage());
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to update invoice: ' . $e->getMessage()
@@ -451,15 +359,14 @@ class InvoiceController extends Controller
         }
     }
 
-    // ✅ ==================== DELETE INVOICE (FIXED) ====================
     public function destroy($id)
     {
         try {
             DB::beginTransaction();
 
+            // findOrFail sirf isi company ki invoice dega, to neeche ka delete bhi safe hai
             $invoice = Invoice::findOrFail($id);
 
-            // Stock wapis add karna (jaisa pehle hota tha)
             foreach ($invoice->items as $item) {
                 $product = Product::find($item->service_id);
                 if ($product) {
@@ -467,8 +374,6 @@ class InvoiceController extends Controller
                 }
             }
 
-            // ✅ FIX: invoice delete karne se pehle uske items aur
-            // payment history explicitly delete karo — orphan rows na banein
             DB::table('invoice_items')->where('invoice_id', $invoice->id)->delete();
             DB::table('payment_histories')->where('invoice_id', $invoice->id)->delete();
 
@@ -476,7 +381,7 @@ class InvoiceController extends Controller
 
             DB::commit();
 
-            Log::info('✅ Invoice deleted (with items + payment history): ID ' . $id);
+            Log::info('Invoice deleted (with items + payment history): ID ' . $id);
 
             return response()->json([
                 'message' => 'Invoice deleted successfully'
@@ -495,48 +400,10 @@ class InvoiceController extends Controller
         try {
             $invoices = Invoice::where('customer_phone', $phone)
                 ->orderBy('invoice_date', 'desc')
-                ->with(['items', 'customer'])
+                ->with(['items', 'creator', 'customer'])
                 ->get();
-            
-            $transformedInvoices = $invoices->map(function($invoice) {
-                // ✅ Get birthday from customer relationship
-                $birthday = $invoice->customer ? $invoice->customer->birthday : null;
-                
-                return [
-                    'id' => $invoice->id,
-                    'invoice_no' => $invoice->invoice_no,
-                    'invoice_date' => $invoice->invoice_date,
-                    'subtotal' => $invoice->subtotal ?? 0,
-                    'discount' => $invoice->discount ?? 0,
-                    'discount_note' => $invoice->discount_note,
-                    'total_amount' => $invoice->total_amount,
-                    'paid_amount' => $invoice->paid_amount,
-                    'remaining_amount' => $invoice->remaining_amount,
-                    'payment_method' => $invoice->payment_method,
-                    'paid_at' => $invoice->paid_at,
-                    'status' => $invoice->status,
-                    'customer_name' => $invoice->customer_name,
-                    'customer_phone' => $invoice->customer_phone,
-                    'customer_email' => $invoice->customer_email,
-                    'customer_car_number' => $invoice->customer_car_number,
-                    'customer_car_model' => $invoice->customer_car_model,
-                    'customer_birthday' => $birthday,
-                    'items' => $invoice->items->map(function($item) {
-                        return [
-                            'id' => $item->id,
-                            'service_id' => $item->service_id,
-                            'service_name' => $item->service_name,
-                            'service_category' => $item->service_category,
-                            'mileage' => $item->mileage,
-                            'quantity' => $item->quantity,
-                            'price' => $item->price,
-                            'total' => $item->total
-                        ];
-                    })
-                ];
-            });
-            
-            return response()->json($transformedInvoices);
+
+            return response()->json($invoices->map(fn($invoice) => $this->formatInvoice($invoice)));
         } catch (\Exception $e) {
             Log::error('Error fetching customer history: ' . $e->getMessage());
             return response()->json([
@@ -548,23 +415,14 @@ class InvoiceController extends Controller
     public function getStats()
     {
         try {
-            $totalInvoices = Invoice::count();
-            $totalRevenue = Invoice::sum('total_amount');
-            $totalPaid = Invoice::sum('paid_amount');
-            $totalRemaining = Invoice::sum('remaining_amount');
-            
-            $paidInvoices = Invoice::where('status', 'Paid')->count();
-            $partialInvoices = Invoice::where('status', 'Partial')->count();
-            $pendingInvoices = Invoice::where('status', 'Pending')->count();
-            
             return response()->json([
-                'total_invoices' => $totalInvoices,
-                'total_revenue' => $totalRevenue,
-                'total_paid' => $totalPaid,
-                'total_remaining' => $totalRemaining,
-                'paid_invoices' => $paidInvoices,
-                'partial_invoices' => $partialInvoices,
-                'pending_invoices' => $pendingInvoices
+                'total_invoices' => Invoice::count(),
+                'total_revenue' => Invoice::sum('total_amount'),
+                'total_paid' => Invoice::sum('paid_amount'),
+                'total_remaining' => Invoice::sum('remaining_amount'),
+                'paid_invoices' => Invoice::where('status', 'Paid')->count(),
+                'partial_invoices' => Invoice::where('status', 'Partial')->count(),
+                'pending_invoices' => Invoice::where('status', 'Pending')->count()
             ]);
         } catch (\Exception $e) {
             Log::error('Error fetching invoice stats: ' . $e->getMessage());
@@ -574,7 +432,7 @@ class InvoiceController extends Controller
         }
     }
 
-    // ✅ ==================== PENDING PAYMENTS ====================
+    // ==================== PENDING PAYMENTS ====================
 
     public function getPendingPayments()
     {
@@ -586,12 +444,12 @@ class InvoiceController extends Controller
 
             Log::info('Pending payments found: ' . $pendingInvoices->count());
 
-            $transformed = $pendingInvoices->map(function($invoice) {
+            $transformed = $pendingInvoices->map(function ($invoice) {
                 $remaining = (float) $invoice->remaining_amount;
                 if ($remaining < 0) {
                     $remaining = 0;
                 }
-                
+
                 return [
                     'id' => $invoice->id,
                     'invoice_no' => $invoice->invoice_no,
@@ -609,7 +467,7 @@ class InvoiceController extends Controller
                     'paid_at' => $invoice->paid_at,
                     'status' => $invoice->status,
                     'invoice_date' => $invoice->invoice_date,
-                    'items' => $invoice->items->map(function($item) {
+                    'items' => $invoice->items->map(function ($item) {
                         return [
                             'service_name' => $item->service_name,
                             'price' => (float) $item->price,
@@ -634,9 +492,10 @@ class InvoiceController extends Controller
         }
     }
 
-    // ✅ ==================== UPDATE PENDING PAYMENT - WITH PAYMENT HISTORY & TIMEZONE FIX ====================
     public function updatePendingPayment(Request $request, $id)
     {
+        $companyId = $this->cid();
+
         try {
             $request->validate([
                 'amount' => 'required|numeric|min:0.01',
@@ -645,7 +504,7 @@ class InvoiceController extends Controller
             ]);
 
             $invoice = Invoice::findOrFail($id);
-            
+
             if ($request->amount > $invoice->remaining_amount) {
                 return response()->json([
                     'success' => false,
@@ -655,7 +514,7 @@ class InvoiceController extends Controller
 
             $newPaidAmount = $invoice->paid_amount + $request->amount;
             $newRemainingAmount = $invoice->remaining_amount - $request->amount;
-            
+
             if ($newRemainingAmount <= 0) {
                 $status = 'Paid';
                 $newRemainingAmount = 0;
@@ -664,12 +523,8 @@ class InvoiceController extends Controller
             }
 
             $paymentMethod = $request->payment_method ?? $invoice->payment_method ?? 'Cash';
-
-            // ✅ FIX (timezone): Parse paid_at as Asia/Karachi local time
-            // directly — no implicit UTC assumption, no extra shift.
             $paidAt = $this->parseAsKarachiTime($request->paid_at);
 
-            // ✅ UPDATE INVOICE
             $invoice->update([
                 'paid_amount' => $newPaidAmount,
                 'remaining_amount' => $newRemainingAmount,
@@ -679,9 +534,9 @@ class InvoiceController extends Controller
                 'updated_at' => Carbon::now('Asia/Karachi')
             ]);
 
-            // ✅ SAVE PAYMENT HISTORY
             try {
                 DB::table('payment_histories')->insert([
+                    'company_id' => $companyId,
                     'invoice_id' => $invoice->id,
                     'invoice_no' => $invoice->invoice_no,
                     'amount' => $request->amount,
@@ -691,14 +546,13 @@ class InvoiceController extends Controller
                     'created_at' => Carbon::now('Asia/Karachi'),
                     'updated_at' => Carbon::now('Asia/Karachi')
                 ]);
-                Log::info('✅ Payment history saved for invoice: ' . $invoice->invoice_no . ' | Amount: ' . $request->amount);
             } catch (\Exception $e) {
                 Log::warning('Payment history save skipped: ' . $e->getMessage());
             }
 
-            Log::info('✅ Payment updated for invoice: ' . $invoice->invoice_no . 
-                      ' | Amount: ' . $request->amount . 
-                      ' | Payment Method: ' . $paymentMethod . 
+            Log::info('Payment updated for invoice: ' . $invoice->invoice_no .
+                      ' | Amount: ' . $request->amount .
+                      ' | Payment Method: ' . $paymentMethod .
                       ' | Paid At: ' . $paidAt->format('Y-m-d H:i:s') .
                       ' | Remaining: ' . $newRemainingAmount);
 
@@ -740,11 +594,13 @@ class InvoiceController extends Controller
         }
     }
 
-    // ✅ ==================== GET PAYMENT HISTORY ====================
     public function getPaymentHistory($invoiceNo)
     {
+        $companyId = $this->cid();
+
         try {
             $histories = DB::table('payment_histories')
+                ->where('company_id', $companyId)
                 ->where('invoice_no', $invoiceNo)
                 ->orderBy('paid_at', 'desc')
                 ->get();

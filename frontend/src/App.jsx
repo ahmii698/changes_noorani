@@ -12,7 +12,12 @@ import Dashboard from './components/Dashboard';
 
 // <-- NAYA (Super Admin)
 import SuperAdminLogin from './pages/super-admin/SuperAdminLogin';
-import SuperAdminDashboard from './pages/super-admin/SuperAdminDashboard';
+import SuperAdminDashboard from './pages/super-admin/dashboard'; // ✅ FIX: ab naya dashboard.jsx import hoga
+import SuperAdminPayments from './pages/super-admin/Payments';
+import SuperAdminReminder from './pages/super-admin/Reminder';
+import SuperAdminMoneyChannel from './pages/super-admin/MoneyChannel';
+import SuperAdminTrial from './pages/super-admin/Trial';
+import SuperAdminCreate from './pages/super-admin/create';
 
 // Ye sab pages Dashboard ke andar render hote hain
 const DASHBOARD_PATHS = [
@@ -29,6 +34,8 @@ const DASHBOARD_PATHS = [
   '/finance-credit',
   '/finance-reminders',
   '/reminders',
+  '/amounts', // <-- NAYA (subscription payment page)
+  '/amount-proof', // <-- NAYA (payment screenshot upload page)
   '/users',
   '/discarded',
   '/estimate',
@@ -104,9 +111,18 @@ function App() {
           }
         />
 
-        {/* <-- NAYA (Super Admin) */}
+        {/* <-- NAYA (Super Admin) --------------------------------------
+            Ye pages normal ProtectedRoute use nahi karte, kyunke super admin
+            ka token alag hai (sa_token). Har page khud token check karke
+            /super-admin/login par bhej deta hai. */}
         <Route path="/super-admin" element={<SuperAdminLogin />} />
+        <Route path="/super-admin/login" element={<SuperAdminLogin />} />
         <Route path="/super-admin/dashboard" element={<SuperAdminDashboard />} />
+        <Route path="/super-admin/payments" element={<SuperAdminPayments />} />
+        <Route path="/super-admin/reminders" element={<SuperAdminReminder />} />
+        <Route path="/super-admin/money-channels" element={<SuperAdminMoneyChannel />} />
+        <Route path="/super-admin/trial" element={<SuperAdminTrial />} />
+        <Route path="/super-admin/create" element={<SuperAdminCreate />} />
 
         {/* Saare pages Dashboard ke through */}
         {DASHBOARD_PATHS.map((path) => (

@@ -12,6 +12,17 @@ use Illuminate\Support\Facades\Mail;
 
 class AuthController extends Controller
 {
+    // ✅ Admin sirf apni company ke users dekh/badal sakta hai
+    // (company_id null wale purane users ke liye behaviour pehle jaisa hi hai)
+    private function scopedUsers(Request $request)
+    {
+        $companyId = $request->user()->company_id;
+
+        return User::query()->when($companyId, function ($q) use ($companyId) {
+            $q->where('company_id', $companyId);
+        });
+    }
+
     // ✅ LOGIN
     public function login(Request $request)
     {
@@ -35,6 +46,17 @@ class AuthController extends Controller
                     'success' => false,
                     'message' => 'Wrong password!'
                 ], 401);
+            }
+
+            // ✅ NAYA: blocked company ke users login nahi kar sakte
+            if (!empty($user->company_id) && DB::table('gym_companies')
+                    ->where('id', $user->company_id)
+                    ->where('is_blocked', 1)
+                    ->exists()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Your company account is blocked. Please contact support.'
+                ], 403);
             }
 
             $token = $user->createToken('auth_token')->plainTextToken;
@@ -277,7 +299,8 @@ class AuthController extends Controller
                 ], 403);
             }
 
-            $users = User::select('id', 'name', 'email', 'role', 'created_at', 'updated_at')
+            $users = $this->scopedUsers($request)
+                ->select('id', 'name', 'email', 'role', 'created_at', 'updated_at')
                 ->orderBy('created_at', 'desc')
                 ->get();
 
@@ -318,6 +341,8 @@ class AuthController extends Controller
                 'email' => $request->email,
                 'password' => Hash::make($request->password),
                 'role' => $request->role,
+                // ✅ NAYA: naya user usi company ka hoga jis ka admin hai
+                'company_id' => $request->user()->company_id,
             ]);
 
             Log::info('New user created: ' . $user->email . ' by admin: ' . $request->user()->email);
@@ -358,7 +383,7 @@ class AuthController extends Controller
                 ], 403);
             }
 
-            $user = User::findOrFail($id);
+            $user = $this->scopedUsers($request)->findOrFail($id);
 
             $request->validate([
                 'name' => 'sometimes|string|max:255',
@@ -424,9 +449,8 @@ class AuthController extends Controller
                 ], 403);
             }
 
-            $user = User::findOrFail($id);
+            $user = $this->scopedUsers($request)->findOrFail($id);
 
-           
             if ($user->id === $request->user()->id) {
                 return response()->json([
                     'success' => false,
